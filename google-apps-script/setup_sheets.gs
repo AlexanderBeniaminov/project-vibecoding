@@ -170,7 +170,6 @@ function buildSheet1_Hotel(ss) {
 
   // Закрепляем строку с заголовками
   sh.setFrozenRows(4);
-  sh.setFrozenColumns(1);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -287,7 +286,6 @@ function buildSheet2_Comparison(ss) {
   });
 
   sh.setFrozenRows(4);
-  sh.setFrozenColumns(1);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -405,7 +403,6 @@ function buildSheet3_Restaurant(ss) {
   writeDataBlock(sh, 66, ctrlRows);
 
   sh.setFrozenRows(4);
-  sh.setFrozenColumns(1);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -504,7 +501,6 @@ function buildSheet4_Operations(ss) {
   writeDataBlock(sh, 45, miscRows, true);
 
   sh.setFrozenRows(5);
-  sh.setFrozenColumns(1);
 }
 
 // ═══════════════════════════════════════════════════════════════
