@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EntenS Group — Группа компаний</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg1: #0d1117;
+      --bg2: #0a1628;
+      --surface: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --green1: #4CAF50;
+      --green2: #2E7D32;
+      --green3: #8BC34A;
+      --text: #f0f6fc;
+      --muted: #8b949e;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg1);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Background ── */
+    .bg-gradient {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 10% 10%, rgba(46,125,50,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 60% at 90% 90%, rgba(76,175,80,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 50% 50%, rgba(10,22,40,0.8) 0%, transparent 100%);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── Grid lines ── */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(76,175,80,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(76,175,80,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── Sections ── */
+    section, header, footer { position: relative; z-index: 1; }
+
+    /* ══════════════════════════════
+       HEADER / HERO
+    ══════════════════════════════ */
+    header {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 24px 80px;
+    }
+
+    .logo-wrap {
+      margin-bottom: 40px;
+      animation: fadeDown 0.8s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    /* SVG Logo */
+    .logo-svg { width: 120px; height: 120px; }
+
+    .badge {
+      display: inline-block;
+      background: rgba(76,175,80,0.12);
+      border: 1px solid rgba(76,175,80,0.3);
+      color: var(--green1);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border-radius: 100px;
+      margin-bottom: 24px;
+      animation: fadeDown 0.8s 0.1s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 8vw, 5rem);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #ffffff 0%, var(--green3) 40%, var(--green1) 70%, #ffffff 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 5s linear infinite, fadeDown 0.8s 0.2s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 0% center; }
+      100% { background-position: 200% center; }
+    }
+
+    .tagline {
+      font-size: clamp(1rem, 2.5vw, 1.3rem);
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 48px;
+      animation: fadeDown 0.8s 0.3s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .tagline strong { color: var(--text); }
+
+    .hero-cta {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      animation: fadeDown 0.8s 0.4s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    /* ── CTA Button ── */
+    .cta-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, var(--green2), var(--green1));
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 16px 36px;
+      border-radius: 14px;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
+      animation: pulse-glow 2.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(76,175,80,0.5), 0 8px 32px rgba(46,125,50,0.4); }
+      50%       { box-shadow: 0 0 0 14px rgba(76,175,80,0), 0 8px 48px rgba(76,175,80,0.5); }
+    }
+
+    .cta-btn::after {
+      content: '';
+      position: absolute;
+      width: 80px; height: 100%;
+      top: 0; left: -100px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+      transform: skewX(-20deg);
+      transition: left 0.6s;
+    }
+
+    .cta-btn:hover { transform: translateY(-3px) scale(1.03); animation: none; box-shadow: 0 12px 48px rgba(76,175,80,0.5); }
+    .cta-btn:hover::after { left: 120%; }
+    .cta-btn:active { transform: scale(0.98); }
+
+    .phone-link {
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: color 0.2s;
+    }
+
+    .phone-link:hover { color: var(--green1); }
+
+    /* scroll hint */
+    .scroll-hint {
+      position: absolute;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      color: rgba(255,255,255,0.2);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      animation: bounce 2s ease-in-out infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50%       { transform: translateX(-50%) translateY(8px); }
+    }
+
+    /* ══════════════════════════════
+       DIRECTIONS
+    ══════════════════════════════ */
+    .section-wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 80px 24px;
+    }
+
+    .section-label {
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--green1);
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+
+    .section-sub {
+      text-align: center;
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 500px;
+      margin: 0 auto 56px;
+      line-height: 1.7;
+    }
+
+    /* Directions grid */
+    .directions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 0;
+    }
+
+    .dir-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px 20px;
+      text-align: center;
+      transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+      cursor: default;
+    }
+
+    .dir-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(76,175,80,0.3);
+      background: rgba(76,175,80,0.06);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+    }
+
+    .dir-icon {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(46,125,50,0.3), rgba(76,175,80,0.2));
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+      color: var(--green1);
+    }
+
+    .dir-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* ══════════════════════════════
+       ADVANTAGES
+    ══════════════════════════════ */
+    .adv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .adv-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 36px 32px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+
+    .adv-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--green2), var(--green1), var(--green3));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .adv-card:hover { transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,0.4); border-color: rgba(76,175,80,0.2); }
+    .adv-card:hover::before { opacity: 1; }
+
+    .adv-num {
+      font-size: 2.5rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--green1), var(--green3));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+      margin-bottom: 16px;
+    }
+
+    .adv-icon {
+      width: 56px; height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(46,125,50,0.3), rgba(139,195,74,0.15));
+      display: flex; align-items: center; justify-content: center;
+      color: var(--green1);
+      margin-bottom: 20px;
+    }
+
+    .adv-card h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+    }
+
+    .adv-card p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.7;
+    }
+
+    /* ══════════════════════════════
+       FOR WHOM
+    ══════════════════════════════ */
+    .for-whom {
+      background: rgba(76,175,80,0.04);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .whom-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .whom-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+    }
+
+    .whom-card h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .whom-card h3 svg { color: var(--green1); flex-shrink: 0; }
+
+    .whom-card ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .whom-card ul li {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      display: flex;
+      gap: 10px;
+    }
+
+    .whom-card ul li::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green1);
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    /* ══════════════════════════════
+       BOTTOM CTA
+    ══════════════════════════════ */
+    .bottom-cta {
+      text-align: center;
+      padding: 100px 24px;
+    }
+
+    .bottom-cta h2 {
+      font-size: clamp(1.8rem, 5vw, 3rem);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #fff, var(--green3), var(--green1));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .bottom-cta p {
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 440px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .bottom-cta .cta-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* ══════════════════════════════
+       FOOTER
+    ══════════════════════════════ */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 32px 24px;
+      color: rgba(139,148,158,0.4);
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+    }
+
+    /* ══════════════════════════════
+       ANIMATIONS
+    ══════════════════════════════ */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ══════════════════════════════
+       RESPONSIVE
+    ══════════════════════════════ */
+    @media (max-width: 600px) {
+      .section-wrap { padding: 60px 20px; }
+      .adv-card { padding: 28px 24px; }
+      .whom-card { padding: 24px; }
+      .bottom-cta { padding: 70px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-gradient"></div>
+<div class="grid-bg"></div>
+
+<!-- ══ HERO ══ -->
+<header>
+  <div class="logo-wrap">
+    <!-- SVG Logo EntenS Group -->
+    <svg class="logo-svg" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="60" cy="60" r="58" fill="#1a2e1a" stroke="#2E7D32" stroke-width="2"/>
+      <circle cx="60" cy="60" r="46" fill="#0d1f0d"/>
+      <!-- E letter stylized -->
+      <rect x="32" y="36" width="28" height="6" rx="3" fill="#4CAF50"/>
+      <rect x="32" y="57" width="22" height="6" rx="3" fill="#8BC34A"/>
+      <rect x="32" y="78" width="28" height="6" rx="3" fill="#4CAF50"/>
+      <rect x="32" y="36" width="6" height="48" rx="3" fill="#2E7D32"/>
+      <!-- S letter stylized -->
+      <path d="M68 42 Q84 38 84 50 Q84 60 68 60 Q52 60 68 78 Q78 84 86 78" stroke="#4CAF50" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+      <!-- glow dots -->
+      <circle cx="84" cy="50" r="3" fill="#8BC34A" opacity="0.7"/>
+      <circle cx="68" cy="60" r="3" fill="#4CAF50" opacity="0.7"/>
+    </svg>
+  </div>
+
+  <span class="badge">EntenS Group</span>
+
+  <h1>Бизнес-экосистема<br>нового уровня</h1>
+
+  <p class="tagline">
+    Группа компаний по <strong>5 направлениям</strong> — от отелей и ресторанов<br>
+    до ИИ-технологий и инвест-проектов. Единая инфраструктура,<br>
+    максимальная синергия.
+  </p>
+
+  <div class="hero-cta">
+    <a class="cta-btn" href="tel:+79037801122">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z"/>
+      </svg>
+      Обсудить сотрудничество
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14M13 6l6 6-6 6"/>
+      </svg>
+    </a>
+    <a class="phone-link" href="tel:+79037801122">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8 19.79 19.79 0 01.07 1.13 2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z"/>
+      </svg>
+      +7 903 780 11 22
+    </a>
+  </div>
+
+  <div class="scroll-hint">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M12 5v14M5 12l7 7 7-7"/>
+    </svg>
+    Листай вниз
+  </div>
+</header>
+
+<!-- ══ DIRECTIONS ══ -->
+<section>
+  <div class="section-wrap">
+    <p class="section-label">Наши направления</p>
+    <h2 class="section-title">5 отраслей — одна экосистема</h2>
+    <p class="section-sub">Диверсифицированная группа с синергией между всеми активами</p>
+
+    <div class="directions">
+
+      <div class="dir-card reveal">
+        <div class="dir-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </div>
+        <div class="dir-name">Отели</div>
+      </div>
+
+      <div class="dir-card reveal">
+        <div class="dir-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+          </svg>
+        </div>
+        <div class="dir-name">Кафе и рестораны</div>
+      </div>
+
+      <div class="dir-card reveal">
+        <div class="dir-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07M8.46 8.46a5 5 0 000 7.07"/>
+          </svg>
+        </div>
+        <div class="dir-name">Искусственный интеллект</div>
+      </div>
+
+      <div class="dir-card reveal">
+        <div class="dir-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <div class="dir-name">Развлечения и активити</div>
+      </div>
+
+      <div class="dir-card reveal">
+        <div class="dir-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+          </svg>
+        </div>
+        <div class="dir-name">Инвест-проекты</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ ADVANTAGES ══ -->
+<section style="background: rgba(0,0,0,0.2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="section-wrap">
+    <p class="section-label">Преимущества</p>
+    <h2 class="section-title">Почему это выгодно</h2>
+    <p class="section-sub">Три ключевых причины войти в экосистему EntenS Group</p>
+
+    <div class="adv-grid">
+
+      <div class="adv-card reveal">
+        <div class="adv-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+          </svg>
+        </div>
+        <div class="adv-num">01</div>
+        <h3>Диверсификация без лишних усилий</h3>
+        <p>Вы получаете доступ к активам в 5 разных отраслях одновременно. Риски распределены — ни один сектор не тянет всё вниз. Вложения работают на вас комплексно, а не точечно.</p>
+      </div>
+
+      <div class="adv-card reveal">
+        <div class="adv-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+        </div>
+        <div class="adv-num">02</div>
+        <h3>Готовая команда и инфраструктура</h3>
+        <p>Не нужно строить с нуля. Операционная команда, юридическая база, IT-инфраструктура и ИИ-инструменты уже работают. Вы входите в действующую систему — без боли запуска.</p>
+      </div>
+
+      <div class="adv-card reveal">
+        <div class="adv-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div class="adv-num">03</div>
+        <h3>Синергия даёт кратный эффект</h3>
+        <p>Клиент отеля идёт в ресторан группы. ИИ-инструменты снижают расходы на персонал. Гость парка развлечений становится участником инвест-программы. Каждый актив усиливает другой.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ FOR WHOM ══ -->
+<section class="for-whom">
+  <div class="section-wrap">
+    <p class="section-label">Для кого</p>
+    <h2 class="section-title">Кому подходит</h2>
+    <p class="section-sub">EntenS Group — для тех, кто хочет зарабатывать умнее</p>
+
+    <div class="whom-grid">
+
+      <div class="whom-card reveal">
+        <h3>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
+          </svg>
+          Собственники бизнеса
+        </h3>
+        <ul>
+          <li>У вас уже есть актив в одной из наших отраслей — отель, кафе, парк или иное</li>
+          <li>Хотите масштабироваться, но не знаете как выстроить систему</li>
+          <li>Ищете партнёра с экспертизой, инфраструктурой и синергией</li>
+          <li>Готовы к коллаборации для кратного роста</li>
+        </ul>
+      </div>
+
+      <div class="whom-card reveal">
+        <h3>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+          </svg>
+          Непрофильные инвесторы
+        </h3>
+        <ul>
+          <li>Есть капитал, но нет времени и желания операционно управлять</li>
+          <li>Хотите вложить деньги в реальный сектор, а не в акции или крипту</li>
+          <li>Ищете защищённый инструмент с понятной моделью дохода</li>
+          <li>Важна прозрачность, отчётность и живой контакт с командой</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ BOTTOM CTA ══ -->
+<section>
+  <div class="bottom-cta reveal">
+    <h2>Давайте обсудим<br>ваш случай</h2>
+    <p>Расскажите о вашем активе или целях — мы найдём формат сотрудничества, который подходит именно вам.</p>
+    <div class="cta-group">
+      <a class="cta-btn" href="tel:+79037801122">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8 19.79 19.79 0 01.07 1.13 2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z"/>
+        </svg>
+        Позвонить сейчас
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14M13 6l6 6-6 6"/>
+        </svg>
+      </a>
+      <a class="phone-link" href="tel:+79037801122">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8 19.79 19.79 0 01.07 1.13 2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z"/>
+        </svg>
+        +7 903 780 11 22
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  © 2026 EntenS Group &nbsp;·&nbsp; Все права защищены
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => entry.target.classList.add('visible'), i * 80);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
