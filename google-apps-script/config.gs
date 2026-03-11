@@ -22,7 +22,7 @@ const CONFIG = {
 
   // ── GOOGLE SHEETS ─────────────────────────────────────────
   // Оставьте пустым '' если скрипт запущен внутри нужной таблицы
-  SPREADSHEET_ID: '',
+  SPREADSHEET_ID: '1ptWfgoDDZ86Nc9Rzs-Wf0i5zBC3In6kYp-9NDthjlNM',
 
   // ── TRAVELLINE API ────────────────────────────────────────
   TRAVELLINE: {
