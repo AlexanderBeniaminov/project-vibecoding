@@ -43,7 +43,7 @@ const CONFIG = {
   CLAUDE: {
     API_KEY:    '',   // ← ключ с console.anthropic.com
     MODEL:      'claude-opus-4-6',
-    MAX_TOKENS: 2048,
+    MAX_TOKENS: 4096,
   },
 
   // ── УВЕДОМЛЕНИЯ ───────────────────────────────────────────
