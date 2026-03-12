@@ -320,6 +320,8 @@ function buildSheet3_Restaurant(ss) {
     ['Доля кухни, %',                      '', '', '', 'Изменение доли >5пп — акцент'],
     ['Доля бара, %',                       '', '', '', ''],
     ['Средний чек на 1 гостя, ₽',         '', '', '', 'Люфт ±10%. Рост >20% — предупреждение'],
+    ['Средний чек по кухне, ₽',           '', '', '', ''],
+    ['Средний чек по бару, ₽',            '', '', '', ''],
     ['Food cost — сумма, ₽',              '', '', '', ''],
     ['Food cost — % от выручки',          '', '', '', 'Исторический коридор. +3пп — предупреждение; +5пп — критично'],
     ['Маржинальная прибыль — Кухня, ₽',   '', '', '', ''],
@@ -327,22 +329,32 @@ function buildSheet3_Restaurant(ss) {
     ['Маржинальная прибыль — ИТОГО, ₽',   '', '', '', ''],
     ['Маржинальность — % от выручки',     '', '', '', ''],
   ];
-  writeDataBlock(sh, 6, finRows);
+  writeDataBlock(sh, 6, finRows);  // строки 6–20
 
-  // ── БЛОК 2: Гости и трафик ──
-  writeSectionHeader(sh, 20, '👥 ГОСТИ И ТРАФИК', C.restMid, C.white, 5);
-  const guestRows = [
-    ['Кол-во гостей за неделю',      '', '', '', 'Люфт ±10%'],
-    ['Кол-во чеков за неделю',       '', '', '', ''],
-    ['Оборачиваемость стола (раз/день)', '', '', '', 'Рост — позитивный сигнал'],
-    ['Средний стол (чеков/столов)',   '', '', '', '90 посадочных мест'],
-    ['Доля постоянных гостей, %',    '', '', '', 'Люфт ±10%'],
-    ['Гости по акциям / промо, %',   '', '', '', 'Не более 20%'],
+  // ── БЛОК 2: Банкеты / мероприятия ──
+  writeSectionHeader(sh, 22, '🎉 БАНКЕТЫ / МЕРОПРИЯТИЯ', C.restMid, C.white, 5);
+  const banquetRows = [
+    ['Банкетов / мероприятий — кол-во',  '', '', '', 'Банкет без доп.продаж — сигнал (порог >10%)'],
+    ['Банкеты — сумма выручки, ₽',       '', '', '', ''],
+    ['Средний чек на гостя (банкет), ₽', '', '', '', ''],
+    ['Средний чек на мероприятие, ₽',    '', '', '', ''],
   ];
-  writeDataBlock(sh, 21, guestRows);
+  writeDataBlock(sh, 23, banquetRows);  // строки 23–26
 
-  // ── БЛОК 3: Выручка по времени суток ──
-  writeSectionHeader(sh, 28, '⏰ ВЫРУЧКА ПО ВРЕМЕНИ СУТОК', C.restMid, C.white, 5);
+  // ── БЛОК 3: Гости и трафик ──
+  writeSectionHeader(sh, 28, '👥 ГОСТИ И ТРАФИК', C.restMid, C.white, 5);
+  const guestRows = [
+    ['Кол-во гостей за неделю',             '', '', '', 'Люфт ±10%'],
+    ['Кол-во чеков за неделю',              '', '', '', ''],
+    ['Оборачиваемость стола (раз/день)',     '', '', '', 'Рост — позитивный сигнал'],
+    ['Средний стол (чеков/столов)',          '', '', '', '90 посадочных мест'],
+    ['Доля постоянных гостей, %',           '', '', '', 'Люфт ±10%'],
+    ['Гости по акциям / промо, %',          '', '', '', 'Не более 20%'],
+  ];
+  writeDataBlock(sh, 29, guestRows);  // строки 29–34
+
+  // ── БЛОК 4: Выручка по времени суток ──
+  writeSectionHeader(sh, 36, '⏰ ВЫРУЧКА ПО ВРЕМЕНИ СУТОК', C.restMid, C.white, 5);
   const timeRows = [
     ['Утро 09:00–11:00 — выручка, ₽',     '', '', '', ''],
     ['Утро 09:00–11:00 — кол-во гостей',  '', '', '', ''],
@@ -351,56 +363,68 @@ function buildSheet3_Restaurant(ss) {
     ['Вечер 17:00–21:00 — выручка, ₽',    '', '', '', ''],
     ['Вечер 17:00–21:00 — кол-во гостей', '', '', '', ''],
   ];
-  writeDataBlock(sh, 29, timeRows);
+  writeDataBlock(sh, 37, timeRows);  // строки 37–42
 
-  // ── БЛОК 4: Списания ──
-  writeSectionHeader(sh, 36, '🗑 СПИСАНИЯ', C.restMid, C.white, 5);
+  // ── БЛОК 5: Списания ──
+  writeSectionHeader(sh, 44, '🗑 СПИСАНИЯ', C.restMid, C.white, 5);
   const writeoffRows = [
-    ['Списания "со списанием" — сумма, ₽',    '', '', '', '±20% к прош. неделе. >50% — критично'],
+    ['Списания "со списанием" — сумма, ₽',      '', '', '', '±20% к прош. неделе. >50% — критично'],
     ['Списания "со списанием" — кол-во позиций', '', '', '', ''],
-    ['Списания "без списания" — сумма, ₽',    '', '', '', 'Аннулированные позиции до закрытия чека'],
-    ['Списания "без списания" — кол-во',      '', '', '', 'Каждая: ФИО, №чека, сумма'],
-    ['Удалённые позиции из чеков — кол-во',   '', '', '', 'Норма: <1% от выручки этих позиций'],
-    ['Нулевые чеки — кол-во',                 '', '', '', 'Каждый — сигнал к злоупотреблению'],
+    ['Списания "без списания" — сумма, ₽',      '', '', '', 'Аннулированные позиции до закрытия чека'],
+    ['Списания "без списания" — кол-во',        '', '', '', 'Каждая: ФИО, №чека, сумма'],
+    ['Удалённые позиции из чеков — кол-во',     '', '', '', 'Норма: <1% от выручки этих позиций'],
+    ['Нулевые чеки — кол-во',                   '', '', '', 'Каждый — сигнал к злоупотреблению'],
   ];
-  writeDataBlock(sh, 37, writeoffRows);
+  writeDataBlock(sh, 45, writeoffRows);  // строки 45–50
 
-  // ── БЛОК 5: ТОП блюда ──
-  writeSectionHeader(sh, 44, '🏆 ТОП-10 БЛЮД ПО ВЫРУЧКЕ', C.restMid, C.white, 5);
-  sh.getRange(45, 1).setValue('#').setFontWeight('bold');
-  sh.getRange(45, 2).setValue('Наименование').setFontWeight('bold');
-  sh.getRange(45, 3).setValue('Выручка, ₽').setFontWeight('bold');
-  sh.getRange(45, 4).setValue('Кол-во продаж').setFontWeight('bold');
-  sh.getRange(45, 5).setValue('vs Прошлый год, %').setFontWeight('bold');
-  sh.getRange(45, 1, 1, 5).setBackground(C.restLight);
+  // ── БЛОК 6: ТОП блюда ──
+  writeSectionHeader(sh, 52, '🏆 ТОП-10 БЛЮД ПО ВЫРУЧКЕ', C.restMid, C.white, 5);
+  sh.getRange(53, 1).setValue('#').setFontWeight('bold');
+  sh.getRange(53, 2).setValue('Наименование').setFontWeight('bold');
+  sh.getRange(53, 3).setValue('Выручка, ₽').setFontWeight('bold');
+  sh.getRange(53, 4).setValue('Кол-во продаж').setFontWeight('bold');
+  sh.getRange(53, 5).setValue('vs Прошлый год, %').setFontWeight('bold');
+  sh.getRange(53, 1, 1, 5).setBackground(C.restLight);
   for (let i = 1; i <= 10; i++) {
-    sh.getRange(45 + i, 1).setValue(i);
-    sh.getRange(45 + i, 1, 1, 5).setBackground(i % 2 === 0 ? C.rowEven : C.white);
+    sh.getRange(53 + i, 1).setValue(i);
+    sh.getRange(53 + i, 1, 1, 5).setBackground(i % 2 === 0 ? C.rowEven : C.white);
   }
 
-  writeSectionHeader(sh, 57, '⚠️ АНТИРЕЙТИНГ — ПАДЕНИЕ ПРОДАЖ >20%', C.restDark, C.white, 5);
-  sh.getRange(58, 1).setValue('Наименование').setFontWeight('bold');
-  sh.getRange(58, 2).setValue('Текущий период').setFontWeight('bold');
-  sh.getRange(58, 3).setValue('Прошлый год').setFontWeight('bold');
-  sh.getRange(58, 4).setValue('Изменение, %').setFontWeight('bold');
-  sh.getRange(58, 1, 1, 4).setBackground(C.red);
+  writeSectionHeader(sh, 65, '⚠️ АНТИРЕЙТИНГ — ПАДЕНИЕ ПРОДАЖ >20%', C.restDark, C.white, 5);
+  sh.getRange(66, 1).setValue('Наименование').setFontWeight('bold');
+  sh.getRange(66, 2).setValue('Текущий период').setFontWeight('bold');
+  sh.getRange(66, 3).setValue('Прошлый год').setFontWeight('bold');
+  sh.getRange(66, 4).setValue('Изменение, %').setFontWeight('bold');
+  sh.getRange(66, 1, 1, 4).setBackground(C.red);
   for (let i = 1; i <= 5; i++) {
-    sh.getRange(58 + i, 1, 1, 5).setBackground(i % 2 === 0 ? '#fdecea' : C.white);
+    sh.getRange(66 + i, 1, 1, 5).setBackground(i % 2 === 0 ? '#fdecea' : C.white);
   }
 
-  // ── БЛОК 6: Контроль ──
-  writeSectionHeader(sh, 65, '🔍 КОНТРОЛЬ (ручные операции)', C.restMid, C.white, 5);
+  // ── БЛОК 7: Контроль ──
+  writeSectionHeader(sh, 73, '🔍 КОНТРОЛЬ (ручные операции)', C.restMid, C.white, 5);
   const ctrlRows = [
-    ['Ручные скидки — кол-во',            '', '', '', 'Каждая: ФИО официанта, №чека, сумма, время'],
-    ['Ручные скидки — сумма, ₽',          '', '', '', 'Норма: менее 1% от выручки в месяц'],
-    ['Скидочных чеков, % от всех',        '', '', '', 'Не более 20%'],
-    ['Чеков открытых >4 часов',           '', '', '', 'Каждый: №стола, ФИО официанта, время'],
-    ['Транзакций с несколькими картами',  '', '', '', 'Более 1 карты в чеке — сигнал к мошенничеству'],
-    ['Возвраты — кол-во',                 '', '', '', 'Динамика ±5%'],
-    ['Возвраты — сумма, ₽',               '', '', '', ''],
+    ['Ручные скидки — кол-во',               '', '', '', 'Каждая: ФИО официанта, №чека, сумма, время'],
+    ['Ручные скидки — сумма, ₽',             '', '', '', 'Норма: менее 1% от выручки в месяц'],
+    ['Скидочных чеков, % от всех',           '', '', '', 'Не более 20%'],
+    ['Чеков открытых >4 часов',              '', '', '', 'Каждый: №стола, ФИО официанта, время'],
+    ['Транзакций с несколькими картами',     '', '', '', 'Более 1 карты в чеке — сигнал к мошенничеству'],
+    ['Возвраты — кол-во',                    '', '', '', 'Динамика ±5%'],
+    ['Возвраты — сумма, ₽',                  '', '', '', ''],
     ['Ручных вводов, % изменение нед./нед.', '', '', '', 'Люфт ±5%'],
   ];
-  writeDataBlock(sh, 66, ctrlRows);
+  writeDataBlock(sh, 74, ctrlRows);  // строки 74–81
+
+  // ── БЛОК 8: Отзывы ──
+  writeSectionHeader(sh, 83, '⭐ ОТЗЫВЫ', C.restMid, C.white, 5);
+  sh.getRange(84, 1).setValue('Платформа').setFontWeight('bold').setBackground(C.restLight);
+  sh.getRange(84, 2).setValue('Кол-во за неделю').setFontWeight('bold').setBackground(C.restLight);
+  sh.getRange(84, 3).setValue('Всего / рейтинг').setFontWeight('bold').setBackground(C.restLight);
+  sh.getRange(84, 4).setValue('Доля негативных, %').setFontWeight('bold').setBackground(C.restLight);
+  sh.getRange(84, 5).setValue('Примечание').setFontWeight('bold').setBackground(C.restLight);
+  [['Яндекс Карты'], ['2ГИС'], ['Книга отзывов (оффлайн)'], ['Booking / OTA']].forEach((platform, i) => {
+    sh.getRange(85 + i, 1).setValue(platform[0]);
+    sh.getRange(85 + i, 1, 1, 5).setBackground(i % 2 === 0 ? C.rowEven : C.white);
+  });
 
   sh.setFrozenRows(4);
 }
