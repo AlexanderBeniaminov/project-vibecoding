@@ -1,0 +1,2721 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EntenS Group — Управляющая компания в сфере развлечений и гостеприимства</title>
+  <meta name="description" content="Покупаем, берём в аренду и управляем РЦ, парками, отелями и ресторанами. Для собственников и инвесторов. EntenS Group — Пермский край и регионы России." />
+  <meta property="og:title" content="EntenS Group" />
+  <meta property="og:description" content="Профессиональное управление объектами развлечений и гостеприимства" />
+  <meta property="og:image" content="/og-image.jpg" />
+  <link rel="canonical" href="https://entens.ru/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── CSS CUSTOM PROPERTIES ── */
+    :root {
+      --bg-white:       #FFFFFF;
+      --bg-light:       #F5F9F5;
+      --bg-dark:        #212121;
+      --green-primary:  #4CAF50;
+      --green-deep:     #2E7D32;
+      --green-lime:     #8BC34A;
+      --text-primary:   #212121;
+      --text-secondary: #555555;
+      --text-muted:     #9E9E9E;
+      --text-on-dark:   #FFFFFF;
+      --border:         rgba(46,125,50,0.15);
+      --border-active:  #4CAF50;
+      --radius:         8px;
+      --transition:     0.25s ease;
+      --header-h:       72px;
+    }
+
+    /* ── RESET & BASE ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: 'Inter', sans-serif;
+      color: var(--text-primary);
+      background: var(--bg-white);
+      overflow-x: hidden;
+      line-height: 1.7;
+    }
+    img { display: block; max-width: 100%; }
+    a { color: inherit; text-decoration: none; }
+    ul { list-style: none; }
+    button { cursor: pointer; font-family: inherit; border: none; background: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+
+    /* ── TYPOGRAPHY HELPERS ── */
+    .label {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--green-primary);
+    }
+    .label--dark { color: var(--green-lime); }
+
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(40px, 6vw, 96px);
+      font-weight: 300;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+    h2 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(30px, 4vw, 52px);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(22px, 2.5vw, 32px);
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+    p { line-height: 1.7; color: var(--text-secondary); }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: var(--radius);
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: all var(--transition);
+      will-change: transform;
+    }
+    .btn--primary {
+      background: var(--green-primary);
+      color: #fff;
+    }
+    .btn--primary:hover {
+      background: var(--green-deep);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(76,175,80,0.35);
+    }
+    .btn--ghost {
+      background: transparent;
+      color: var(--green-primary);
+      border: 2px solid var(--green-primary);
+    }
+    .btn--ghost:hover {
+      background: var(--green-primary);
+      color: #fff;
+      transform: translateY(-2px);
+    }
+    .btn--ghost-dark {
+      background: transparent;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.5);
+    }
+    .btn--ghost-dark:hover {
+      background: #fff;
+      color: var(--text-primary);
+      transform: translateY(-2px);
+    }
+    .btn--full { width: 100%; justify-content: center; }
+
+    /* ── LAYOUT HELPERS ── */
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .section { padding: 96px 0; }
+    .section--light { background: var(--bg-light); }
+    .section--dark { background: var(--bg-dark); }
+    .section-header { margin-bottom: 48px; }
+    .section-header h2 { margin-top: 12px; }
+
+    /* ── SCROLL ANIMATION ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+
+    /* ════════════════════════════
+       HEADER
+    ════════════════════════════ */
+    .header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      height: var(--header-h);
+      display: flex;
+      align-items: center;
+      transition: background 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease;
+    }
+    .header.scrolled {
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 1px 0 var(--border);
+    }
+    .header__inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+      transition: color var(--transition);
+    }
+    .logo--on-dark { color: #fff; }
+    .logo__icon {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+    }
+    .header.scrolled .logo { color: var(--text-primary); }
+    .header.scrolled .logo--on-dark { color: var(--text-primary); }
+
+    .nav { display: flex; align-items: center; gap: 32px; }
+    .nav__link {
+      font-size: 14px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.85);
+      transition: color var(--transition);
+      position: relative;
+    }
+    .nav__link::after {
+      content: '';
+      position: absolute;
+      bottom: -3px; left: 0;
+      width: 0; height: 2px;
+      background: var(--green-primary);
+      transition: width var(--transition);
+    }
+    .nav__link:hover::after,
+    .nav__link.active::after { width: 100%; }
+    .nav__link.active { color: var(--green-lime); }
+    .header.scrolled .nav__link { color: var(--text-secondary); }
+    .header.scrolled .nav__link:hover { color: var(--green-primary); }
+    .header.scrolled .nav__link.active { color: var(--green-primary); }
+
+    .header__cta { flex-shrink: 0; }
+
+    /* Burger */
+    .burger {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      width: 28px;
+      padding: 4px 0;
+      background: none;
+      border: none;
+    }
+    .burger span {
+      display: block;
+      height: 2px;
+      background: #fff;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+    .header.scrolled .burger span { background: var(--text-primary); }
+    .burger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .burger.open span:nth-child(2) { opacity: 0; }
+    .burger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    /* Mobile nav */
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      top: var(--header-h);
+      left: 0; right: 0;
+      background: rgba(33,33,33,0.97);
+      backdrop-filter: blur(20px);
+      padding: 24px;
+      z-index: 99;
+      flex-direction: column;
+      gap: 0;
+    }
+    .mobile-nav.open { display: flex; }
+    .mobile-nav__link {
+      display: block;
+      padding: 16px 0;
+      font-size: 18px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.85);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      transition: color var(--transition);
+    }
+    .mobile-nav__link:hover { color: var(--green-primary); }
+    .mobile-nav .btn { margin-top: 20px; }
+
+    /* ════════════════════════════
+       HERO
+    ════════════════════════════ */
+    .hero {
+      position: relative;
+      min-height: 100svh;
+      display: flex;
+      align-items: center;
+      background: var(--bg-dark);
+      overflow: hidden;
+    }
+    .hero__bg {
+      position: absolute;
+      inset: 0;
+      background:
+        url('https://images.unsplash.com/photo-1559494007-9f5847c49d94?w=1920&q=80') center/cover no-repeat;
+      transform-origin: center;
+      animation: kenBurns 14s ease-in-out infinite alternate;
+    }
+    @keyframes kenBurns {
+      from { transform: scale(1); }
+      to   { transform: scale(1.06); }
+    }
+    .hero__overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(33,33,33,0.65);
+    }
+    /* Ambient orbs */
+    .hero__orb {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      filter: blur(80px);
+    }
+    .hero__orb--1 {
+      top: -120px; left: -80px;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(76,175,80,0.18) 0%, transparent 70%);
+      animation: floatOrb1 28s ease-in-out infinite;
+    }
+    .hero__orb--2 {
+      bottom: -100px; right: -60px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(139,195,74,0.10) 0%, transparent 70%);
+      animation: floatOrb2 36s ease-in-out infinite;
+    }
+    @keyframes floatOrb1 {
+      0%,100% { transform: translate(0,0) scale(1); }
+      33%      { transform: translate(40px,30px) scale(1.05); }
+      66%      { transform: translate(-20px,50px) scale(0.95); }
+    }
+    @keyframes floatOrb2 {
+      0%,100% { transform: translate(0,0) scale(1); }
+      50%      { transform: translate(-50px,-40px) scale(1.08); }
+    }
+
+    .hero__content {
+      position: relative;
+      z-index: 2;
+      padding: calc(var(--header-h) + 40px) 0 80px;
+      width: 100%;
+    }
+    .hero__inner { max-width: 900px; }
+    .hero__label { margin-bottom: 20px; }
+    .hero__label .label { color: var(--green-lime); }
+
+    .hero__h1 { color: #fff; }
+    .hero__h1 .word {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(30px);
+      animation: wordIn 0.6s ease forwards;
+      margin-right: 0.25em;
+    }
+
+    @keyframes wordIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero__sub {
+      color: rgba(255,255,255,0.8);
+      font-size: 18px;
+      max-width: 560px;
+      margin-top: 20px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.6s forwards;
+    }
+    .hero__cta {
+      display: flex;
+      gap: 16px;
+      margin-top: 36px;
+      flex-wrap: wrap;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.9s forwards;
+    }
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; transform: translateY(16px); }
+    }
+
+    /* Trust bar inside hero */
+    .hero__trust {
+      position: relative;
+      z-index: 2;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      padding: 28px 0;
+      margin-top: auto;
+    }
+    .hero__trust-inner {
+      display: flex;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+    .hero__stat {
+      flex: 1;
+      min-width: 120px;
+      padding: 0 24px;
+      border-right: 1px solid rgba(255,255,255,0.12);
+      text-align: center;
+    }
+    .hero__stat:last-child { border-right: none; }
+    .hero__stat-num {
+      display: block;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 36px;
+      font-weight: 300;
+      color: var(--green-lime);
+      line-height: 1.1;
+    }
+    .hero__stat-label {
+      display: block;
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      margin-top: 4px;
+    }
+
+    /* ════════════════════════════
+       NUMBERS / TRUST BAR
+    ════════════════════════════ */
+    .numbers { padding: 72px 0; }
+    .numbers__grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0;
+    }
+    .number-item {
+      padding: 32px 24px;
+      text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .number-item:last-child { border-right: none; }
+    .number-item__icon {
+      width: 40px; height: 40px;
+      margin: 0 auto 12px;
+      color: var(--green-primary);
+    }
+    .number-item__icon svg { width: 100%; height: 100%; }
+    .number-item__val {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(32px, 4vw, 48px);
+      font-weight: 300;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+    .number-item__val span { color: var(--green-primary); }
+    .number-item__label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 6px;
+    }
+    .number-item__caption {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ════════════════════════════
+       ABOUT
+    ════════════════════════════ */
+    .about__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .about__text p + p { margin-top: 16px; }
+    .about__diff {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .about__diff-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .check-icon {
+      width: 22px; height: 22px;
+      background: var(--green-primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: #fff;
+      font-size: 12px;
+    }
+    .about__photo {
+      border-radius: 16px;
+      overflow: hidden;
+      aspect-ratio: 4/3;
+      background: var(--bg-light);
+    }
+    .about__photo img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transition: transform 0.6s ease;
+    }
+    .about__photo:hover img { transform: scale(1.04); }
+
+    /* photo placeholder */
+    .photo-placeholder {
+      width: 100%; height: 100%;
+      background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--green-deep);
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .photo-placeholder svg { width: 48px; height: 48px; opacity: 0.5; }
+
+    /* ════════════════════════════
+       PORTFOLIO
+    ════════════════════════════ */
+    .portfolio { overflow: hidden; }
+    .portfolio__label { margin-bottom: 40px; }
+
+    .cards-track {
+      display: flex;
+      gap: 24px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 8px;
+    }
+    .cards-track::-webkit-scrollbar { display: none; }
+
+    .portfolio-card {
+      flex: 0 0 340px;
+      scroll-snap-align: start;
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      will-change: transform;
+      cursor: default;
+    }
+    .portfolio-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 20px 48px rgba(76,175,80,0.12);
+    }
+    .portfolio-card__img {
+      height: 200px;
+      overflow: hidden;
+      background: var(--bg-light);
+    }
+    .portfolio-card__img img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transition: transform 0.5s ease;
+    }
+    .portfolio-card:hover .portfolio-card__img img { transform: scale(1.06); }
+    .portfolio-card__body { padding: 24px; }
+    .portfolio-card__tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--green-deep);
+      background: rgba(76,175,80,0.1);
+      border-radius: 4px;
+      padding: 4px 10px;
+      margin-bottom: 12px;
+    }
+    .portfolio-card__tag--tech {
+      color: #1565C0;
+      background: rgba(21,101,192,0.1);
+    }
+    .portfolio-card h3 { margin-bottom: 10px; }
+    .portfolio-card p { font-size: 14px; line-height: 1.6; }
+    .portfolio-card__meta {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .portfolio-card__metric {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .portfolio-card__metric span {
+      color: var(--green-primary);
+      font-size: 14px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-top: 12px;
+    }
+    .badge--active { background: var(--green-lime); color: #fff; }
+    .badge--dev { background: #e0e0e0; color: #555; }
+    .badge--live { background: var(--green-primary); color: #fff; }
+
+    .cards-progress {
+      display: flex;
+      gap: 6px;
+      margin-top: 24px;
+      justify-content: center;
+    }
+    .cards-progress__dot {
+      width: 28px; height: 3px;
+      border-radius: 2px;
+      background: var(--border);
+      transition: background 0.3s ease, width 0.3s ease;
+      cursor: pointer;
+    }
+    .cards-progress__dot.active {
+      background: var(--green-primary);
+      width: 48px;
+    }
+
+    /* ════════════════════════════
+       FOR OWNERS (5A)
+    ════════════════════════════ */
+    .owners__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+    }
+    .owners__quote {
+      border-left: 3px solid var(--green-primary);
+      padding-left: 20px;
+      margin: 20px 0 32px;
+      font-size: 16px;
+      font-style: italic;
+      color: var(--text-primary);
+    }
+    .deal-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .deal-card {
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      transition: border-color var(--transition), transform var(--transition);
+    }
+    .deal-card:hover {
+      border-color: var(--green-primary);
+      transform: translateY(-3px);
+    }
+    .deal-card__title {
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--green-primary);
+      margin-bottom: 10px;
+    }
+    .deal-card p { font-size: 14px; }
+
+    .criteria { margin-bottom: 32px; }
+    .criteria__title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .criteria__list { display: flex; flex-direction: column; gap: 8px; }
+    .criteria__item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    .criteria__item::before {
+      content: '✓';
+      color: var(--green-primary);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .steps { display: flex; gap: 0; margin: 32px 0; position: relative; }
+    .steps::before {
+      content: '';
+      position: absolute;
+      top: 20px; left: 20px; right: 20px;
+      height: 1px;
+      background: var(--border);
+    }
+    .step {
+      flex: 1;
+      text-align: center;
+      position: relative;
+    }
+    .step__num {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--green-primary);
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 12px;
+      position: relative;
+      z-index: 1;
+    }
+    .step p { font-size: 13px; color: var(--text-secondary); }
+    .step__title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+
+    .owners__cta { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* ════════════════════════════
+       FOR INVESTORS (5B)
+    ════════════════════════════ */
+    .investors__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+    }
+    .invest-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 28px 0 32px;
+    }
+    .invest-card {
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      transition: border-color var(--transition), transform var(--transition);
+    }
+    .invest-card:hover {
+      border-color: var(--green-primary);
+      transform: translateX(4px);
+    }
+    .invest-card__title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    .invest-card p { font-size: 14px; }
+
+    .why-us-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 28px; }
+    .why-us-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+    .star-icon {
+      color: var(--green-primary);
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .investors__cta { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* ════════════════════════════
+       BENTO GRID — WHY US
+    ════════════════════════════ */
+    .bento { padding: 96px 0; }
+    .bento__grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      grid-template-rows: auto;
+      gap: 16px;
+      margin-top: 48px;
+    }
+    .bento-tile {
+      border-radius: 16px;
+      padding: 32px;
+      border: 1.5px solid var(--border);
+      background: #fff;
+      transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .bento-tile:hover {
+      transform: translateY(-4px);
+      border-color: var(--green-primary);
+      box-shadow: 0 12px 32px rgba(76,175,80,0.1);
+    }
+    .bento-tile--1 { grid-column: 1 / 8; }
+    .bento-tile--2 { grid-column: 8 / 13; }
+    .bento-tile--3 { grid-column: 1 / 13; background: linear-gradient(135deg, #f1f8f1 0%, #e8f5e9 100%); }
+    .bento-tile--4 { grid-column: 1 / 5; }
+    .bento-tile--5 { grid-column: 5 / 13; }
+    .bento-tile--6 { grid-column: 1 / 13; background: var(--green-primary); color: #fff; }
+    .bento-tile--6 .bento-tile__title { color: #fff; }
+    .bento-tile--6 p { color: rgba(255,255,255,0.85); }
+
+    .bento-tile__icon {
+      width: 44px; height: 44px;
+      background: rgba(76,175,80,0.1);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: var(--green-primary);
+    }
+    .bento-tile--6 .bento-tile__icon {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+    }
+    .bento-tile__title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 400;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+    .bento-tile p { font-size: 14px; line-height: 1.65; }
+
+    /* ════════════════════════════
+       CASES
+    ════════════════════════════ */
+    .cases__grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+    .case-card {
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #fff;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .case-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 20px 48px rgba(0,0,0,0.08);
+    }
+    .case-card__img {
+      height: 180px;
+      background: var(--bg-light);
+      overflow: hidden;
+    }
+    .case-card__img img { width: 100%; height: 100%; object-fit: cover; }
+    .case-card__body { padding: 24px; }
+    .case-card__city {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .case-card h3 { margin-bottom: 14px; }
+    .case-card__result {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 36px;
+      font-weight: 300;
+      color: var(--green-primary);
+      line-height: 1;
+      margin: 16px 0 6px;
+    }
+    .case-card__result-label { font-size: 13px; color: var(--text-muted); }
+    .case-row {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .case-row strong { color: var(--text-primary); }
+
+    /* Timeline (альтернатива если нет кейсов) */
+    .timeline {
+      position: relative;
+      padding-left: 32px;
+      margin-top: 48px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 8px; bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--green-primary), var(--green-lime));
+    }
+    .timeline__item {
+      position: relative;
+      padding: 0 0 32px 24px;
+    }
+    .timeline__item::before {
+      content: '';
+      position: absolute;
+      left: -8px; top: 6px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--green-primary);
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 2px var(--green-primary);
+    }
+    .timeline__year {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--green-primary);
+      margin-bottom: 4px;
+    }
+    .timeline__title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .timeline__desc { font-size: 14px; color: var(--text-secondary); }
+
+    /* ════════════════════════════
+       TEAM
+    ════════════════════════════ */
+    .team__grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+    .team-card {
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--border);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .team-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.08);
+    }
+    .team-card__photo {
+      aspect-ratio: 3/3.5;
+      background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .team-card__photo img { width: 100%; height: 100%; object-fit: cover; }
+    .team-avatar {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: rgba(76,175,80,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      color: var(--green-deep);
+    }
+    .team-card__body { padding: 20px; }
+    .team-card__name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+    .team-card__role {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--green-primary);
+      margin-bottom: 10px;
+    }
+    .team-card__bio { font-size: 13px; line-height: 1.6; }
+
+    /* ════════════════════════════
+       GEOGRAPHY
+    ════════════════════════════ */
+    .geo__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .geo__map {
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--bg-light);
+      padding: 32px;
+    }
+    .geo__map svg { width: 100%; height: auto; }
+    .geo__presence { margin-bottom: 28px; }
+    .geo__presence h4, .geo__target h4 {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .geo__item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    .geo__dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+    .geo__dot--filled { background: var(--green-primary); }
+    .geo__dot--outline {
+      background: transparent;
+      border: 2px solid var(--green-lime);
+    }
+    .geo__cta { margin-top: 28px; }
+
+    /* ════════════════════════════
+       CONTACT FORM
+    ════════════════════════════ */
+    .contact { padding: 96px 0; }
+    .contact__inner {
+      max-width: 640px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .contact__inner h2 { color: #fff; margin: 12px 0 10px; }
+    .contact__inner > p { color: rgba(255,255,255,0.7); margin-bottom: 40px; }
+
+    .form {
+      text-align: left;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 36px;
+    }
+    .form-field { margin-bottom: 20px; }
+    .form-field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 8px;
+    }
+    .form-field input,
+    .form-field select,
+    .form-field textarea {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      border: 1.5px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .form-field select option { background: #333; }
+    .form-field input:focus,
+    .form-field select:focus,
+    .form-field textarea:focus {
+      border-color: var(--green-primary);
+      box-shadow: 0 0 0 3px rgba(76,175,80,0.2);
+    }
+    .form-field input::placeholder,
+    .form-field textarea::placeholder { color: rgba(255,255,255,0.3); }
+    .form-field textarea { resize: vertical; min-height: 100px; }
+    .form-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+    }
+    .form-check input { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; accent-color: var(--green-primary); }
+    .form-check a { color: var(--green-lime); text-decoration: underline; }
+
+    .form-success {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: #fff;
+    }
+    .form-success__icon {
+      width: 64px; height: 64px;
+      background: var(--green-primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 28px;
+    }
+    .form-success h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .form-success p { color: rgba(255,255,255,0.7); }
+
+    /* Alt contacts */
+    .contact__alts {
+      margin-top: 32px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .contact__alt-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.85);
+      font-size: 14px;
+      font-weight: 500;
+      transition: all var(--transition);
+      backdrop-filter: blur(10px);
+    }
+    .contact__alt-btn:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.4);
+    }
+
+    /* ════════════════════════════
+       FOOTER
+    ════════════════════════════ */
+    .footer {
+      background: #111;
+      padding: 64px 0 32px;
+      color: rgba(255,255,255,0.6);
+    }
+    .footer__grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .footer__logo { margin-bottom: 16px; }
+    .footer__desc { font-size: 14px; line-height: 1.7; }
+    .footer__col h4 {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 16px;
+    }
+    .footer__col ul { display: flex; flex-direction: column; gap: 10px; }
+    .footer__col li a {
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      transition: color var(--transition);
+    }
+    .footer__col li a:hover { color: var(--green-lime); }
+    .footer__bottom {
+      padding-top: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .footer__legal { display: flex; gap: 20px; }
+    .footer__legal a {
+      color: rgba(255,255,255,0.4);
+      transition: color var(--transition);
+    }
+    .footer__legal a:hover { color: rgba(255,255,255,0.7); }
+
+    /* ════════════════════════════
+       FLOATING TELEGRAM BUTTON
+    ════════════════════════════ */
+    .float-cta {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      z-index: 90;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 22px;
+      border-radius: 50px;
+      background: rgba(33,33,33,0.85);
+      backdrop-filter: blur(20px);
+      border: 1.5px solid var(--green-primary);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      text-decoration: none;
+    }
+    .float-cta.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .float-cta:hover {
+      background: var(--green-primary);
+      border-color: var(--green-primary);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(76,175,80,0.4);
+    }
+    .float-cta svg { width: 20px; height: 20px; }
+
+    /* ════════════════════════════
+       RESPONSIVE
+    ════════════════════════════ */
+    @media (max-width: 1024px) {
+      .nav { display: none; }
+      .header__cta { display: none; }
+      .burger { display: flex; }
+      .numbers__grid { grid-template-columns: repeat(3, 1fr); }
+      .number-item:nth-child(3) { border-right: none; }
+      .number-item:nth-child(4) { border-top: 1px solid var(--border); }
+      .cases__grid { grid-template-columns: 1fr 1fr; }
+      .team__grid { grid-template-columns: repeat(2, 1fr); }
+      .footer__grid { grid-template-columns: 1fr 1fr; }
+      .bento-tile--1 { grid-column: 1 / 13; }
+      .bento-tile--2 { grid-column: 1 / 13; }
+      .bento-tile--4 { grid-column: 1 / 7; }
+      .bento-tile--5 { grid-column: 7 / 13; }
+    }
+
+    @media (max-width: 768px) {
+      .section { padding: 64px 0; }
+      .about__grid { grid-template-columns: 1fr; gap: 40px; }
+      .owners__grid { grid-template-columns: 1fr; gap: 40px; }
+      .investors__grid { grid-template-columns: 1fr; gap: 40px; }
+      .geo__grid { grid-template-columns: 1fr; gap: 40px; }
+      .cases__grid { grid-template-columns: 1fr; }
+      .team__grid { grid-template-columns: repeat(2, 1fr); }
+      .deal-cards { grid-template-columns: 1fr; }
+      .hero__trust-inner { justify-content: center; }
+      .hero__stat { min-width: 80px; padding: 0 12px; }
+      .bento-tile--4 { grid-column: 1 / 13; }
+      .bento-tile--5 { grid-column: 1 / 13; }
+      .footer__grid { grid-template-columns: 1fr; gap: 32px; }
+      .footer__bottom { flex-direction: column; align-items: flex-start; }
+    }
+
+    @media (max-width: 480px) {
+      .container { padding: 0 16px; }
+      h1 { font-size: clamp(32px, 8vw, 52px); }
+      h2 { font-size: clamp(26px, 6vw, 36px); }
+      .hero__cta { flex-direction: column; }
+      .hero__cta .btn { width: 100%; justify-content: center; }
+      .numbers__grid { grid-template-columns: 1fr 1fr; }
+      .number-item { border-right: none; border-bottom: 1px solid var(--border); }
+      .team__grid { grid-template-columns: 1fr; }
+      .portfolio-card { flex: 0 0 280px; }
+      .float-cta span { display: none; }
+      .float-cta { padding: 14px; border-radius: 50%; }
+      .steps { flex-direction: column; gap: 16px; }
+      .steps::before { display: none; }
+    }
+    /* ══════════════════════════════════════
+       ✦ WOW EFFECTS — PREMIUM LAYER
+    ══════════════════════════════════════ */
+
+    /* ── ANIMATED GRADIENT HERO H1 ── */
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .hero__h1 {
+      background: linear-gradient(
+        120deg,
+        #ffffff   0%,
+        #ffffff   35%,
+        #8BC34A   55%,
+        #4CAF50   70%,
+        #ffffff   90%
+      );
+      background-size: 250% 250%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: gradientShift 7s ease infinite;
+    }
+    /* ensure split words inherit gradient */
+    .hero__h1 .word { display: inline-block; }
+
+    /* ── SECTION LABEL — accent line ── */
+    .label {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .label::before {
+      content: '';
+      display: block;
+      width: 28px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--green-deep), var(--green-lime));
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* ── HERO PARALLAX BG ── */
+    .hero__bg { will-change: transform; }
+
+    /* ── BOTTOM GRADIENT FADE ON HERO ── */
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 220px;
+      background: linear-gradient(to top, #212121 0%, transparent 100%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ── SCROLL PROGRESS BAR ── */
+    #scroll-progress {
+      position: fixed;
+      top: var(--header-h);
+      left: 0;
+      height: 2px;
+      width: 0%;
+      background: linear-gradient(90deg, var(--green-deep), var(--green-primary), var(--green-lime));
+      z-index: 101;
+      transition: width 0.08s linear;
+      pointer-events: none;
+    }
+
+    /* ── CUSTOM CURSOR (desktop only) ── */
+    @media (hover: hover) {
+      body { cursor: none; }
+      a, button, [data-tilt], .portfolio-card, .deal-card, .bento-tile { cursor: none; }
+    }
+    #cursor {
+      position: fixed;
+      top: 0; left: 0;
+      pointer-events: none;
+      z-index: 9999;
+      mix-blend-mode: normal;
+    }
+    #cursor-dot {
+      width: 6px; height: 6px;
+      background: var(--green-primary);
+      border-radius: 50%;
+      position: absolute;
+      top: -3px; left: -3px;
+      transition: transform 0.1s ease;
+    }
+    #cursor-ring {
+      width: 32px; height: 32px;
+      border: 1.5px solid rgba(76,175,80,0.7);
+      border-radius: 50%;
+      position: absolute;
+      top: -16px; left: -16px;
+      transition:
+        width  0.35s cubic-bezier(0.16,1,0.3,1),
+        height 0.35s cubic-bezier(0.16,1,0.3,1),
+        top    0.35s cubic-bezier(0.16,1,0.3,1),
+        left   0.35s cubic-bezier(0.16,1,0.3,1),
+        border-color 0.3s ease,
+        opacity 0.3s ease;
+    }
+    #cursor.hover #cursor-ring {
+      width: 56px; height: 56px;
+      top: -28px; left: -28px;
+      border-color: rgba(139,195,74,0.5);
+      background: rgba(76,175,80,0.06);
+    }
+    #cursor.hidden #cursor-ring { opacity: 0; }
+    #cursor.hidden #cursor-dot  { opacity: 0; }
+
+    /* ── NUMBER STAT GLOW ── */
+    @keyframes glowPulse {
+      0%, 100% { text-shadow: 0 0 0 rgba(139,195,74,0); }
+      50%       { text-shadow: 0 0 28px rgba(139,195,74,0.45); }
+    }
+    .hero__stat-num { animation: glowPulse 3.5s ease-in-out infinite; }
+    .hero__stat:nth-child(2) .hero__stat-num { animation-delay: 0.6s; }
+    .hero__stat:nth-child(3) .hero__stat-num { animation-delay: 1.2s; }
+    .hero__stat:nth-child(4) .hero__stat-num { animation-delay: 1.8s; }
+    .hero__stat:nth-child(5) .hero__stat-num { animation-delay: 2.4s; }
+
+    /* ── ENHANCED CARD HOVER ── */
+    .portfolio-card {
+      position: relative;
+      overflow: hidden;
+    }
+    .portfolio-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 55%;
+      height: 100%;
+      background: linear-gradient(120deg, transparent, rgba(255,255,255,0.07), transparent);
+      transform: skewX(-15deg);
+      transition: left 0.65s ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .portfolio-card:hover::before { left: 160%; }
+    .portfolio-card:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 28px 64px rgba(76,175,80,0.18), 0 0 0 1px rgba(76,175,80,0.15);
+    }
+
+    .deal-card:hover {
+      box-shadow: 0 12px 36px rgba(76,175,80,0.14);
+      transform: translateY(-4px);
+    }
+    .bento-tile:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 20px 56px rgba(76,175,80,0.13), 0 0 0 1.5px rgba(76,175,80,0.25);
+    }
+    .team-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 24px 60px rgba(76,175,80,0.14), 0 0 0 1px rgba(76,175,80,0.12);
+    }
+    .case-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 28px 72px rgba(0,0,0,0.1), 0 0 0 1px rgba(76,175,80,0.14);
+    }
+    .invest-card:hover {
+      transform: translateX(6px);
+      box-shadow: -4px 0 0 0 var(--green-primary), 0 8px 24px rgba(76,175,80,0.1);
+      border-color: var(--green-primary);
+    }
+
+    /* ── FLOATING CTA PULSE ── */
+    .float-cta.visible {
+      animation: pulseRing 3s ease-in-out infinite;
+    }
+    @keyframes pulseRing {
+      0%, 100% { box-shadow: 0 4px 16px rgba(76,175,80,0.2); }
+      50%       { box-shadow: 0 8px 32px rgba(76,175,80,0.45), 0 0 0 8px rgba(76,175,80,0.08); }
+    }
+
+    /* ── HERO AMBIENT ORBS ENHANCE ── */
+    .hero__orb--1 {
+      background: radial-gradient(circle, rgba(76,175,80,0.22) 0%, transparent 65%);
+      filter: blur(60px);
+    }
+    .hero__orb--2 {
+      background: radial-gradient(circle, rgba(139,195,74,0.14) 0%, transparent 65%);
+      filter: blur(80px);
+    }
+
+    /* ── SECTION GRADIENT ACCENTS ── */
+    #for-owners  { border-top: 1px solid var(--border); }
+    #why         { border-top: 1px solid var(--border); }
+    #team        { border-top: 1px solid var(--border); }
+
+    /* gradient underline on section H2 */
+    .section-title-accent {
+      position: relative;
+      display: inline-block;
+    }
+    .section-title-accent::after {
+      content: '';
+      position: absolute;
+      bottom: -6px; left: 0;
+      width: 64px; height: 3px;
+      background: linear-gradient(90deg, var(--green-primary), var(--green-lime));
+      border-radius: 2px;
+    }
+
+    /* ── BENTO STAGGER ── */
+    .bento__grid .bento-tile:nth-child(1) { transition-delay: 0.04s; }
+    .bento__grid .bento-tile:nth-child(2) { transition-delay: 0.10s; }
+    .bento__grid .bento-tile:nth-child(3) { transition-delay: 0.16s; }
+    .bento__grid .bento-tile:nth-child(4) { transition-delay: 0.22s; }
+    .bento__grid .bento-tile:nth-child(5) { transition-delay: 0.28s; }
+    .bento__grid .bento-tile:nth-child(6) { transition-delay: 0.34s; }
+
+    /* ── TIMELINE DOT PULSE ── */
+    .timeline__item::before {
+      animation: dotPulse 2s ease-in-out infinite;
+    }
+    @keyframes dotPulse {
+      0%, 100% { box-shadow: 0 0 0 2px var(--green-primary); }
+      50%       { box-shadow: 0 0 0 5px rgba(76,175,80,0.2); }
+    }
+
+    /* ── STEP NUMBER GRADIENT ── */
+    .step__num {
+      background: linear-gradient(135deg, #4CAF50, #2E7D32);
+      box-shadow: 0 4px 12px rgba(76,175,80,0.35);
+    }
+
+    /* ── CHECK ICON GRADIENT ── */
+    .check-icon {
+      background: linear-gradient(135deg, #4CAF50, #2E7D32);
+      box-shadow: 0 2px 8px rgba(76,175,80,0.3);
+    }
+
+    /* ── FORM FOCUS GLOW ── */
+    .form-field input:focus,
+    .form-field select:focus,
+    .form-field textarea:focus {
+      box-shadow: 0 0 0 4px rgba(76,175,80,0.18);
+    }
+
+    /* ── HERO SUB FADE-UP enhanced ── */
+    .hero__sub, .hero__cta {
+      will-change: opacity, transform;
+    }
+
+  </style>
+</head>
+
+<body>
+
+<!-- ════ HEADER ════ -->
+<header class="header" id="header">
+  <div class="header__inner">
+    <a href="#hero" class="logo logo--on-dark" id="logo">
+      <svg class="logo__icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="36" height="36" rx="8" fill="#4CAF50"/>
+        <path d="M8 18L14 12L20 18L26 12L28 14L20 22L14 16L10 20L8 18Z" fill="white"/>
+        <path d="M8 24L18 14L28 24" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.5"/>
+      </svg>
+      EntenS Group
+    </a>
+
+    <nav class="nav" id="main-nav">
+      <a href="#about" class="nav__link">О нас</a>
+      <a href="#portfolio" class="nav__link">Направления</a>
+      <a href="#for-owners" class="nav__link">Для владельцев</a>
+      <a href="#for-investors" class="nav__link">Для инвесторов</a>
+      <a href="#team" class="nav__link">Команда</a>
+      <a href="#contact" class="nav__link">Контакты</a>
+    </nav>
+
+    <a href="#contact" class="btn btn--primary header__cta">Предложить объект</a>
+
+    <button class="burger" id="burger" aria-label="Меню">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<!-- Mobile nav -->
+<nav class="mobile-nav" id="mobile-nav">
+  <a href="#about" class="mobile-nav__link">О нас</a>
+  <a href="#portfolio" class="mobile-nav__link">Направления</a>
+  <a href="#for-owners" class="mobile-nav__link">Для владельцев</a>
+  <a href="#for-investors" class="mobile-nav__link">Для инвесторов</a>
+  <a href="#team" class="mobile-nav__link">Команда</a>
+  <a href="#contact" class="mobile-nav__link">Контакты</a>
+  <a href="#contact" class="btn btn--primary">Предложить объект</a>
+</nav>
+
+<!-- ════ HERO ════ -->
+<section class="hero" id="hero">
+  <div class="hero__bg"></div>
+  <div class="hero__overlay"></div>
+  <div class="hero__orb hero__orb--1"></div>
+  <div class="hero__orb hero__orb--2"></div>
+
+  <div class="container" style="display:flex;flex-direction:column;min-height:100svh;">
+    <div class="hero__content">
+      <div class="hero__inner">
+        <div class="hero__label">
+          <span class="label label--dark">EntenS Group · Управление активами</span>
+        </div>
+
+        <h1 class="hero__h1" id="hero-h1">
+          <!-- Words are injected by JS -->
+        </h1>
+
+        <p class="hero__sub">
+          Покупаем, берём в аренду РЦ, парки, отели.<br>
+          Для собственников, готовых к сделке, и инвесторов, ищущих партнёра-оператора.
+        </p>
+
+        <div class="hero__cta">
+          <a href="#contact" class="btn btn--primary">Предложить объект</a>
+          <a href="#for-investors" class="btn btn--ghost-dark">Для инвесторов →</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero__trust">
+      <div class="hero__trust-inner">
+        <div class="hero__stat">
+          <span class="hero__stat-num" data-count="7" data-suffix="+">0</span>
+          <span class="hero__stat-label">лет на рынке</span>
+        </div>
+        <div class="hero__stat">
+          <span class="hero__stat-num" data-count="12" data-suffix="">0</span>
+          <span class="hero__stat-label">объектов в портфеле</span>
+        </div>
+        <div class="hero__stat">
+          <span class="hero__stat-num" data-count="500" data-suffix="К+">0</span>
+          <span class="hero__stat-label">гостей в год</span>
+        </div>
+        <div class="hero__stat">
+          <span class="hero__stat-num" data-count="8" data-suffix="">0</span>
+          <span class="hero__stat-label">городов присутствия</span>
+        </div>
+        <div class="hero__stat">
+          <span class="hero__stat-num" data-count="5" data-suffix="">0</span>
+          <span class="hero__stat-label">ИИ-продуктов</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ NUMBERS ════ -->
+<section class="numbers" id="numbers">
+  <div class="container">
+    <div class="numbers__grid">
+
+      <div class="number-item reveal">
+        <div class="number-item__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+          </svg>
+        </div>
+        <div class="number-item__val"><span data-count="7" data-suffix="+">7+</span></div>
+        <div class="number-item__label">лет на рынке</div>
+        <div class="number-item__caption">Работаем с 2018 года</div>
+      </div>
+
+      <div class="number-item reveal reveal-delay-1">
+        <div class="number-item__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/>
+          </svg>
+        </div>
+        <div class="number-item__val"><span data-count="12" data-suffix="">0</span></div>
+        <div class="number-item__label">объектов в портфеле</div>
+        <div class="number-item__caption">Развлечения, отели, рестораны</div>
+      </div>
+
+      <div class="number-item reveal reveal-delay-2">
+        <div class="number-item__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+        </div>
+        <div class="number-item__val"><span data-count="500" data-suffix="К+">0</span></div>
+        <div class="number-item__label">гостей в год</div>
+        <div class="number-item__caption">Ежегодный трафик</div>
+      </div>
+
+      <div class="number-item reveal reveal-delay-3">
+        <div class="number-item__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/>
+          </svg>
+        </div>
+        <div class="number-item__val"><span data-count="8" data-suffix="">0</span></div>
+        <div class="number-item__label">городов присутствия</div>
+        <div class="number-item__caption">Пермский край и другие</div>
+      </div>
+
+      <div class="number-item reveal reveal-delay-4">
+        <div class="number-item__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+          </svg>
+        </div>
+        <div class="number-item__val"><span data-count="5" data-suffix="">0</span></div>
+        <div class="number-item__label">ИИ-продуктов</div>
+        <div class="number-item__caption">Цифровые инструменты</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════ ABOUT ════ -->
+<section class="section" id="about">
+  <div class="container">
+    <div class="about__grid">
+      <div class="about__text reveal-left">
+        <span class="label">О компании</span>
+        <h2 style="margin-top:12px;margin-bottom:20px;">
+          EntenS Group — управляем тем,<br>что создаём и покупаем сами
+        </h2>
+
+        <p>Мы не брокеры и не консультанты. Мы собственники и операторы — покупаем объекты, берём в аренду с правом выкупа. Каждый объект в нашем портфеле работает под нашим прямым управлением.</p>
+        <p style="margin-top:14px;">Группа работает в пяти направлениях: развлекательный и гостиничный бизнес, рестораны, ИИ-продукты и инвестпроекты.</p>
+        <p style="margin-top:14px;">Мы используем собственные технологии на базе ИИ в операционном управлении — это позволяет нам работать быстрее и эффективнее, чем традиционные управляющие компании.</p>
+
+        <div class="about__diff">
+          <div class="about__diff-item">
+            <span class="check-icon">✓</span>
+            Не перепродаём — управляем сами
+          </div>
+          <div class="about__diff-item">
+            <span class="check-icon">✓</span>
+            Прозрачная отчётность для собственников
+          </div>
+          <div class="about__diff-item">
+            <span class="check-icon">✓</span>
+            Технологичное управление на базе ИИ
+          </div>
+        </div>
+      </div>
+
+      <div class="about__photo reveal-right reveal-delay-2">
+        <div class="photo-placeholder">
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="4" y="10" width="40" height="28" rx="3"/>
+            <circle cx="24" cy="24" r="8"/>
+            <circle cx="24" cy="24" r="3"/>
+          </svg>
+          Фото объекта
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ PORTFOLIO ════ -->
+<section class="section section--light" id="portfolio">
+  <div class="container">
+    <div class="portfolio__label reveal">
+      <span class="label">Направления</span>
+      <h2 style="margin-top:12px;">Пять направлений группы</h2>
+      <p style="margin-top:12px;max-width:520px;">Покупаем и управляем объектами в индустрии развлечений, гостеприимства и питания. Разрабатываем ИИ-инструменты и реализуем инвестпроекты.</p>
+    </div>
+
+    <div class="cards-track" id="cards-track">
+
+      <!-- Карточка 1 -->
+      <div class="portfolio-card reveal" data-tilt>
+        <div class="portfolio-card__img">
+          <div class="photo-placeholder">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="24" cy="24" r="10"/><path d="M14 24h-4M34 24h4M24 14v-4M24 34v4"/>
+            </svg>
+            Фото РЦ
+          </div>
+        </div>
+        <div class="portfolio-card__body">
+          <div class="portfolio-card__tag">Развлечения</div>
+          <h3>Парки и развлекательные центры</h3>
+          <p>РЦ, парки, активити-пространства и семейные центры. Управляем операционно: от маркетинга до команды.</p>
+          <div class="portfolio-card__meta">
+            <div class="portfolio-card__metric">Объекты: <span>X шт.</span></div>
+            <div class="portfolio-card__metric">Площадь: <span>X тыс. м²</span></div>
+          </div>
+          <span class="badge badge--active">В управлении</span>
+        </div>
+      </div>
+
+      <!-- Карточка 2 -->
+      <div class="portfolio-card reveal reveal-delay-1" data-tilt>
+        <div class="portfolio-card__img">
+          <div class="photo-placeholder">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M6 18l18-12 18 12v22a2 2 0 01-2 2H8a2 2 0 01-2-2z"/><rect x="16" y="24" width="7" height="18"/>
+            </svg>
+            Фото отеля / курорта
+          </div>
+        </div>
+        <div class="portfolio-card__body">
+          <div class="portfolio-card__tag">Гостиничный бизнес</div>
+          <h3>Отели и курорты</h3>
+          <p>Большой опыт работы на всесезонных курортах — Роза Хутор, Завидово, Губаха. Работаем круглогодично.</p>
+          <div class="portfolio-card__meta">
+            <div class="portfolio-card__metric">Номеров: <span>X шт.</span></div>
+            <div class="portfolio-card__metric">Occupancy: <span>X%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Карточка 3 -->
+      <div class="portfolio-card reveal reveal-delay-2" data-tilt>
+        <div class="portfolio-card__img">
+          <div class="photo-placeholder">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M8 40V20l16-12 16 12v20"/><path d="M16 40v-14h16v14"/>
+            </svg>
+            Фото ресторана
+          </div>
+        </div>
+        <div class="portfolio-card__body">
+          <div class="portfolio-card__tag">Рестораны</div>
+          <h3>Питание в составе проектов</h3>
+          <p>Ресторанные концепции как часть комплексных объектов: РЦ, курортов, парков. Собственные концепты — РеBEERная, Чалагач.</p>
+          <div class="portfolio-card__meta">
+            <div class="portfolio-card__metric">Точек: <span>X шт.</span></div>
+            <div class="portfolio-card__metric">Форматов: <span>X</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Карточка 4 -->
+      <div class="portfolio-card reveal reveal-delay-3" data-tilt>
+        <div class="portfolio-card__img" style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);display:flex;align-items:center;justify-content:center;">
+          <svg width="64" height="64" viewBox="0 0 48 48" fill="none" stroke="#1565C0" stroke-width="1.5" opacity="0.5">
+            <rect x="8" y="8" width="32" height="32" rx="4"/><path d="M16 24h4l3-6 4 12 3-6h2"/>
+          </svg>
+        </div>
+        <div class="portfolio-card__body">
+          <div class="portfolio-card__tag portfolio-card__tag--tech">Технологии</div>
+          <h3>ИИ-агенты и цифровые продукты</h3>
+          <p>Разрабатываем ИИ-инструменты для управления объектами — автоматизация операционных процессов, аналитика, отчётность. Используем в своих объектах и предлагаем рынку.</p>
+          <div class="portfolio-card__meta">
+            <div class="portfolio-card__metric">Продуктов: <span>5</span></div>
+          </div>
+          <span class="badge badge--live">Live</span>
+        </div>
+      </div>
+
+      <!-- Карточка 5 -->
+      <div class="portfolio-card reveal reveal-delay-4" data-tilt>
+        <div class="portfolio-card__img">
+          <div class="photo-placeholder">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 20l12-8 12 8v16H12z"/><path d="M20 36v-8h8v8"/>
+            </svg>
+            Фото проекта
+          </div>
+        </div>
+        <div class="portfolio-card__body">
+          <div class="portfolio-card__tag">Инвестиции</div>
+          <h3>Совместные проекты и коллаборации</h3>
+          <p>Реализуем инвестпроекты в индустрии развлечений и гостеприимства — совместное владение, соинвестирование, стратегические партнёрства.</p>
+          <div class="portfolio-card__meta">
+            <div class="portfolio-card__metric">Проектов: <span>X шт.</span></div>
+            <div class="portfolio-card__metric">Партнёров: <span>X</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="cards-progress" id="cards-progress">
+      <div class="cards-progress__dot active" data-index="0"></div>
+      <div class="cards-progress__dot" data-index="1"></div>
+      <div class="cards-progress__dot" data-index="2"></div>
+      <div class="cards-progress__dot" data-index="3"></div>
+      <div class="cards-progress__dot" data-index="4"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ FOR OWNERS ════ -->
+<section class="section" id="for-owners">
+  <div class="container">
+    <div class="owners__grid">
+      <div class="reveal-left">
+        <span class="label">Для собственников бизнеса</span>
+        <h2 style="margin-top:12px;margin-bottom:16px;">
+          Хотите продать или сдать в аренду<br>с правом выкупа?
+        </h2>
+        <p>Мы рассмотрим ваш объект в течение 3 рабочих дней и сделаем конкретное предложение.</p>
+
+        <blockquote class="owners__quote">
+          «Мы не занимаемся перепродажей — каждый объект остаётся в нашем операционном управлении»
+        </blockquote>
+
+        <div class="deal-cards">
+          <div class="deal-card">
+            <div class="deal-card__title">Покупка</div>
+            <p>Прямая сделка. Справедливая оценка. Без участия продавца в операционке после закрытия.</p>
+          </div>
+          <div class="deal-card">
+            <div class="deal-card__title">Аренда с правом выкупа</div>
+            <p>Стабильный доход для вас + профессиональное управление + путь к полному выходу.</p>
+          </div>
+        </div>
+
+        <div class="owners__cta">
+          <a href="#contact" class="btn btn--primary">Предложить свой объект</a>
+          <a href="https://t.me/entens_group" class="btn btn--ghost" target="_blank" rel="noopener">Написать в Telegram →</a>
+        </div>
+      </div>
+
+      <div class="reveal-right reveal-delay-2">
+        <div class="criteria">
+          <div class="criteria__title">Рассматриваем объекты</div>
+          <div class="criteria__list">
+            <div class="criteria__item">РЦ, парки, отели, рестораны, активити-пространства</div>
+            <div class="criteria__item">Площадь: от 300 кв.м.</div>
+            <div class="criteria__item">Выручка: от 5 млн руб/год (убыточные тоже рассматриваем)</div>
+            <div class="criteria__item">География: любой город РФ с населением от 50 000 чел.</div>
+            <div class="criteria__item">Состояние: рабочие и вновь возводимые</div>
+          </div>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step__num">01</div>
+            <div class="step__title">Заявка</div>
+            <p>Оставляете заявку</p>
+          </div>
+          <div class="step">
+            <div class="step__num">02</div>
+            <div class="step__title">Оценка</div>
+            <p>Проводим оценку за 3 дня</p>
+          </div>
+          <div class="step">
+            <div class="step__num">03</div>
+            <div class="step__title">Сделка</div>
+            <p>Выходим на сделку в течение 30 дней</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ FOR INVESTORS ════ -->
+<section class="section section--light" id="for-investors">
+  <div class="container">
+    <div class="investors__grid">
+      <div class="reveal-right reveal-delay-1">
+        <div class="invest-cards">
+          <div class="invest-card">
+            <div class="invest-card__title">Совместные проекты</div>
+            <p>Инвестируете в конкретный объект. EntenS управляет. Получаете доход от операционной деятельности.</p>
+          </div>
+          <div class="invest-card">
+            <div class="invest-card__title">Соинвестирование в приобретение</div>
+            <p>Участвуете в покупке актива вместе с нами. Разделяем риски и доходность на согласованных условиях.</p>
+          </div>
+          <div class="invest-card">
+            <div class="invest-card__title">Стратегическое партнёрство</div>
+            <p>Долгосрочные коллаборации по направлениям группы: franchise, tech-лицензия, joint venture.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal-left">
+        <span class="label">Для инвесторов</span>
+        <h2 style="margin-top:12px;margin-bottom:16px;">
+          Инвестируйте в индустрию развлечений и гостеприимства — без операционной головной боли
+        </h2>
+        <p>Вы вкладываете капитал — мы управляем активом. Прозрачная отчётность, понятная модель участия.</p>
+
+        <div class="why-us-list" style="margin-top:24px;">
+          <div class="why-us-item">
+            <span class="star-icon">★</span>
+            <div><strong>Операционный опыт</strong> — управляем реальными объектами сами, без субподряда</div>
+          </div>
+          <div class="why-us-item">
+            <span class="star-icon">★</span>
+            <div><strong>Технологии</strong> — ИИ-инструменты повышают эффективность и снижают издержки</div>
+          </div>
+          <div class="why-us-item">
+            <span class="star-icon">★</span>
+            <div><strong>Прозрачность</strong> — ежемесячная финансовая отчётность по каждому объекту</div>
+          </div>
+        </div>
+
+        <div class="investors__cta">
+          <a href="#contact" class="btn btn--primary">Обсудить инвестицию</a>
+          <a href="https://t.me/entens_group" class="btn btn--ghost" target="_blank" rel="noopener">Написать в Telegram →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ BENTO — WHY US ════ -->
+<section class="bento" id="why">
+  <div class="container">
+    <div class="reveal">
+      <span class="label">Почему мы</span>
+      <h2 style="margin-top:12px;">Конкретные преимущества<br>без клише</h2>
+    </div>
+
+    <div class="bento__grid">
+
+      <div class="bento-tile bento-tile--1 reveal">
+        <div class="bento-tile__icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div class="bento-tile__title">Операционная экспертиза</div>
+        <p>Собственная команда управляющих, маркетологов и технологов. Не посредники — операторы. Каждый объект под прямым управлением.</p>
+      </div>
+
+      <div class="bento-tile bento-tile--2 reveal reveal-delay-1">
+        <div class="bento-tile__icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+          </svg>
+        </div>
+        <div class="bento-tile__title">Технологическое управление</div>
+        <p>ИИ-продукты собственной разработки внедрены в операционку. Быстрее традиционных УК.</p>
+      </div>
+
+      <div class="bento-tile bento-tile--3 reveal">
+        <div class="bento-tile__icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div class="bento-tile__title">Долгосрочное партнёрство</div>
+        <p>Каждый объект рассматриваем как долгосрочную инвестицию. Не флиппинг — развитие. Мы заинтересованы в росте вашего актива не меньше вас.</p>
+      </div>
+
+      <div class="bento-tile bento-tile--4 reveal reveal-delay-1">
+        <div class="bento-tile__icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>
+          </svg>
+        </div>
+        <div class="bento-tile__title">Прозрачная отчётность</div>
+        <p>Ежемесячные финансовые отчёты для собственников. Вы всегда знаете, что происходит с вашим активом.</p>
+      </div>
+
+      <div class="bento-tile bento-tile--5 reveal reveal-delay-2">
+        <div class="bento-tile__icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/>
+          </svg>
+        </div>
+        <div class="bento-tile__title">Опыт в регионах РФ</div>
+        <p>Понимаем специфику регионального рынка. Работаем с муниципальными и частными объектами. Рассматриваем любой город от 50 000 жителей.</p>
+      </div>
+
+      <div class="bento-tile bento-tile--6 reveal">
+        <div class="bento-tile__icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+          </svg>
+        </div>
+        <div class="bento-tile__title">Полный цикл</div>
+        <p>От приобретения до операционного управления и маркетинга под ключ. Один партнёр — всё под контролем.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════ CASES ════ -->
+<section class="section section--light" id="cases">
+  <div class="container">
+    <div class="reveal">
+      <span class="label">Кейсы</span>
+      <h2 style="margin-top:12px;margin-bottom:8px;">История и результаты</h2>
+      <p style="max-width:480px;">Ключевые вехи компании и реальные результаты управления объектами.</p>
+    </div>
+
+    <div class="timeline reveal-scale">
+      <div class="timeline__item">
+        <div class="timeline__year">2018</div>
+        <div class="timeline__title">Основание EntenS Group</div>
+        <div class="timeline__desc">Начало операционной деятельности в сфере развлечений в Пермском крае.</div>
+      </div>
+      <div class="timeline__item">
+        <div class="timeline__year">2019–2020</div>
+        <div class="timeline__title">Первые объекты в управлении</div>
+        <div class="timeline__desc">Приобретение и запуск первых РЦ. Формирование операционной команды и бизнес-процессов.</div>
+      </div>
+      <div class="timeline__item">
+        <div class="timeline__year">2021–2022</div>
+        <div class="timeline__title">Выход в гостиничный бизнес</div>
+        <div class="timeline__desc">Начало работы на горнолыжных курортах — Губаха, выход на объекты на Роза Хутор и Завидово.</div>
+      </div>
+      <div class="timeline__item">
+        <div class="timeline__year">2023</div>
+        <div class="timeline__title">Ресторанные концепции</div>
+        <div class="timeline__desc">Запуск собственных брендов питания РеBEERная и Чалагач как часть комплексных объектов.</div>
+      </div>
+      <div class="timeline__item">
+        <div class="timeline__year">2024–2025</div>
+        <div class="timeline__title">ИИ-продукты и расширение</div>
+        <div class="timeline__desc">Разработка и внедрение ИИ-агентов для операционного управления. Выход в новые регионы России.</div>
+      </div>
+      <div class="timeline__item">
+        <div class="timeline__year">2026</div>
+        <div class="timeline__title">Активная экспансия</div>
+        <div class="timeline__desc">Поиск объектов для покупки и аренды в городах РФ от 50 000 чел. Привлечение инвестпартнёров.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ TEAM ════ -->
+<section class="section" id="team">
+  <div class="container">
+    <div class="reveal">
+      <span class="label">Команда</span>
+      <h2 style="margin-top:12px;margin-bottom:12px;">Люди, которые управляют активами</h2>
+      <p style="max-width:520px;">Мы сами — предприниматели. Поэтому понимаем, что значит доверить свой бизнес другому человеку.</p>
+    </div>
+
+    <div class="team__grid">
+
+      <div class="team-card reveal-scale">
+        <div class="team-card__photo">
+          <div class="team-avatar">О</div>
+        </div>
+        <div class="team-card__body">
+          <div class="team-card__name">Основатель</div>
+          <div class="team-card__role">CEO / Founder</div>
+          <p class="team-card__bio">X лет в индустрии развлечений и гостеприимства. Запустил X объектов. Экспертиза в M&A и операционном управлении.</p>
+        </div>
+      </div>
+
+      <div class="team-card reveal-scale reveal-delay-1">
+        <div class="team-card__photo">
+          <div class="team-avatar">О</div>
+        </div>
+        <div class="team-card__body">
+          <div class="team-card__name">Операционный директор</div>
+          <div class="team-card__role">COO · Развлечения & Парки</div>
+          <p class="team-card__bio">Управляет РЦ и парками. X лет в операционном менеджменте. Запустил X объектов с нуля.</p>
+        </div>
+      </div>
+
+      <div class="team-card reveal-scale reveal-delay-2">
+        <div class="team-card__photo">
+          <div class="team-avatar">О</div>
+        </div>
+        <div class="team-card__body">
+          <div class="team-card__name">Директор по гостиничному бизнесу</div>
+          <div class="team-card__role">Отели & Курорты</div>
+          <p class="team-card__bio">Специализация на всесезонных курортах. X лет опыта в гостиничном менеджменте. Работал с Роза Хутор, Завидово, Губаха.</p>
+        </div>
+      </div>
+
+      <div class="team-card reveal-scale reveal-delay-3">
+        <div class="team-card__photo">
+          <div class="team-avatar" style="background:rgba(21,101,192,0.1);color:#1565C0;">T</div>
+        </div>
+        <div class="team-card__body">
+          <div class="team-card__name">Tech Lead</div>
+          <div class="team-card__role">AI & Технологии</div>
+          <p class="team-card__bio">Разрабатывает ИИ-агентов для операционного управления. Автоматизация бизнес-процессов в объектах группы.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════ GEOGRAPHY ════ -->
+<section class="section section--light" id="geography">
+  <div class="container">
+    <div class="geo__grid">
+      <div class="geo__map reveal-left">
+        <!-- Simplified SVG map of Russia -->
+        <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" fill="none">
+          <!-- Russia simplified outline -->
+          <path d="M120,180 L180,150 L240,130 L300,110 L380,100 L440,90 L520,85 L600,95 L660,110 L700,130 L720,160 L710,200 L680,230 L650,260 L620,290 L590,310 L560,330 L530,310 L500,290 L460,280 L420,290 L400,310 L380,290 L360,270 L340,280 L320,300 L300,320 L280,340 L260,360 L240,370 L220,360 L200,340 L180,320 L160,300 L140,280 L120,260 L110,230 L115,200 Z"
+            fill="#e8f5e9" stroke="#4CAF50" stroke-width="1.5"/>
+          <!-- Eastern Russia -->
+          <path d="M600,95 L650,80 L700,70 L750,80 L780,100 L790,130 L780,160 L760,190 L740,210 L720,200 L700,180 L680,200 L660,190 L650,160 L640,130 L620,110 Z"
+            fill="#e8f5e9" stroke="#4CAF50" stroke-width="1.5"/>
+          <!-- Siberia extension -->
+          <path d="M660,110 L700,130 L720,160 L720,200 L700,180 L680,200 L660,190 L650,160 L640,130 L620,110 Z"
+            fill="#c8e6c9" stroke="#4CAF50" stroke-width="1"/>
+
+          <!-- Current presence dots -->
+          <!-- Perm / Gubakha -->
+          <circle cx="490" cy="220" r="10" fill="#4CAF50" stroke="white" stroke-width="2"/>
+          <text x="505" y="225" font-family="Inter" font-size="11" fill="#2E7D32" font-weight="600">Пермский край</text>
+
+          <!-- Moscow region (Zavidovo) -->
+          <circle cx="370" cy="215" r="8" fill="#4CAF50" stroke="white" stroke-width="2"/>
+          <text x="385" y="220" font-family="Inter" font-size="11" fill="#2E7D32" font-weight="600">Завидово</text>
+
+          <!-- Sochi (Roza Khutor) -->
+          <circle cx="340" cy="310" r="8" fill="#4CAF50" stroke="white" stroke-width="2"/>
+          <text x="355" y="315" font-family="Inter" font-size="11" fill="#2E7D32" font-weight="600">Роза Хутор</text>
+
+          <!-- Priority regions (outline circles) -->
+          <circle cx="530" cy="270" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
+          <circle cx="450" cy="180" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
+          <circle cx="280" cy="230" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
+          <circle cx="580" cy="200" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
+
+          <!-- Legend -->
+          <circle cx="40" cy="410" r="7" fill="#4CAF50"/>
+          <text x="55" y="415" font-family="Inter" font-size="11" fill="#555">Текущие объекты</text>
+          <circle cx="40" cy="435" r="7" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
+          <text x="55" y="440" font-family="Inter" font-size="11" fill="#555">Приоритетные регионы</text>
+        </svg>
+      </div>
+
+      <div class="reveal-right reveal-delay-1">
+        <span class="label">География</span>
+        <h2 style="margin-top:12px;margin-bottom:28px;">Где мы работаем и куда планируем расти</h2>
+
+        <div class="geo__presence">
+          <h4>Текущее присутствие</h4>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--filled"></span>
+            Пермский край (Губаха) — горнолыжный курорт
+          </div>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--filled"></span>
+            Роза Хутор — гостиничный и ресторанный бизнес
+          </div>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--filled"></span>
+            Завидово — отельный проект
+          </div>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--filled"></span>
+            Другие регионы — развлекательные центры
+          </div>
+        </div>
+
+        <div class="geo__target">
+          <h4>Приоритетные регионы для роста</h4>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--outline"></span>
+            Поволжье и Урал — города от 50 000 чел.
+          </div>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--outline"></span>
+            Сибирь — горнолыжные и туристические кластеры
+          </div>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--outline"></span>
+            Центральная Россия — РЦ и семейные парки
+          </div>
+          <div class="geo__item">
+            <span class="geo__dot geo__dot--outline"></span>
+            Юг России — курорты и развлечения
+          </div>
+        </div>
+
+        <p style="margin:20px 0 24px;font-size:14px;">
+          Если ваш объект находится в одном из этих регионов — свяжитесь с нами первыми.
+        </p>
+
+        <a href="#contact" class="btn btn--primary">Предложить объект в моём регионе →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ CONTACT ════ -->
+<section class="section section--dark contact" id="contact">
+  <div class="container">
+    <div class="contact__inner">
+      <span class="label label--dark">Связаться</span>
+      <h2>Есть объект или хотите инвестировать?<br>Обсудим за 30 минут</h2>
+      <p>Оставьте заявку — ответим в течение 24 часов.<br>Без обязательств, без навязчивых звонков.</p>
+
+      <div class="form" id="contact-form-wrap">
+        <form id="contact-form" novalidate>
+          <div class="form-field">
+            <label for="name">Ваше имя *</label>
+            <input type="text" id="name" name="name" placeholder="Иван Петров" required autocomplete="name" />
+          </div>
+          <div class="form-field">
+            <label for="contact-input">Телефон или email *</label>
+            <input type="text" id="contact-input" name="contact" placeholder="+7 900 000 00 00 или mail@example.com" required />
+          </div>
+          <div class="form-field">
+            <label for="who">Кто вы? *</label>
+            <select id="who" name="who" required>
+              <option value="">Выберите...</option>
+              <option value="owner">Собственник бизнеса</option>
+              <option value="investor">Инвестор</option>
+              <option value="partner">Партнёр</option>
+              <option value="other">Другое</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="message">Коротко о вашей ситуации (необязательно)</label>
+            <textarea id="message" name="message" placeholder="Расскажите об объекте или вашем запросе..."></textarea>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" id="consent" name="consent" required />
+            <label for="consent">
+              Соглашаюсь с обработкой персональных данных в соответствии с <a href="#">152-ФЗ</a>
+            </label>
+          </div>
+          <button type="submit" class="btn btn--primary btn--full">Отправить заявку</button>
+        </form>
+
+        <div class="form-success" id="form-success">
+          <div class="form-success__icon">✓</div>
+          <h3>Заявка отправлена!</h3>
+          <p>Мы свяжемся с вами в течение 24 часов.<br>Или напишите нам в Telegram прямо сейчас.</p>
+          <a href="https://t.me/entens_group" class="btn btn--primary" style="margin-top:20px;" target="_blank">Написать в Telegram →</a>
+        </div>
+      </div>
+
+      <div class="contact__alts">
+        <a href="https://t.me/entens_group" class="contact__alt-btn" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.68 7.92c-.12.56-.44.7-.9.44l-2.5-1.84-1.2 1.16c-.14.14-.26.26-.52.26l.18-2.56 4.68-4.22c.2-.18-.04-.28-.32-.1L7.46 14.3l-2.46-.77c-.54-.16-.54-.54.12-.8l9.64-3.72c.44-.16.84.1.88.79z"/></svg>
+          Telegram @entens_group
+        </a>
+        <a href="tel:+7XXXXXXXXXX" class="contact__alt-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 11.5 19.79 19.79 0 011 2.18 2 2 0 013 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L7.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z"/></svg>
+          +7 XXX XXX XX XX
+        </a>
+        <a href="mailto:info@entens.ru" class="contact__alt-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          info@entens.ru
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ FOOTER ════ -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer__grid">
+      <div>
+        <div class="footer__logo">
+          <a href="#hero" class="logo" style="color:rgba(255,255,255,0.85);">
+            <svg class="logo__icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="36" height="36" rx="8" fill="#4CAF50"/>
+              <path d="M8 18L14 12L20 18L26 12L28 14L20 22L14 16L10 20L8 18Z" fill="white"/>
+            </svg>
+            EntenS Group
+          </a>
+        </div>
+        <p class="footer__desc">
+          Группа компаний, управляющая объектами в сфере развлечений, гостеприимства, ресторанного бизнеса и ИИ-технологий.
+        </p>
+      </div>
+
+      <div class="footer__col">
+        <h4>Навигация</h4>
+        <ul>
+          <li><a href="#about">О компании</a></li>
+          <li><a href="#portfolio">Направления</a></li>
+          <li><a href="#for-owners">Для владельцев</a></li>
+          <li><a href="#for-investors">Для инвесторов</a></li>
+          <li><a href="#team">Команда</a></li>
+          <li><a href="#contact">Контакты</a></li>
+        </ul>
+      </div>
+
+      <div class="footer__col">
+        <h4>Направления</h4>
+        <ul>
+          <li><a href="#portfolio">Развлекательный бизнес</a></li>
+          <li><a href="#portfolio">Гостиничный бизнес</a></li>
+          <li><a href="#portfolio">Ресторанный бизнес</a></li>
+          <li><a href="#portfolio">ИИ-продукты</a></li>
+          <li><a href="#portfolio">Инвестпроекты</a></li>
+        </ul>
+      </div>
+
+      <div class="footer__col">
+        <h4>Контакты</h4>
+        <ul>
+          <li><a href="tel:+7XXXXXXXXXX">+7 XXX XXX XX XX</a></li>
+          <li><a href="mailto:info@entens.ru">info@entens.ru</a></li>
+          <li><a href="https://t.me/entens_group" target="_blank" rel="noopener">Telegram @entens_group</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer__bottom">
+      <div>© 2026 EntenS Group · ООО «[Юридическое название]» · ОГРН: XXXXXXXXXXXXXXX · ИНН: XXXXXXXXXX</div>
+      <div class="footer__legal">
+        <a href="#">Политика конфиденциальности</a>
+        <a href="#">Пользовательское соглашение</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ════ FLOATING TELEGRAM CTA ════ -->
+<a href="https://t.me/entens_group" class="float-cta" id="float-cta" target="_blank" rel="noopener" aria-label="Написать в Telegram">
+  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.68 7.92c-.12.56-.44.7-.9.44l-2.5-1.84-1.2 1.16c-.14.14-.26.26-.52.26l.18-2.56 4.68-4.22c.2-.18-.04-.28-.32-.1L7.46 14.3l-2.46-.77c-.54-.16-.54-.54.12-.8l9.64-3.72c.44-.16.84.1.88.79z"/></svg>
+  <span>Написать в Telegram</span>
+</a>
+
+<!-- ════ JAVASCRIPT ════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ── HERO H1 SPLIT ANIMATION ──
+  const h1 = document.getElementById('hero-h1');
+  const heroText = 'Управляем развлекательными, гостиничными и ресторанными активами — и ищем следующий';
+  const words = heroText.split(' ');
+  h1.innerHTML = words.map((w, i) =>
+    `<span class="word" style="animation-delay:${i * 80}ms">${w}</span>`
+  ).join(' ');
+
+  // ── HEADER SCROLL BEHAVIOR ──
+  const header = document.getElementById('header');
+  const logo   = document.getElementById('logo');
+  const navLinks = document.querySelectorAll('.nav__link');
+
+  function onScroll() {
+    const scrolled = window.scrollY > 60;
+    header.classList.toggle('scrolled', scrolled);
+    if (scrolled) {
+      logo.classList.remove('logo--on-dark');
+    } else {
+      logo.classList.add('logo--on-dark');
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // ── BURGER MENU ──
+  const burger    = document.getElementById('burger');
+  const mobileNav = document.getElementById('mobile-nav');
+
+  burger.addEventListener('click', () => {
+    const open = mobileNav.classList.toggle('open');
+    burger.classList.toggle('open', open);
+    document.body.style.overflow = open ? 'hidden' : '';
+  });
+
+  mobileNav.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      mobileNav.classList.remove('open');
+      burger.classList.remove('open');
+      document.body.style.overflow = '';
+    });
+  });
+
+  // ── SMOOTH SCROLL ──
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', e => {
+      const target = document.querySelector(anchor.getAttribute('href'));
+      if (!target) return;
+      e.preventDefault();
+      const offset = document.getElementById('header').offsetHeight;
+      const top = target.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({ top, behavior: 'smooth' });
+    });
+  });
+
+  // ── ACTIVE NAV LINK ──
+  const sections = document.querySelectorAll('section[id]');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.getAttribute('id');
+        navLinks.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + id));
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  sections.forEach(s => io.observe(s));
+
+  // ── REVEAL ON SCROLL ──
+  const revealObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -60px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+  // ── COUNT UP ──
+  function countUp(el) {
+    const target  = parseInt(el.dataset.count, 10);
+    const suffix  = el.dataset.suffix || '';
+    const duration = 1600;
+    const start   = performance.now();
+
+    function tick(now) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // easeOut cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const value = Math.round(eased * target);
+      el.textContent = value + suffix;
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  const countObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.querySelectorAll('[data-count]').forEach(el => {
+          // avoid double-counting
+          if (!el.dataset.counted) {
+            el.dataset.counted = '1';
+            countUp(el);
+          }
+        });
+        countObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.3 });
+
+  document.querySelectorAll('.numbers, .hero__trust').forEach(el => countObserver.observe(el));
+
+  // ── FLOATING CTA ──
+  const floatCta = document.getElementById('float-cta');
+  const heroSection = document.getElementById('hero');
+
+  const floatObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      floatCta.classList.toggle('visible', !entry.isIntersecting);
+    });
+  }, { threshold: 0.1 });
+  floatObserver.observe(heroSection);
+
+  // ── CARDS TRACK SCROLL ──
+  const track    = document.getElementById('cards-track');
+  const dots     = document.querySelectorAll('.cards-progress__dot');
+
+  if (track) {
+    track.addEventListener('scroll', () => {
+      const cardWidth = track.firstElementChild ? track.firstElementChild.offsetWidth + 24 : 364;
+      const idx = Math.round(track.scrollLeft / cardWidth);
+      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    }, { passive: true });
+
+    dots.forEach(dot => {
+      dot.addEventListener('click', () => {
+        const idx = parseInt(dot.dataset.index, 10);
+        const cardWidth = track.firstElementChild ? track.firstElementChild.offsetWidth + 24 : 364;
+        track.scrollTo({ left: idx * cardWidth, behavior: 'smooth' });
+      });
+    });
+  }
+
+  // ── 3D CARD TILT ──
+  document.querySelectorAll('[data-tilt]').forEach(card => {
+    card.addEventListener('mousemove', e => {
+      const rect = card.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width  - 0.5;
+      const y = (e.clientY - rect.top)  / rect.height - 0.5;
+      card.style.transform = `perspective(800px) rotateY(${x * 8}deg) rotateX(${-y * 8}deg) translateY(-4px)`;
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = '';
+    });
+  });
+
+  // ── FORM VALIDATION + SUBMIT ──
+  const form    = document.getElementById('contact-form');
+  const success = document.getElementById('form-success');
+
+  if (form) {
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+
+      const name    = form.querySelector('#name');
+      const contact = form.querySelector('#contact-input');
+      const who     = form.querySelector('#who');
+      const consent = form.querySelector('#consent');
+      let valid = true;
+
+      [name, contact, who].forEach(f => {
+        if (!f.value.trim()) {
+          f.style.borderColor = '#ef5350';
+          f.style.boxShadow   = '0 0 0 3px rgba(239,83,80,0.2)';
+          valid = false;
+          f.addEventListener('input', () => {
+            f.style.borderColor = '';
+            f.style.boxShadow   = '';
+          }, { once: true });
+        }
+      });
+
+      if (!consent.checked) {
+        consent.parentElement.style.color = '#ef5350';
+        valid = false;
+      }
+
+      if (!valid) return;
+
+      // Simulate successful send
+      const submitBtn = form.querySelector('[type="submit"]');
+      submitBtn.textContent = 'Отправляем...';
+      submitBtn.disabled = true;
+
+      setTimeout(() => {
+        form.style.display = 'none';
+        success.style.display = 'block';
+      }, 900);
+    });
+  }
+
+  // ── SCROLL PROGRESS BAR ──
+  const progressBar = document.getElementById('scroll-progress');
+  if (progressBar) {
+    window.addEventListener('scroll', () => {
+      const total  = document.documentElement.scrollHeight - window.innerHeight;
+      const pct    = total > 0 ? (window.scrollY / total) * 100 : 0;
+      progressBar.style.width = pct + '%';
+    }, { passive: true });
+  }
+
+  // ── HERO PARALLAX ──
+  const heroBg = document.querySelector('.hero__bg');
+  if (heroBg) {
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const y = window.scrollY;
+          heroBg.style.transform = `translateY(${y * 0.35}px) scale(1.15)`;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }, { passive: true });
+  }
+
+  // ── CUSTOM CURSOR ──
+  const cursorEl   = document.getElementById('cursor');
+  const cursorDot  = document.getElementById('cursor-dot');
+  const cursorRing = document.getElementById('cursor-ring');
+
+  if (cursorEl && window.matchMedia('(hover: hover)').matches) {
+    let mouseX = 0, mouseY = 0;
+    let ringX  = 0, ringY  = 0;
+    let rafId;
+
+    document.addEventListener('mousemove', e => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      cursorEl.style.transform = `translate(${mouseX}px, ${mouseY}px)`;
+      cursorEl.classList.remove('hidden');
+    });
+
+    // smooth ring lag
+    function animateRing() {
+      ringX += (mouseX - ringX) * 0.14;
+      ringY += (mouseY - ringY) * 0.14;
+      cursorRing.style.transform = `translate(${ringX - mouseX}px, ${ringY - mouseY}px)`;
+      rafId = requestAnimationFrame(animateRing);
+    }
+    animateRing();
+
+    document.addEventListener('mouseleave', () => cursorEl.classList.add('hidden'));
+    document.addEventListener('mouseenter', () => cursorEl.classList.remove('hidden'));
+
+    // expand ring on interactive elements
+    const hoverTargets = 'a, button, [data-tilt], .portfolio-card, .deal-card, .bento-tile, .team-card, .case-card, .invest-card, input, select, textarea';
+    document.querySelectorAll(hoverTargets).forEach(el => {
+      el.addEventListener('mouseenter', () => cursorEl.classList.add('hover'));
+      el.addEventListener('mouseleave', () => cursorEl.classList.remove('hover'));
+    });
+  }
+
+  // ── SECTION H2 ACCENT UNDERLINE ──
+  // Apply gradient underline class to first h2 in each section-header
+  document.querySelectorAll('.section-header h2').forEach(h2 => {
+    h2.classList.add('section-title-accent');
+  });
+
+  // ── HERO H1 ANIMATED GRADIENT FIX ──
+  // Ensure gradient covers word-split spans
+  const heroH1 = document.querySelector('.hero__h1');
+  if (heroH1) heroH1.classList.add('hero__h1--gradient');
+
+  // ── REVEAL VARIANTS OBSERVER ──
+  const variantObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        variantObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal-left, .reveal-right, .reveal-scale').forEach(el => {
+    variantObserver.observe(el);
+  });
+
+  // ── MAGNETIC BUTTONS ──
+  document.querySelectorAll('.btn--primary, .btn--ghost').forEach(btn => {
+    btn.addEventListener('mousemove', e => {
+      const rect = btn.getBoundingClientRect();
+      const dx = (e.clientX - (rect.left + rect.width  / 2)) * 0.28;
+      const dy = (e.clientY - (rect.top  + rect.height / 2)) * 0.28;
+      btn.style.transform = `translate(${dx}px, ${dy}px) translateY(-2px)`;
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = '';
+    });
+  });
+
+  // ── STAGGER PORTFOLIO CARDS on enter ──
+  const portfolioObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const cards = entry.target.querySelectorAll('.portfolio-card');
+        cards.forEach((card, i) => {
+          setTimeout(() => card.classList.add('is-visible'), i * 90);
+        });
+        portfolioObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  const portfolioWrap = document.querySelector('#portfolio .portfolio-cards-wrap');
+  if (portfolioWrap) portfolioObserver.observe(portfolioWrap);
+
+})();
+</script>
+
+</body>
+</html>
