@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Бизнес-процессы: Отель + Ресторан</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    min-height: 100vh;
+    padding: 40px 32px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 44px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: #64748b;
+    font-size: 26px;
+    margin-bottom: 48px;
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin-bottom: 48px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 22px;
+    color: #475569;
+  }
+  .legend-dot {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ── COLUMNS ── */
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+    max-width: 1400px;
+    margin: 0 auto 56px;
+  }
+
+  .column-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    padding: 14px 20px;
+    border-radius: 10px;
+  }
+
+  .hotel-title  { background: rgba(59,130,246,.12); color: #1d4ed8; border: 1px solid rgba(59,130,246,.35); }
+  .rest-title   { background: rgba(161,98,7,.1);    color: #a16207; border: 1px solid rgba(161,98,7,.3); }
+
+  /* ── STEP CARD ── */
+  .step {
+    position: relative;
+    border-radius: 12px;
+    padding: 18px 20px 18px 62px;
+    margin-bottom: 8px;
+    border: 1px solid transparent;
+    transition: transform .15s;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .step:hover { transform: translateX(3px); }
+
+  .step-number {
+    position: absolute;
+    left: 16px; top: 50%;
+    transform: translateY(-50%);
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700;
+  }
+
+  .step-title {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #0f172a;
+  }
+
+  .step-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .step-items li {
+    font-size: 20px;
+    color: #475569;
+    padding-left: 16px;
+    position: relative;
+    line-height: 1.4;
+  }
+  .step-items li::before {
+    content: '›';
+    position: absolute; left: 0;
+    color: #94a3b8;
+  }
+
+  .tag {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 5px;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.3px;
+  }
+  .tag-manual  { background: rgba(239,68,68,.12);  color: #dc2626; }
+  .tag-auto    { background: rgba(22,163,74,.12);   color: #16a34a; }
+  .tag-partial { background: rgba(234,88,12,.1);    color: #ea580c; }
+
+  /* HOTEL colours */
+  .hotel-step {
+    border-color: rgba(59,130,246,.25);
+  }
+  .hotel-step .step-number {
+    background: rgba(59,130,246,.15);
+    color: #1d4ed8;
+  }
+
+  /* RESTAURANT colours */
+  .rest-step {
+    border-color: rgba(161,98,7,.2);
+  }
+  .rest-step .step-number {
+    background: rgba(161,98,7,.12);
+    color: #a16207;
+  }
+
+  /* ── ARROW ── */
+  .arrow {
+    text-align: center;
+    color: #cbd5e1;
+    font-size: 26px;
+    line-height: 1;
+    margin: 3px 0;
+  }
+
+  /* ── AUTOMATION SECTION ── */
+  .automation {
+    max-width: 1400px;
+    margin: 0 auto 56px;
+  }
+
+  .section-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #0f172a;
+    text-align: center;
+    margin-bottom: 28px;
+    position: relative;
+  }
+  .section-title::after {
+    content: '';
+    display: block;
+    width: 48px; height: 3px;
+    background: #3b82f6;
+    margin: 10px auto 0;
+    border-radius: 2px;
+  }
+
+  .auto-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .auto-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,.07);
+  }
+  .auto-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 4px; height: 100%;
+    border-radius: 4px 0 0 4px;
+  }
+
+  .auto-card.p1::before { background: #16a34a; }
+  .auto-card.p2::before { background: #2563eb; }
+  .auto-card.p3::before { background: #7c3aed; }
+  .auto-card.p4::before { background: #d97706; }
+  .auto-card.p5::before { background: #94a3b8; }
+
+  .auto-priority {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    color: #94a3b8;
+  }
+  .auto-card.p1 .auto-priority { color: #16a34a; }
+  .auto-card.p2 .auto-priority { color: #2563eb; }
+  .auto-card.p3 .auto-priority { color: #7c3aed; }
+  .auto-card.p4 .auto-priority { color: #d97706; }
+
+  .auto-name {
+    font-size: 20px;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 8px;
+    line-height: 1.3;
+  }
+
+  .auto-saving {
+    font-size: 18px;
+    color: #16a34a;
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+
+  .auto-tools {
+    font-size: 17px;
+    color: #64748b;
+    line-height: 1.5;
+  }
+
+  /* ── GREY ZONES ── */
+  .grey-section {
+    max-width: 1400px;
+    margin: 0 auto 56px;
+  }
+
+  .grey-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+  }
+
+  .grey-card {
+    background: #ffffff;
+    border: 1px solid rgba(220,38,38,.2);
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+
+  .grey-icon { font-size: 32px; margin-bottom: 10px; }
+
+  .grey-label {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 8px;
+  }
+
+  .grey-status {
+    font-size: 16px;
+    color: #dc2626;
+    margin-bottom: 8px;
+  }
+
+  .grey-solution {
+    font-size: 15px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  /* ── TIMELINE ── */
+  .timeline {
+    max-width: 1100px;
+    margin: 0 auto 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .timeline-block {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.07);
+  }
+
+  .timeline-period {
+    font-size: 18px;
+    font-weight: 700;
+    color: #2563eb;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .timeline-block ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .timeline-block li {
+    font-size: 18px;
+    color: #475569;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.4;
+  }
+
+  .timeline-block li::before {
+    content: '→';
+    color: #3b82f6;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    text-align: center;
+    font-size: 18px;
+    color: #94a3b8;
+    margin-top: 16px;
+  }
+
+  @media (max-width: 900px) {
+    .columns { grid-template-columns: 1fr; }
+    .auto-grid { grid-template-columns: 1fr 1fr; }
+    .grey-grid { grid-template-columns: 1fr 1fr; }
+    .timeline { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Бизнес-процессы: Отель + Ресторан</h1>
+<p class="subtitle">Анализ и карта автоматизации — март 2026</p>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#f87171"></div> Ручной процесс</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4ade80"></div> Автоматически</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div> Частично вручную</div>
+</div>
+
+<!-- ── MAIN FLOW ── -->
+<div class="columns">
+
+  <!-- HOTEL -->
+  <div>
+    <div class="column-title hotel-title">🏨 Отель — 16 коттеджей + хостел ~100 мест</div>
+
+    <div class="step hotel-step">
+      <div class="step-number">1</div>
+      <div class="step-title">Первый контакт</div>
+      <ul class="step-items">
+        <li>Сайт (форма бронирования) <span class="tag tag-auto">авто</span></li>
+        <li>Телефон / АТС <span class="tag tag-manual">вручную</span></li>
+        <li>Мессенджеры / соцсети <span class="tag tag-manual">вручную</span></li>
+        <li>Менеджер по группам (личный тел.) <span class="tag tag-manual">вручную</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step hotel-step">
+      <div class="step-number">2</div>
+      <div class="step-title">Обработка заявки</div>
+      <ul class="step-items">
+        <li>Проверка наличия в TravelLine (шахматка) <span class="tag tag-manual">вручную</span></li>
+        <li>Уточнение деталей у клиента <span class="tag tag-manual">вручную</span></li>
+        <li>Внесение брони при звонке <span class="tag tag-manual">вручную</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step hotel-step">
+      <div class="step-number">3</div>
+      <div class="step-title">Подтверждение и оплата</div>
+      <ul class="step-items">
+        <li>Онлайн (сайт) → оплата <span class="tag tag-auto">авто</span></li>
+        <li>Телефон / группы → счёт + контроль оплаты <span class="tag tag-manual">вручную</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step hotel-step">
+      <div class="step-number">4</div>
+      <div class="step-title">Заезд и обслуживание</div>
+      <ul class="step-items">
+        <li>Встреча на стойке (коттеджи / хостел) <span class="tag tag-manual">вручную</span></li>
+        <li>Шаттл (устно / вручную) <span class="tag tag-manual">вручную</span></li>
+        <li>Доп. услуги, ресторан <span class="tag tag-partial">частично</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step hotel-step">
+      <div class="step-number">5</div>
+      <div class="step-title">Выезд и закрытие</div>
+      <ul class="step-items">
+        <li>Расчёт на кассе <span class="tag tag-manual">вручную</span></li>
+        <li>Закрытие брони в TravelLine <span class="tag tag-manual">вручную</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step hotel-step" style="border-color: rgba(220,38,38,.35);">
+      <div class="step-number" style="background:rgba(220,38,38,.12);color:#dc2626;">6</div>
+      <div class="step-title" style="color:#dc2626;">Сбор данных и отчётность</div>
+      <ul class="step-items">
+        <li>Данные из TravelLine <span class="tag tag-manual">вручную</span></li>
+        <li>Данные из касс <span class="tag tag-manual">вручную</span></li>
+        <li>Опрос сотрудников (шаттл, смены) <span class="tag tag-manual">вручную</span></li>
+        <li style="color:#dc2626; font-weight:600;">Составление отчёта — 1–2 часа/день</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- RESTAURANT -->
+  <div>
+    <div class="column-title rest-title">🍽️ Ресторан — система iiko</div>
+
+    <div class="step rest-step">
+      <div class="step-number">1</div>
+      <div class="step-title">Первый контакт</div>
+      <ul class="step-items">
+        <li>Гость приходит / резервирует стол <span class="tag tag-partial">частично</span></li>
+        <li>Заказ доставки (сайт / телефон / агрегатор) <span class="tag tag-partial">частично</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step rest-step">
+      <div class="step-number">2</div>
+      <div class="step-title">Обслуживание</div>
+      <ul class="step-items">
+        <li>Работа в iiko: заказы, блюда, чеки <span class="tag tag-auto">авто</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step rest-step">
+      <div class="step-number">3</div>
+      <div class="step-title">Закрытие смены</div>
+      <ul class="step-items">
+        <li>Выручка, количество гостей, чеки — в iiko <span class="tag tag-auto">авто</span></li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step rest-step" style="border-color:rgba(220,38,38,.35);">
+      <div class="step-number" style="background:rgba(220,38,38,.12);color:#dc2626;">4</div>
+      <div class="step-title" style="color:#dc2626;">Ежедневный сбор данных</div>
+      <ul class="step-items">
+        <li>Выручка, гости, средний чек из iiko <span class="tag tag-manual">вручную</span></li>
+        <li>Списания из iiko → копирование в Excel <span class="tag tag-manual">вручную</span></li>
+        <li>Отказы из iiko → копирование в Excel <span class="tag tag-manual">вручную</span></li>
+        <li>Внесение в общий Excel <span class="tag tag-manual">вручную</span></li>
+        <li style="color:#dc2626; font-weight:600;">20–30 мин/день</li>
+      </ul>
+    </div>
+    <div class="arrow">↓</div>
+
+    <div class="step rest-step" style="border-color:rgba(220,38,38,.35);">
+      <div class="step-number" style="background:rgba(220,38,38,.12);color:#dc2626;">5</div>
+      <div class="step-title" style="color:#dc2626;">Еженедельный сводный отчёт</div>
+      <ul class="step-items">
+        <li>Сбор данных из 7 ежедневных записей <span class="tag tag-manual">вручную</span></li>
+        <li>Расчёт оборачиваемости столов и мест <span class="tag tag-manual">вручную</span></li>
+        <li>Формирование итоговой таблицы <span class="tag tag-manual">вручную</span></li>
+        <li style="color:#dc2626; font-weight:600;">1–1,5 часа/неделю</li>
+      </ul>
+    </div>
+
+    <!-- Summary box -->
+    <div style="background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2);border-radius:12px;padding:18px;margin-top:12px;">
+      <div style="font-size:20px;font-weight:700;color:#dc2626;margin-bottom:10px;">⚠ Критические пробелы</div>
+      <ul class="step-items">
+        <li style="color:#dc2626;">Конверсия заявок — не отслеживается вообще</li>
+        <li style="color:#dc2626;">Звонки АТС не попадают в Битрикс24 → лиды теряются</li>
+        <li style="color:#dc2626;">Шаттл и персонал — только устный опрос</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── AUTOMATION ── -->
+<div class="automation">
+  <div class="section-title">Топ-5 кандидатов на автоматизацию</div>
+  <div class="auto-grid">
+
+    <div class="auto-card p1">
+      <div class="auto-priority">Приоритет 1</div>
+      <div class="auto-name">Отчёт ресторана → iiko API → Google Sheets</div>
+      <div class="auto-saving">Экономия: ~12–15 часов/месяц</div>
+      <div class="auto-tools">iiko API + Google Sheets + Apps Script или Python<br>Разработка: 1–2 дня</div>
+    </div>
+
+    <div class="auto-card p2">
+      <div class="auto-priority">Приоритет 2</div>
+      <div class="auto-name">Отчёт отеля → TravelLine API → Google Sheets</div>
+      <div class="auto-saving">Экономия: 30–60 часов/месяц управляющего</div>
+      <div class="auto-tools">TravelLine API + Google Sheets / Notion / Telegram-бот<br>Запрос каждую ночь автоматически</div>
+    </div>
+
+    <div class="auto-card p3">
+      <div class="auto-priority">Приоритет 3</div>
+      <div class="auto-name">Дашборд собственника в реальном времени</div>
+      <div class="auto-saving">Данные без ожидания отчётов управляющего</div>
+      <div class="auto-tools">Google Looker Studio (бесплатно) над данными из п.1 и п.2</div>
+    </div>
+
+    <div class="auto-card p4">
+      <div class="auto-priority">Приоритет 4</div>
+      <div class="auto-name">АТС → Битрикс24 — единая воронка заявок</div>
+      <div class="auto-saving">Прозрачность воронки → рост конверсии</div>
+      <div class="auto-tools">Манго / Билайн Бизнес / UIS + интеграция с Битрикс24<br>Средняя сложность</div>
+    </div>
+
+    <div class="auto-card p5">
+      <div class="auto-priority">Приоритет 5</div>
+      <div class="auto-name">Авто-уведомления гостям (SMS / WhatsApp)</div>
+      <div class="auto-saving">Снижение no-show, меньше ручных коммуникаций</div>
+      <div class="auto-tools">TravelLine встроенные уведомления или вебхук → рассылки<br>Низкая сложность</div>
+    </div>
+
+    <!-- empty cell for grid alignment -->
+    <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:14px;padding:22px;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;color:#94a3b8;font-size:20px;">
+        <div style="font-size:36px;margin-bottom:10px;">+</div>
+        Следующие шаги<br>по требованию
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── GREY ZONES ── -->
+<div class="grey-section">
+  <div class="section-title">Серые зоны — не оцифровано</div>
+  <div class="grey-grid">
+    <div class="grey-card">
+      <div class="grey-icon">📞</div>
+      <div class="grey-label">Входящие звонки</div>
+      <div class="grey-status">Количество неизвестно</div>
+      <div class="grey-solution">Виртуальная АТС с аналитикой</div>
+    </div>
+    <div class="grey-card">
+      <div class="grey-icon">📊</div>
+      <div class="grey-label">Конверсия звонок → бронь</div>
+      <div class="grey-status">Не отслеживается</div>
+      <div class="grey-solution">АТС + CRM (Битрикс24)</div>
+    </div>
+    <div class="grey-card">
+      <div class="grey-icon">👥</div>
+      <div class="grey-label">Загрузка групп</div>
+      <div class="grey-status">Только итог видно</div>
+      <div class="grey-solution">Корпоративный номер + CRM</div>
+    </div>
+    <div class="grey-card">
+      <div class="grey-icon">🚐</div>
+      <div class="grey-label">Шаттл</div>
+      <div class="grey-status">Устный опрос</div>
+      <div class="grey-solution">Чат-бот или Google Form для водителя</div>
+    </div>
+    <div class="grey-card">
+      <div class="grey-icon">🧑‍💼</div>
+      <div class="grey-label">Персонал в смену</div>
+      <div class="grey-status">Устный опрос</div>
+      <div class="grey-solution">Табель в Google Sheets или HR-модуль</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TIMELINE ── -->
+<div class="automation">
+  <div class="section-title">План действий</div>
+  <div class="timeline">
+    <div class="timeline-block">
+      <div class="timeline-period">Неделя 1–2 · Быстрые победы</div>
+      <ul>
+        <li>iiko API → ежедневный отчёт в Google Sheets автоматически</li>
+        <li>Авто-уведомления гостям через TravelLine (встроенные возможности)</li>
+      </ul>
+    </div>
+    <div class="timeline-block">
+      <div class="timeline-period">Неделя 3–4 · Отель</div>
+      <ul>
+        <li>TravelLine API → отчёт управляющего формируется автоматически</li>
+        <li>Дашборд в Google Looker Studio на базе двух выгрузок</li>
+      </ul>
+    </div>
+    <div class="timeline-block">
+      <div class="timeline-period">Месяц 2 · Воронка продаж</div>
+      <ul>
+        <li>Переход на виртуальную АТС + интеграция с Битрикс24</li>
+        <li>Корпоративный виртуальный номер для менеджера по группам</li>
+        <li>Автосоздание лидов при входящем звонке</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<footer>Документ создан автоматически на основе business-analysis.md · март 2026</footer>
+
+</body>
+</html>
