@@ -25,9 +25,9 @@ RETRY_PAUSE = 60      # пауза между попытками (сек); в б
 # Авторизация
 # ---------------------------------------------------------------------------
 
-def _md5(text: str) -> str:
-    """MD5-хэш строки в нижнем регистре — формат iiko."""
-    return hashlib.md5(text.encode("utf-8")).hexdigest()
+def _sha1(text: str) -> str:
+    """SHA1-хэш строки в нижнем регистре — формат iikoServer."""
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
 def get_token(base_url: str, login: str, password: str) -> str:
@@ -36,7 +36,7 @@ def get_token(base_url: str, login: str, password: str) -> str:
     Токен живёт ~15 минут — вызывать в начале каждого запуска.
     """
     url = f"{base_url}/auth"
-    params = {"login": login, "pass": _md5(password)}
+    params = {"login": login, "pass": _sha1(password)}
     response = _request("GET", url, params=params)
     token = response.text.strip()
     if not token:
