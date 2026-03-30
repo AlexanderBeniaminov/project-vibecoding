@@ -166,9 +166,11 @@ def setup_spreadsheet(service, spreadsheet_id: str):
 
 def _write_metric_columns(service, spreadsheet_id: str):
     """Записать названия параметров в колонку A каждого листа."""
-    # A1 — заголовок колонки, A2:An — параметры
-    daily_col   = [["Показатель"]] + [[m] for m in METRICS_DAILY]
-    weekly_col  = [["Показатель"]] + [[m] for m in METRICS_WEEKLY]
+    # Ежедневно: A1 — «Показатель», A2:An — параметры
+    daily_col = [["Показатель"]] + [[m] for m in METRICS_DAILY]
+
+    # Еженедельно: A1 — «Неделя №», A2 — «Период (пн–вс)», A3:An — параметры
+    weekly_col = [["Неделя №"], ["Период (пн–вс)"]] + [[m] for m in METRICS_WEEKLY]
 
     service.spreadsheets().values().batchUpdate(
         spreadsheetId=spreadsheet_id,
@@ -187,25 +189,23 @@ def _write_metric_columns(service, spreadsheet_id: str):
 # Вспомогательные функции навигации
 # ---------------------------------------------------------------------------
 
-def _find_or_create_date_column(service, spreadsheet_id: str, sheet_name: str, date_str: str) -> int:
+def _find_or_create_date_column(service, spreadsheet_id: str, sheet_name: str, key: str, search_row: int = 1) -> int:
     """
-    Найти колонку с нужной датой в строке 1 или создать новую.
+    Найти колонку с нужным ключом в указанной строке или создать новую.
     Возвращает номер колонки (1-based, где 1=A, 2=B...).
     """
     result = service.spreadsheets().values().get(
         spreadsheetId=spreadsheet_id,
-        range=f"{sheet_name}!1:1"
+        range=f"{sheet_name}!{search_row}:{search_row}"
     ).execute()
-    row1 = result.get("values", [[]])[0]
+    row = result.get("values", [[]])[0] if result.get("values") else []
 
-    # Ищем существующую колонку с этой датой (начиная с B = индекс 1)
-    for i, cell in enumerate(row1):
-        if str(cell).strip() == date_str:
+    for i, cell in enumerate(row):
+        if str(cell).strip() == key:
             return i + 1  # 1-based
 
-    # Не нашли — добавляем новую колонку после последней заполненной
-    next_col = max(len(row1), 1) + 1  # минимум колонка B (2)
-    return next_col
+    # Не нашли — новая колонка после последней заполненной, минимум B (2)
+    return max(len(row), 1) + 1
 
 
 def _col_letter(n: int) -> str:
@@ -287,7 +287,7 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         status,
     ]
 
-    col_num = _find_or_create_date_column(service, spreadsheet_id, "Ежедневно", report_date)
+    col_num = _find_or_create_date_column(service, spreadsheet_id, "Ежедневно", report_date, search_row=1)
     col_ltr = _col_letter(col_num)
 
     # Строка 1 — дата, строки 2..N — значения
@@ -309,10 +309,23 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
 
 def write_weekly_row(service, spreadsheet_id: str, data: dict):
     """
-    Записать еженедельные данные в колонку с номером недели.
-    Строка 1 — идентификатор недели, строки 2..N — значения.
+    Записать еженедельные данные.
+    Строка 1 — номер недели («Неделя 13»).
+    Строка 2 — период («23.03.2026 – 29.03.2026»).
+    Строки 3..N — значения параметров (порядок = METRICS_WEEKLY).
     """
-    week_label = f"Нед. {data.get('week_num')} ({data.get('date_from', '')[:10]})"
+    from datetime import date as _date
+
+    week_num = data.get("week_num", "?")
+    week_title = f"Неделя {week_num}"
+
+    # Форматируем период пн–вс
+    try:
+        d_from = _date.fromisoformat(data.get("date_from", ""))
+        d_to   = _date.fromisoformat(data.get("date_to", ""))
+        period = f"{d_from.strftime('%d.%m.%Y')} – {d_to.strftime('%d.%m.%Y')}"
+    except ValueError:
+        period = f"{data.get('date_from', '')} – {data.get('date_to', '')}"
 
     values = [
         _v(data.get("week_num")),
@@ -335,17 +348,19 @@ def write_weekly_row(service, spreadsheet_id: str, data: dict):
         _v(data.get("writeoffs")),
         _v(data.get("turnover_table")),
         _v(data.get("turnover_seat")),
-        "", "", "",  # Гостей 1/2/3+ чел
+        "", "", "",        # Гостей 1/2/3+ чел
         "", "", "", "", "", "",  # Градация чеков
-        "", "", "",  # Топ-3 блюда
-        "", "",      # Мероприятия
+        "", "", "",        # Топ-3 блюда
+        "", "",            # Мероприятия
         _v(data.get("zp_total")),
     ]
 
-    col_num = _find_or_create_date_column(service, spreadsheet_id, "Еженедельно", week_label)
+    # Ищем колонку по номеру недели в строке 1
+    col_num = _find_or_create_date_column(service, spreadsheet_id, "Еженедельно", week_title, search_row=1)
     col_ltr = _col_letter(col_num)
 
-    col_data = [[week_label]] + [[v] for v in values]
+    # Строка 1: номер недели, строка 2: период, строки 3+: значения
+    col_data = [[week_title], [period]] + [[v] for v in values]
 
     service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
@@ -354,7 +369,7 @@ def write_weekly_row(service, spreadsheet_id: str, data: dict):
         body={"values": col_data}
     ).execute()
 
-    logger.info(f"Еженедельные данные (неделя {data.get('week_num')}) записаны в колонку {col_ltr}")
+    logger.info(f"Еженедельные данные (неделя {week_num}, {period}) записаны в колонку {col_ltr}")
 
 
 # ---------------------------------------------------------------------------
