@@ -67,9 +67,6 @@ METRICS_DAILY = [
 
 # Параметры листа «Еженедельно»
 METRICS_WEEKLY = [
-    "Неделя №",
-    "Дата от",
-    "Дата до",
     "Выручка за неделю",
     "Ср. выручка/день",
     "Чеков за неделю",
@@ -161,6 +158,7 @@ def setup_spreadsheet(service, spreadsheet_id: str):
         logger.info(f"Созданы листы: {[r['addSheet']['properties']['title'] for r in requests]}")
 
     _write_metric_columns(service, spreadsheet_id)
+    _apply_number_format(service, spreadsheet_id)
     logger.info("Структура таблицы готова")
 
 
@@ -188,6 +186,43 @@ def _write_metric_columns(service, spreadsheet_id: str):
 # ---------------------------------------------------------------------------
 # Вспомогательные функции навигации
 # ---------------------------------------------------------------------------
+
+def _apply_number_format(service, spreadsheet_id: str):
+    """
+    Применить числовой формат с пробелом как разделителем тысяч
+    ко всем ячейкам с данными (колонки B+) на обоих листах.
+    """
+    meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_ids = {s["properties"]["title"]: s["properties"]["sheetId"] for s in meta["sheets"]}
+
+    fmt_number  = {"type": "NUMBER", "pattern": "# ##0"}
+    fmt_decimal = {"type": "NUMBER", "pattern": "# ##0.00"}
+
+    requests = []
+    for sheet_name, data_start_row in [("Ежедневно", 1), ("Еженедельно", 2)]:
+        sid = sheet_ids.get(sheet_name)
+        if sid is None:
+            continue
+        # Все данные начиная с колонки B (index 1), строка data_start_row+1 (0-based)
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": sid,
+                    "startRowIndex": data_start_row,
+                    "startColumnIndex": 1,
+                },
+                "cell": {"userEnteredFormat": {"numberFormat": fmt_number}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        })
+
+    if requests:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute()
+        logger.info("Числовой формат применён")
+
 
 def _find_or_create_date_column(service, spreadsheet_id: str, sheet_name: str, key: str, search_row: int = 1) -> int:
     """
@@ -328,9 +363,6 @@ def write_weekly_row(service, spreadsheet_id: str, data: dict):
         period = f"{data.get('date_from', '')} – {data.get('date_to', '')}"
 
     values = [
-        _v(data.get("week_num")),
-        _v(data.get("date_from")),
-        _v(data.get("date_to")),
         _v(data.get("revenue")),
         _v(data.get("avg_revenue_day")),
         _v(data.get("orders")),
