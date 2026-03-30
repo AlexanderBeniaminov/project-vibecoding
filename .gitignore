@@ -1,0 +1,15 @@
+
+# Секреты — никогда не коммитить
+*.json
+!package.json
+hotel-restaurant-processes/scripts/credentials.json
+
+# Логи
+hotel-restaurant-processes/logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store

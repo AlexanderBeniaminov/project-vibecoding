@@ -1,0 +1,59 @@
+name: Монблан — еженедельный дайджест
+
+on:
+  schedule:
+    # 02:00 UTC = 07:00 UTC+5 каждый понедельник
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Любая дата из нужной недели (YYYY-MM-DD). Пусто = прошлая неделя.'
+        required: false
+        default: ''
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hotel-restaurant-processes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установить Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: hotel-restaurant-processes/requirements.txt
+
+      - name: Установить зависимости
+        run: pip install -r requirements.txt
+
+      - name: Запустить еженедельный дайджест
+        env:
+          IIKO_BASE_URL:               ${{ secrets.IIKO_BASE_URL }}
+          IIKO_LOGIN:                  ${{ secrets.IIKO_LOGIN }}
+          IIKO_PASSWORD:               ${{ secrets.IIKO_PASSWORD }}
+          GOOGLE_SHEETS_ID:            ${{ secrets.GOOGLE_SHEETS_ID }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          TELEGRAM_BOT_TOKEN:          ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_CHAT_ID:      ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
+          TELEGRAM_ADMIN_CHAT_ID:      ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
+          TELEGRAM_DEV_CHAT_ID:        ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+        run: |
+          DATE_ARG="${{ github.event.inputs.date }}"
+          if [ -n "$DATE_ARG" ]; then
+            python3 scripts/main.py weekly "$DATE_ARG"
+          else
+            python3 scripts/main.py weekly
+          fi
+
+      - name: Сохранить лог
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-log-${{ github.run_id }}
+          path: hotel-restaurant-processes/logs/
+          retention-days: 30
