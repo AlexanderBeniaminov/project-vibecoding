@@ -37,7 +37,7 @@ from config import (
     TELEGRAM_ADMIN_CHAT_ID, TELEGRAM_DEV_CHAT_ID,
     RESTAURANT_NAME, get_capacity,
 )
-from iiko_client import collect_daily_data
+from iiko_client import collect_daily_data, get_token
 from sheets_writer import get_service, setup_spreadsheet, write_daily_row, write_weekly_row
 from utils import yesterday_utc5, fmt_date, week_bounds, fmt_date_ru, fmt_money, fmt_int
 
@@ -82,11 +82,11 @@ def daily(report_date: date):
     # 1. Собрать данные iiko
     logger.info("Шаг 1: сбор данных из iiko...")
     try:
+        token = get_token(IIKO_BASE_URL, IIKO_LOGIN, IIKO_PASSWORD)
         data = collect_daily_data(
             base_url=IIKO_BASE_URL,
-            login=IIKO_LOGIN,
-            password=IIKO_PASSWORD,
-            report_date=fmt_date(report_date),
+            token=token,
+            report_date=date.fromisoformat(fmt_date(report_date)),
         )
         data["date"] = str(report_date)
         logger.info("Данные iiko собраны успешно")
