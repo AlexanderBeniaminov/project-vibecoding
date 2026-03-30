@@ -1,6 +1,7 @@
 """
 sheets_writer.py — запись данных в Google Sheets.
-Создаёт структуру листов и записывает ежедневные данные.
+Структура: колонка A — параметры, строка 1 — даты.
+Каждый новый день добавляет новую колонку.
 """
 
 import json
@@ -17,47 +18,95 @@ logger = logging.getLogger(__name__)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # ---------------------------------------------------------------------------
-# Заголовки листов
+# Параметры листа «Ежедневно» (колонка A)
 # ---------------------------------------------------------------------------
 
-# Лист 1 — Ежедневно
-HEADERS_DAILY = [
-    "Дата",
-    # Автоматически из iiko
-    "Выручка итого", "Нал", "СБП", "Карта", "По счёту",
-    "Кол-во чеков", "Средний чек", "Гости",
-    "Кухня", "Бар",
-    "Утро (выручка)", "Утро (гости)", "День (выручка)", "День (гости)", "Вечер (выручка)", "Вечер (гости)",
-    "Отмены (руб)", "Списания (руб)",
-    # Ручной ввод через Telegram
-    "Инкассация", "Расход из кассы", "Остаток нал",
-    "Повара (кол)", "Повара (з/п)",
-    "Официанты (кол)", "Официанты (з/п)",
-    "Бармены (кол)", "Бармены (з/п)",
-    "Посудомойщицы (кол)", "Посудомойщицы (з/п)",
-    "Персонал итого", "З/п итого",
+METRICS_DAILY = [
+    # --- Выручка ---
+    "Выручка итого",
+    "Нал",
+    "СБП",
+    "Карта",
+    "По счёту",
+    # --- Трафик ---
+    "Кол-во чеков",
+    "Средний чек",
+    "Гости",
+    # --- Категории ---
+    "Кухня",
+    "Бар",
+    # --- Временные срезы ---
+    "Утро — выручка (09–11)",
+    "Утро — гости",
+    "День — выручка (11–17)",
+    "День — гости",
+    "Вечер — выручка (17–21)",
+    "Вечер — гости",
+    # --- Потери ---
+    "Отмены (руб)",
+    "Списания (руб)",
+    # --- Касса (ручной ввод) ---
+    "Инкассация",
+    "Расход из кассы",
+    "Остаток нал",
+    # --- Персонал (ручной ввод) ---
+    "Повара — кол-во",
+    "Повара — з/п",
+    "Официанты — кол-во",
+    "Официанты — з/п",
+    "Бармены — кол-во",
+    "Бармены — з/п",
+    "Посудомойщицы — кол-во",
+    "Посудомойщицы — з/п",
+    "Персонал итого",
+    "З/п итого",
+    # --- Прочее ---
     "Завтраки (гостей)",
     "Статус",
 ]
 
-# Лист 2 — Еженедельно
-HEADERS_WEEKLY = [
-    "Неделя", "Дата от", "Дата до",
-    "Выручка за неделю", "Ср. выручка/день",
-    "Чеков за неделю", "Ср. чеков/день",
-    "Гостей за неделю", "Ср. гостей/день",
-    "Средний чек", "Ср. чек на гостя",
-    "Кухня (неделя)", "Бар (неделя)",
-    "Утро (выручка)", "День (выручка)", "Вечер (выручка)",
-    "Отмены (руб)", "Списания (руб)",
-    "Оборачиваемость стола", "Оборачиваемость места",
-    "Гостей 1 чел", "Гостей 2 чел", "Гостей 3+ чел",
-    "Чеки 0–500", "Чеки 500–1000", "Чеки 1000–1500",
-    "Чеки 1500–3000", "Чеки 3000–5000", "Чеки 5000+",
-    "Топ-1 блюдо", "Топ-2 блюдо", "Топ-3 блюдо",
-    "Мероприятия (кол)", "Мероприятия (выручка)",
+# Параметры листа «Еженедельно»
+METRICS_WEEKLY = [
+    "Неделя №",
+    "Дата от",
+    "Дата до",
+    "Выручка за неделю",
+    "Ср. выручка/день",
+    "Чеков за неделю",
+    "Ср. чеков/день",
+    "Гостей за неделю",
+    "Ср. гостей/день",
+    "Средний чек",
+    "Ср. чек на гостя",
+    "Кухня",
+    "Бар",
+    "Утро — выручка",
+    "День — выручка",
+    "Вечер — выручка",
+    "Отмены (руб)",
+    "Списания (руб)",
+    "Оборачиваемость стола",
+    "Оборачиваемость места",
+    "Гостей 1 чел",
+    "Гостей 2 чел",
+    "Гостей 3+ чел",
+    "Чеки 0–500",
+    "Чеки 500–1000",
+    "Чеки 1000–1500",
+    "Чеки 1500–3000",
+    "Чеки 3000–5000",
+    "Чеки 5000+",
+    "Топ-1 блюдо",
+    "Топ-2 блюдо",
+    "Топ-3 блюдо",
+    "Мероприятия — кол-во",
+    "Мероприятия — выручка",
     "З/п итого за неделю",
 ]
+
+# Для обратной совместимости с main.py
+HEADERS_DAILY = METRICS_DAILY
+HEADERS_WEEKLY = METRICS_WEEKLY
 
 
 # ---------------------------------------------------------------------------
@@ -90,24 +139,19 @@ def get_service(credentials_path: str = None, credentials_json: str = None):
 
 def setup_spreadsheet(service, spreadsheet_id: str):
     """
-    Создать листы и заголовки если их ещё нет.
+    Создать листы и записать параметры в колонку A.
     Безопасно вызывать повторно — не затирает данные.
     """
     sheets_api = service.spreadsheets()
 
-    # Получить список существующих листов
     meta = sheets_api.get(spreadsheetId=spreadsheet_id).execute()
     existing = {s["properties"]["title"] for s in meta["sheets"]}
     logger.info(f"Существующие листы: {existing}")
 
     requests = []
-
-    # Создать листы если не существуют
     for title in ["Ежедневно", "Еженедельно", "Дашборд"]:
         if title not in existing:
-            requests.append({
-                "addSheet": {"properties": {"title": title}}
-            })
+            requests.append({"addSheet": {"properties": {"title": title}}})
 
     if requests:
         sheets_api.batchUpdate(
@@ -116,24 +160,61 @@ def setup_spreadsheet(service, spreadsheet_id: str):
         ).execute()
         logger.info(f"Созданы листы: {[r['addSheet']['properties']['title'] for r in requests]}")
 
-    # Записать заголовки
-    _write_headers(service, spreadsheet_id)
+    _write_metric_columns(service, spreadsheet_id)
     logger.info("Структура таблицы готова")
 
 
-def _write_headers(service, spreadsheet_id: str):
-    """Записать заголовки в первую строку каждого листа."""
+def _write_metric_columns(service, spreadsheet_id: str):
+    """Записать названия параметров в колонку A каждого листа."""
+    # A1 — заголовок колонки, A2:An — параметры
+    daily_col   = [["Показатель"]] + [[m] for m in METRICS_DAILY]
+    weekly_col  = [["Показатель"]] + [[m] for m in METRICS_WEEKLY]
+
     service.spreadsheets().values().batchUpdate(
         spreadsheetId=spreadsheet_id,
         body={
             "valueInputOption": "RAW",
             "data": [
-                {"range": "Ежедневно!A1", "values": [HEADERS_DAILY]},
-                {"range": "Еженедельно!A1", "values": [HEADERS_WEEKLY]},
+                {"range": "Ежедневно!A1",   "values": daily_col},
+                {"range": "Еженедельно!A1", "values": weekly_col},
             ]
         }
     ).execute()
-    logger.info("Заголовки записаны")
+    logger.info("Колонка A с параметрами записана")
+
+
+# ---------------------------------------------------------------------------
+# Вспомогательные функции навигации
+# ---------------------------------------------------------------------------
+
+def _find_or_create_date_column(service, spreadsheet_id: str, sheet_name: str, date_str: str) -> int:
+    """
+    Найти колонку с нужной датой в строке 1 или создать новую.
+    Возвращает номер колонки (1-based, где 1=A, 2=B...).
+    """
+    result = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range=f"{sheet_name}!1:1"
+    ).execute()
+    row1 = result.get("values", [[]])[0]
+
+    # Ищем существующую колонку с этой датой (начиная с B = индекс 1)
+    for i, cell in enumerate(row1):
+        if str(cell).strip() == date_str:
+            return i + 1  # 1-based
+
+    # Не нашли — добавляем новую колонку после последней заполненной
+    next_col = max(len(row1), 1) + 1  # минимум колонка B (2)
+    return next_col
+
+
+def _col_letter(n: int) -> str:
+    """Номер колонки (1-based) → буква(ы): 1→A, 2→B, 27→AA."""
+    result = ""
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -142,24 +223,22 @@ def _write_headers(service, spreadsheet_id: str):
 
 def write_daily_row(service, spreadsheet_id: str, data: dict):
     """
-    Добавить строку с ежедневными данными в лист «Ежедневно».
-    data — словарь из collect_daily_data() + ручные данные из Telegram.
+    Записать данные за день в колонку с соответствующей датой.
+    Строка 1 — дата, строки 2..N — значения параметров.
     """
     report_date = data.get("date", str(date.today()))
 
-    # Автоматические данные из iiko
     summary  = data.get("orders_summary") or {}
     payments = data.get("payment_types") or {}
     cats     = data.get("category_revenue") or {}
     hourly   = data.get("hourly") or {}
-    manual   = data.get("manual") or {}  # ручной ввод из Telegram
+    manual   = data.get("manual") or {}
 
     revenue  = summary.get("revenue", 0)
     orders   = summary.get("orders", 0)
     guests   = summary.get("guests", 0)
     avg_chk  = summary.get("avg_check", 0)
 
-    # Подбираем ключи кухни и бара (зависит от названий категорий в iiko)
     kitchen = _find_category(cats, ["кухня", "kitchen", "еда", "food"])
     bar     = _find_category(cats, ["бар", "bar", "напитки", "drink"])
 
@@ -167,7 +246,6 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
     день  = hourly.get("день",  {})
     вечер = hourly.get("вечер", {})
 
-    # Персонал
     повара    = manual.get("повара",    {})
     официанты = manual.get("официанты", {})
     бармены   = manual.get("бармены",   {})
@@ -181,12 +259,11 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         бармены.get("кол", 0), посудомой.get("кол", 0),
     ])
 
-    # Статус заполнения
     has_manual = bool(manual)
     status = "✅ полный" if has_manual else "⚠️ авто (без кассы)"
 
-    row = [
-        report_date,
+    # Значения в том же порядке, что METRICS_DAILY
+    values = [
         _v(revenue), _v(payments.get("Наличные", payments.get("Нал", 0))),
         _v(payments.get("СБП", payments.get("Безналичный", 0))),
         _v(payments.get("Банковская карта", payments.get("Карта", 0))),
@@ -198,7 +275,6 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         _v(вечер.get("revenue", 0)), _v(вечер.get("guests", 0)),
         _v(data.get("cancellations", 0)),
         _v(data.get("writeoffs", 0)),
-        # Ручной ввод
         _v(manual.get("инкассация", "")),
         _v(manual.get("расход_кассы", "")),
         _v(manual.get("остаток_нал", "")),
@@ -211,21 +287,20 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         status,
     ]
 
-    # Найти первую пустую строку (после заголовка)
-    result = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range="Ежедневно!A:A"
-    ).execute()
-    next_row = len(result.get("values", [])) + 1
+    col_num = _find_or_create_date_column(service, spreadsheet_id, "Ежедневно", report_date)
+    col_ltr = _col_letter(col_num)
+
+    # Строка 1 — дата, строки 2..N — значения
+    col_data = [[report_date]] + [[v] for v in values]
 
     service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
-        range=f"Ежедневно!A{next_row}",
+        range=f"Ежедневно!{col_ltr}1",
         valueInputOption="USER_ENTERED",
-        body={"values": [row]}
+        body={"values": col_data}
     ).execute()
 
-    logger.info(f"Строка за {report_date} записана в строку {next_row}")
+    logger.info(f"Данные за {report_date} записаны в колонку {col_ltr}")
 
 
 # ---------------------------------------------------------------------------
@@ -234,10 +309,12 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
 
 def write_weekly_row(service, spreadsheet_id: str, data: dict):
     """
-    Добавить строку с еженедельными данными в лист «Еженедельно».
-    data — словарь из _aggregate_weekly() в main.py.
+    Записать еженедельные данные в колонку с номером недели.
+    Строка 1 — идентификатор недели, строки 2..N — значения.
     """
-    row = [
+    week_label = f"Нед. {data.get('week_num')} ({data.get('date_from', '')[:10]})"
+
+    values = [
         _v(data.get("week_num")),
         _v(data.get("date_from")),
         _v(data.get("date_to")),
@@ -258,27 +335,26 @@ def write_weekly_row(service, spreadsheet_id: str, data: dict):
         _v(data.get("writeoffs")),
         _v(data.get("turnover_table")),
         _v(data.get("turnover_seat")),
-        "", "", "",  # Гостей 1/2/3+ чел — из iiko отдельным запросом (Этап 4)
+        "", "", "",  # Гостей 1/2/3+ чел
         "", "", "", "", "", "",  # Градация чеков
         "", "", "",  # Топ-3 блюда
         "", "",      # Мероприятия
         _v(data.get("zp_total")),
     ]
 
-    result = service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range="Еженедельно!A:A"
-    ).execute()
-    next_row = len(result.get("values", [])) + 1
+    col_num = _find_or_create_date_column(service, spreadsheet_id, "Еженедельно", week_label)
+    col_ltr = _col_letter(col_num)
+
+    col_data = [[week_label]] + [[v] for v in values]
 
     service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
-        range=f"Еженедельно!A{next_row}",
+        range=f"Еженедельно!{col_ltr}1",
         valueInputOption="USER_ENTERED",
-        body={"values": [row]}
+        body={"values": col_data}
     ).execute()
 
-    logger.info(f"Еженедельная строка (неделя {data.get('week_num')}) записана в строку {next_row}")
+    logger.info(f"Еженедельные данные (неделя {data.get('week_num')}) записаны в колонку {col_ltr}")
 
 
 # ---------------------------------------------------------------------------
