@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 TIMEOUT = 30          # секунды ожидания ответа
 RETRY_COUNT = 3       # количество попыток при ошибке
-RETRY_PAUSE = 60      # пауза между попытками (сек); в боевом режиме — 600
+RETRY_PAUSE = 5       # пауза между попытками (сек); в боевом режиме — 600
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +71,7 @@ def _request(method: str, url: str, *, params=None, json=None) -> requests.Respo
             if resp.status_code == 401:
                 raise
             logger.warning(f"HTTP ошибка {resp.status_code} на попытке {attempt}: {e}")
+            logger.warning(f"Тело ответа: {resp.text[:500]}")
         except requests.exceptions.RequestException as e:
             logger.warning(f"Сетевая ошибка на попытке {attempt}: {e}")
 
@@ -81,11 +82,38 @@ def _request(method: str, url: str, *, params=None, json=None) -> requests.Respo
     raise ConnectionError(f"iiko API недоступен после {RETRY_COUNT} попыток: {url}")
 
 
+def _build_v2_payload(payload: dict) -> dict:
+    """
+    Конвертировать payload в формат v2.
+    В v2 filters — объект (map), где ключ = поле, значение = FilterCriteria с filterType.
+    """
+    v2 = {k: v for k, v in payload.items() if k != "filters"}
+    filters_raw = payload.get("filters", {})
+
+    date_from = filters_raw.get("dateFrom")
+    date_to   = filters_raw.get("dateTo")
+    if date_from and date_to:
+        v2["filters"] = {
+            "OpenDate.Typed": {
+                "filterType": "DateRange",
+                "periodType": "CUSTOM",
+                "from": date_from,
+                "to":   date_to,
+                "includeLow":  "true",
+                "includeHigh": "true",
+            }
+        }
+    return v2
+
+
 def _olap(base_url: str, token: str, payload: dict) -> dict:
-    """Выполнить OLAP-запрос v2."""
+    """
+    Выполнить OLAP-запрос v2 с правильным форматом фильтров.
+    """
     url = f"{base_url}/v2/reports/olap"
     params = {"key": token}
-    resp = _request("POST", url, params=params, json=payload)
+    v2_payload = _build_v2_payload(payload)
+    resp = _request("POST", url, params=params, json=v2_payload)
     return resp.json()
 
 
@@ -99,6 +127,8 @@ def _date_str(d: date) -> str:
 
 def _sum_from_olap(data: dict, field: str = "DishSumInt") -> float:
     """Суммировать поле из OLAP-ответа (строки data > columnNames + data)."""
+    if not data.get("columnNames"):
+        return 0.0
     try:
         cols = data["columnNames"]
         idx = cols.index(field)
@@ -151,7 +181,7 @@ def get_orders_summary(base_url: str, token: str, report_date: date) -> dict:
         "reportType": "SALES",
         "buildSummary": True,
         "groupByRowFields": [],
-        "aggregateFields": ["DishSumInt", "GuestsCount", "OrdersCount"],
+        "aggregateFields": ["DishSumInt", "GuestNum", "OrderNum"],
         "filters": {
             "dateFrom": _date_str(report_date),
             "dateTo": _date_str(report_date),
@@ -163,8 +193,8 @@ def get_orders_summary(base_url: str, token: str, report_date: date) -> dict:
         return {"orders": 0, "guests": 0, "revenue": 0.0, "avg_check": 0.0}
 
     row = rows[0]
-    orders = int(row.get("OrdersCount", 0) or 0)
-    guests = int(row.get("GuestsCount", 0) or 0)
+    orders = int(row.get("OrderNum", 0) or 0)
+    guests = int(row.get("GuestNum", 0) or 0)
     revenue = float(row.get("DishSumInt", 0) or 0)
     avg_check = round(revenue / orders, 2) if orders > 0 else 0.0
 
@@ -205,15 +235,14 @@ def get_revenue_by_category(base_url: str, token: str, report_date: date) -> dic
 
 def get_revenue_by_hour(base_url: str, token: str, report_date: date) -> dict:
     """
-    Выручка и гости по часам → сводка по временным срезам.
-    Срезы: Утро 9–11, День 11–17, Вечер 17–21.
-    Возвращает: {утро: {revenue, guests}, день: {...}, вечер: {...}}
+    Выручка и гости по временным срезам (утро/день/вечер).
+    Группируем по OpenTime (datetime строка), час извлекаем в Python.
     """
     payload = {
         "reportType": "SALES",
         "buildSummary": True,
-        "groupByRowFields": ["Hour"],
-        "aggregateFields": ["DishSumInt", "GuestsCount"],
+        "groupByRowFields": ["OpenTime"],
+        "aggregateFields": ["DishSumInt", "GuestNum"],
         "filters": {
             "dateFrom": _date_str(report_date),
             "dateTo": _date_str(report_date),
@@ -222,22 +251,27 @@ def get_revenue_by_hour(base_url: str, token: str, report_date: date) -> dict:
     data = _olap(base_url, token, payload)
 
     slots = {
-        "утро":   {"hours": range(9, 11),  "revenue": 0.0, "guests": 0},
-        "день":   {"hours": range(11, 17), "revenue": 0.0, "guests": 0},
-        "вечер":  {"hours": range(17, 21), "revenue": 0.0, "guests": 0},
+        "утро":  {"hours": range(9, 11),  "revenue": 0.0, "guests": 0},
+        "день":  {"hours": range(11, 17), "revenue": 0.0, "guests": 0},
+        "вечер": {"hours": range(17, 21), "revenue": 0.0, "guests": 0},
     }
 
     for row in _rows_from_olap(data):
+        open_time = row.get("OpenTime", "") or ""
         try:
-            hour = int(row.get("Hour", -1))
-        except (TypeError, ValueError):
+            # OpenTime может быть "2026-03-29T14:30:00" или "14:30:00"
+            if "T" in open_time:
+                hour = int(open_time.split("T")[1].split(":")[0])
+            else:
+                hour = int(open_time.split(":")[0])
+        except (ValueError, IndexError):
             continue
         revenue = float(row.get("DishSumInt", 0) or 0)
-        guests = int(row.get("GuestsCount", 0) or 0)
+        guests  = int(row.get("GuestNum", 0) or 0)
         for slot_name, slot in slots.items():
             if hour in slot["hours"]:
                 slot["revenue"] += revenue
-                slot["guests"] += guests
+                slot["guests"]  += guests
 
     result = {
         name: {"revenue": round(slot["revenue"], 2), "guests": slot["guests"]}
@@ -249,43 +283,52 @@ def get_revenue_by_hour(base_url: str, token: str, report_date: date) -> dict:
 
 def get_cancellations(base_url: str, token: str, report_date: date) -> float:
     """
-    Сумма отмен / удалений из заказов (reportType: DELETIONS).
+    Сумма отмен/удалений из заказов.
+    В v2 нет типа DELETIONS — используем SALES с фильтром DeletedWithWriteoff.
+    Суммируем оба типа: удалено со списанием + без списания.
     """
-    payload = {
-        "reportType": "DELETIONS",
-        "buildSummary": True,
-        "groupByRowFields": [],
-        "aggregateFields": ["DishSumInt"],
-        "filters": {
-            "dateFrom": _date_str(report_date),
-            "dateTo": _date_str(report_date),
+    total = 0.0
+    for deleted_val in ["DELETED_WITH_WRITEOFF", "DELETED_WITHOUT_WRITEOFF"]:
+        payload = {
+            "reportType": "SALES",
+            "buildSummary": True,
+            "groupByRowFields": [],
+            "aggregateFields": ["DishSumInt"],
+            "filters": {
+                "dateFrom": _date_str(report_date),
+                "dateTo":   _date_str(report_date),
+                "DeletedWithWriteoff": {
+                    "filterType": "IncludeValues",
+                    "values": [deleted_val]
+                }
+            }
         }
-    }
-    data = _olap(base_url, token, payload)
-    total = _sum_from_olap(data, "DishSumInt")
+        data = _olap(base_url, token, payload)
+        total += _sum_from_olap(data, "DishSumInt")
     logger.info(f"Отмены: {total} руб.")
     return round(total, 2)
 
 
 def get_writeoffs(base_url: str, token: str, report_date: date) -> float:
     """
-    Фактические списания из склада (отдельный endpoint /inventory/writeoffs).
-    Берёт по closeDate (дата проводки), не createDate.
+    Фактические списания из склада.
+    Endpoint: GET /v2/documents/writeoff?from=DATE&to=DATE
     """
-    url = f"{base_url}/inventory/writeoffs"
+    url = f"{base_url}/v2/documents/writeoff"
     params = {
-        "key": token,
+        "key":      token,
         "dateFrom": _date_str(report_date),
-        "dateTo": _date_str(report_date),
+        "dateTo":   _date_str(report_date),
     }
     resp = _request("GET", url, params=params)
     data = resp.json()
 
     total = 0.0
-    # Структура ответа: список документов, каждый содержит items с суммами
-    for doc in data if isinstance(data, list) else data.get("writeoffs", []):
+    # Структура ответа: {"result": "SUCCESS", "response": [...документы...]}
+    docs = data.get("response", data) if isinstance(data, dict) else data
+    for doc in docs:
         for item in doc.get("items", []):
-            total += float(item.get("sum", 0) or 0)
+            total += float(item.get("sum", 0) or item.get("cost", 0) or 0)
 
     logger.info(f"Списания: {total} руб.")
     return round(total, 2)
@@ -329,8 +372,8 @@ def get_guest_groups(base_url: str, token: str, report_date: date) -> dict:
     payload = {
         "reportType": "SALES",
         "buildSummary": True,
-        "groupByRowFields": ["GuestsCount"],
-        "aggregateFields": ["OrdersCount", "DishSumInt"],
+        "groupByRowFields": ["GuestNum"],
+        "aggregateFields": ["OrderNum", "DishSumInt"],
         "filters": {
             "dateFrom": _date_str(report_date),
             "dateTo": _date_str(report_date),
@@ -343,10 +386,10 @@ def get_guest_groups(base_url: str, token: str, report_date: date) -> dict:
 
     for row in _rows_from_olap(data):
         try:
-            guests = int(row.get("GuestsCount", 0) or 0)
+            guests = int(row.get("GuestNum", 0) or 0)
         except (TypeError, ValueError):
             continue
-        orders = int(row.get("OrdersCount", 0) or 0)
+        orders = int(row.get("OrderNum", 0) or 0)
         revenue = float(row.get("DishSumInt", 0) or 0)
         key = str(guests) if guests <= 2 else "3+"
         result[key]["orders"] += orders
@@ -359,39 +402,39 @@ def get_guest_groups(base_url: str, token: str, report_date: date) -> dict:
 def get_check_distribution(base_url: str, token: str, report_date: date) -> dict:
     """
     Градация чеков по сумме.
-    Возвращает: {"0-500": N, "500-1000": N, ...}
+    Группируем по OrderNum, суммируем DishSumInt на чек в Python.
+    Возвращает: {"0–500": N, "500–1000": N, ...}
     """
     payload = {
         "reportType": "SALES",
-        "buildSummary": True,
-        "groupByRowFields": ["OrderSum"],
-        "aggregateFields": ["OrdersCount", "DishSumInt"],
+        "buildSummary": False,
+        "groupByRowFields": ["OrderNum"],
+        "aggregateFields": ["DishSumInt"],
         "filters": {
             "dateFrom": _date_str(report_date),
-            "dateTo": _date_str(report_date),
+            "dateTo":   _date_str(report_date),
         }
     }
     data = _olap(base_url, token, payload)
 
     brackets = [
-        (0, 500, "0–500"),
-        (500, 1000, "500–1000"),
-        (1000, 1500, "1000–1500"),
-        (1500, 3000, "1500–3000"),
-        (3000, 5000, "3000–5000"),
+        (0,    500,          "0–500"),
+        (500,  1000,         "500–1000"),
+        (1000, 1500,         "1000–1500"),
+        (1500, 3000,         "1500–3000"),
+        (3000, 5000,         "3000–5000"),
         (5000, float("inf"), "5000+"),
     ]
     result = {label: 0 for _, _, label in brackets}
 
     for row in _rows_from_olap(data):
         try:
-            order_sum = float(row.get("OrderSum", 0) or 0)
-            count = int(row.get("OrdersCount", 1) or 1)
+            order_sum = float(row.get("DishSumInt", 0) or 0)
         except (TypeError, ValueError):
             continue
         for low, high, label in brackets:
             if low <= order_sum < high:
-                result[label] += count
+                result[label] += 1
                 break
 
     logger.info(f"Градация чеков: {result}")
