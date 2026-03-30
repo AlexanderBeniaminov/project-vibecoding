@@ -35,56 +35,90 @@
 
 ### Авторизация
 ```
-GET /auth?login={LOGIN}&pass={MD5_PASS}
+GET /auth?login={LOGIN}&pass={SHA1_PASS}
 → возвращает token (строка, живёт ~15 мин)
 ```
-**Критично:** Токен истекает примерно через 15 минут. Нужен re-auth перед каждой серией запросов или при получении 401. Логика:
+**Важно: SHA1, не MD5.** Хеш пароля в нижнем регистре.
 ```python
-def get_token():
-    resp = requests.get(f"{BASE_URL}/auth", params={"login": LOGIN, "pass": md5(PASS)})
-    return resp.text.strip()
-# Вызывать get_token() в начале main() и передавать во все функции как key=token
+import hashlib
+def sha1(t): return hashlib.sha1(t.encode("utf-8")).hexdigest()
+params = {"login": LOGIN, "pass": sha1(PASSWORD)}
 ```
+Токен передаётся в каждый запрос как `?key=token` в query string.
 
-### Главный метод: POST /reports/olap
+### Главный метод: POST /v2/reports/olap ✅ проверено
 ```json
 {
   "reportType": "SALES",
   "buildSummary": true,
-  "groupByRowFields": ["..."],
-  "aggregateFields": ["DishSumInt", "GuestsCount", "OrdersCount"],
+  "groupByRowFields": ["PayTypes"],
+  "aggregateFields": ["DishSumInt"],
   "filters": {
-    "dateFrom": "2026-03-17",
-    "dateTo": "2026-03-17"
+    "OpenDate.Typed": {
+      "filterType": "DateRange",
+      "periodType": "CUSTOM",
+      "from": "2026-03-17",
+      "to": "2026-03-17",
+      "includeLow": "true",
+      "includeHigh": "true"
+    }
   }
 }
 ```
-Параметр `key=token` передаётся в query string, не в теле.
+**Фильтры v2** — объект, где ключ = поле, значение = FilterCriteria с `filterType`.
+Дополнительные фильтры добавляются рядом с датой как отдельные ключи.
 
-### Все нужные запросы
+### Все нужные запросы ✅ протестировано на демо-стенде
 
-| Данные | groupByRowFields | aggregateFields |
-|---|---|---|
-| Выручка по типу оплаты | `["PayTypes"]` | `DishSumInt` |
-| Кол-во чеков + средний чек | — | `OrdersCount`, `DishSumInt` |
-| Кол-во гостей | — | `GuestsCount` |
-| Выручка Кухня / Бар | `["DishCategory"]` | `DishSumInt` |
-| Временные срезы (утро/день/вечер) | `["Hour"]` | `DishSumInt`, `GuestsCount` |
-| Топ блюд | `["DishName"]` | `DishSumInt`, `DishAmount` |
-| Анализ групп (1/2/3+ гостей) | `["GuestsCount"]` | `OrdersCount`, `DishSumInt` |
-| Градация чеков | `["PriceCategory"]` | `OrdersCount`, `DishSumInt` |
-| Отмены / удаления | `reportType: "DELETIONS"` | `DishSumInt` |
-| Фактические списания | `GET /inventory/writeoffs?dateFrom=&dateTo=&key=` | — отдельный endpoint |
-| Мероприятия | фильтр по тегу / orderType | уточнить у клиента |
+| Данные | groupByRowFields | aggregateFields | Примечание |
+|---|---|---|---|
+| Выручка по типу оплаты | `["PayTypes"]` | `DishSumInt` | |
+| Кол-во чеков | — | `OrderNum` | не `OrdersCount` |
+| Кол-во гостей | — | `GuestNum` | не `GuestsCount` |
+| Средний чек | — | `DishSumInt`, `OrderNum` | считать в Python |
+| Выручка Кухня / Бар | `["DishCategory"]` | `DishSumInt` | |
+| Временные срезы | `["OpenTime"]` | `DishSumInt`, `GuestNum` | час парсить из datetime в Python |
+| Топ блюд | `["DishName"]` | `DishSumInt`, `DishAmountInt` | не `DishAmount` |
+| Анализ групп гостей | `["GuestNum"]` | `OrderNum`, `DishSumInt` | |
+| Градация чеков | `["OrderNum"]` | `DishSumInt` | сумма на чек, распределение в Python |
+| Отмены | SALES + фильтр ниже | `DishSumInt` | нет `DELETIONS` в v2 |
+| Списания | отдельный endpoint | — | см. ниже |
+| Мероприятия | уточнить у клиента | | |
 
-### Временные срезы
-- Утро: 09:00–11:00 (hours 9, 10)
-- День: 11:00–17:00 (hours 11–16)
-- Вечер: 17:00–21:00 (hours 17–20)
+**Валидные reportType в v2:** `SALES`, `STOCK`, `TRANSACTIONS`, `DELIVERIES`
+
+### Отмены (удалённые позиции из заказов)
+```json
+{
+  "reportType": "SALES",
+  "filters": {
+    "OpenDate.Typed": { "filterType": "DateRange", ... },
+    "DeletedWithWriteoff": {
+      "filterType": "IncludeValues",
+      "values": ["DELETED_WITH_WRITEOFF"]
+    }
+  }
+}
+```
+Запрашивать дважды: `DELETED_WITH_WRITEOFF` + `DELETED_WITHOUT_WRITEOFF`, суммировать.
+
+### Фактические списания ✅
+```
+GET /v2/documents/writeoff?dateFrom=2026-03-17&dateTo=2026-03-17&key=TOKEN
+→ {"result": "SUCCESS", "response": [...документы...]}
+```
+Параметры: `dateFrom` / `dateTo` (формат `yyyy-MM-dd`). Не `from`/`to`.
+
+### Временные срезы — парсинг часа
+```python
+# OpenTime возвращает "2026-03-29T14:30:00"
+hour = int(open_time.split("T")[1].split(":")[0])
+```
 
 ### Обработка ошибок iiko
 - **401** → re-auth, повтор запроса
-- **500 / timeout** → retry 3 раза с паузой 10 мин
+- **400** → проверить имена полей и формат фильтров (частая причина)
+- **500 / timeout** → retry 3 раза с паузой 5 сек (тест) / 600 сек (боевой)
 - **Смена не закрыта** → данные неполные, запустить резервный триггер в 06:30
 - **Любая ошибка** → не прерывать весь отчёт, пометить поле `⚠️ нет данных`
 
@@ -291,15 +325,16 @@ hotel-restaurant-processes/
 
 ---
 
-## Открытые вопросы (блокируют разработку)
+## Открытые вопросы
 
-| # | Вопрос | Блокирует |
-|---|---|---|
-| 1 | API-ключ iiko (LOGIN + PASSWORD) | Этап 2 — весь iiko_client.py |
-| 2 | Сколько столов в зале? | Этап 4 — расчёт оборачиваемости |
-| 3 | Мероприятия в iiko: тег или тип заказа? | Этап 4 — запрос мероприятий |
-| 4 | Структура текущего Excel-файла | Этап 3 — совместимость формата |
-| 5 | Один чат для администратора и собственника или разные? | Этап 5 — архитектура бота |
+| # | Вопрос | Статус | Блокирует |
+|---|---|---|---|
+| 1 | API-ключ iiko (LOGIN + PASSWORD) | ✅ Получен (демо-стенд) | — |
+| 2 | Сколько столов / мест? | ✅ 15 столов / 90 мест (с 15.12.2025) | — |
+| 3 | Мероприятия в iiko: тег или тип заказа? | ❓ Не уточнено | Этап 4 — запрос мероприятий |
+| 4 | Структура текущего Excel-файла | ❓ Не получена | Этап 3 — совместимость формата |
+| 5 | Google Sheets ID + сервисный аккаунт JSON | ❓ Не создано | Этап 3 — запись данных |
+| 6 | Telegram bot token + chat ID собственника/администратора | ❓ Не создано | Этап 5 |
 
 ---
 
