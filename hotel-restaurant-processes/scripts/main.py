@@ -220,48 +220,50 @@ def _build_owner_report(data: dict, report_date: date) -> str:
         zp_total    += r.get("зп", 0)
 
     has_manual = bool(manual)
-    status_line = "" if has_manual else "\n⚠️ <i>Ручные данные не заполнены</i>"
 
-    return (
-        f"📊 <b>{RESTAURANT_NAME} — {fmt_date_ru(report_date)}</b>\n\n"
-        f"💰 Выручка: <b>{fmt_money(revenue)}</b>\n"
-        f"   · Нал: {fmt_money(nal)} | СБП: {fmt_money(sbp)}\n"
-        f"   · Карта: {fmt_money(card)} | Счёт: {fmt_money(invoice)}\n\n"
-        f"🍽 Кухня: {fmt_money(kitchen)} | 🍹 Бар: {fmt_money(bar)}\n"
-        f"🧾 Чеков: {fmt_int(orders)} | Ср. чек: {fmt_money(avg_chk)} | Гостей: {fmt_int(guests)}\n\n"
-        + (f"👥 Персонал: {fmt_int(staff_total)} чел. | З/п: {fmt_money(zp_total)}\n"
-           f"🏦 Инкассация: {fmt_money(inkass)} | Остаток: {fmt_money(balance)}\n\n"
-           if has_manual else "")
-        + f"⚠️ Отмены: {fmt_money(cancellations)} | 🗑 Списания: {fmt_money(writeoffs)}"
-        f"{status_line}\n\n"
-        f'📎 <a href="{SHEETS_URL}">Таблица</a>'
-    )
+    lines = [
+        f"📊 {RESTAURANT_NAME} — {fmt_date_ru(report_date)}",
+        "",
+        f"💰 Выручка: {fmt_money(revenue)}",
+        f"   Нал: {fmt_money(nal)} | СБП: {fmt_money(sbp)}",
+        f"   Карта: {fmt_money(card)} | Счёт: {fmt_money(invoice)}",
+        "",
+        f"🍽 Кухня: {fmt_money(kitchen)} | 🍹 Бар: {fmt_money(bar)}",
+        f"🧾 Чеков: {fmt_int(orders)} | Ср. чек: {fmt_money(avg_chk)} | Гостей: {fmt_int(guests)}",
+    ]
+    if has_manual:
+        lines += [
+            "",
+            f"👥 Персонал: {fmt_int(staff_total)} чел. | З/п: {fmt_money(zp_total)}",
+            f"🏦 Инкассация: {fmt_money(inkass)} | Остаток: {fmt_money(balance)}",
+        ]
+    else:
+        lines += ["", "⚠️ Ручные данные не заполнены"]
+    lines += [
+        "",
+        f"⚠️ Отмены: {fmt_money(cancellations)} | 🗑 Списания: {fmt_money(writeoffs)}",
+        "",
+        f"📎 Таблица: {SHEETS_URL}",
+    ]
+    return "\n".join(lines)
 
 
 def _build_admin_request(report_date: date) -> str:
     """Сформировать запрос ручных данных у администратора."""
-    return (
-        f"📋 <b>Монблан — данные за {fmt_date_ru(report_date)}</b>\n\n"
-        "Пожалуйста, заполните вручную:\n\n"
-        "1️⃣ Инкассация в банк (руб.): \n"
-        "2️⃣ Расход из кассы (руб.): \n"
-        "3️⃣ Остаток нал (руб.): \n"
-        "4️⃣ Завтраки — кол-во гостей: \n"
-        "5️⃣ Персонал:\n"
-        "   Повара: кол/сумма з/п\n"
-        "   Официанты: кол/сумма з/п\n"
-        "   Бармены: кол/сумма з/п\n"
-        "   Посудомойщицы: кол/сумма з/п\n\n"
-        "<i>Пример ответа:</i>\n"
-        "Инкассация: 70000\n"
-        "Расход: 3500\n"
-        "Остаток: 26500\n"
-        "Завтраки: 12\n"
-        "Повара: 3/9000\n"
-        "Официанты: 4/12000\n"
-        "Бармены: 1/3500\n"
-        "Посудомойщицы: 2/5000"
-    )
+    return "\n".join([
+        f"📋 Монблан — данные за {fmt_date_ru(report_date)}",
+        "",
+        "Заполните вручную и ответьте в этом формате:",
+        "",
+        "Инкассация: 70000",
+        "Расход: 3500",
+        "Остаток: 26500",
+        "Завтраки: 12",
+        "Повара: 3/9000",
+        "Официанты: 4/12000",
+        "Бармены: 1/3500",
+        "Посудомойщицы: 2/5000",
+    ])
 
 
 def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dict:
@@ -380,15 +382,18 @@ def _build_weekly_digest(data: dict, monday: date, sunday: date, week_num: int) 
     avg_chk = data.get("avg_check", 0)
     avg_rev = data.get("avg_revenue_day", 0)
 
-    return (
-        f"📊 <b>{RESTAURANT_NAME} — неделя {week_num}</b>\n"
-        f"<i>{fmt_date_ru(monday)} – {fmt_date_ru(sunday)}</i>\n\n"
-        f"💰 Выручка за неделю: <b>{fmt_money(revenue)}</b>\n"
-        f"   · Ср. выручка/день: {fmt_money(avg_rev)}\n\n"
-        f"🧾 Чеков: {fmt_int(orders)} | Ср. чек: {fmt_money(avg_chk)}\n"
-        f"👥 Гостей за неделю: {fmt_int(guests)}\n\n"
-        f'📎 <a href="{SHEETS_URL}">Полный отчёт</a>'
-    )
+    return "\n".join([
+        f"📊 {RESTAURANT_NAME} — неделя {week_num}",
+        f"{fmt_date_ru(monday)} – {fmt_date_ru(sunday)}",
+        "",
+        f"💰 Выручка за неделю: {fmt_money(revenue)}",
+        f"   Ср. выручка/день: {fmt_money(avg_rev)}",
+        "",
+        f"🧾 Чеков: {fmt_int(orders)} | Ср. чек: {fmt_money(avg_chk)}",
+        f"👥 Гостей за неделю: {fmt_int(guests)}",
+        "",
+        f"📎 Таблица: {SHEETS_URL}",
+    ])
 
 
 # ---------------------------------------------------------------------------
