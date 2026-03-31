@@ -33,8 +33,8 @@ logger = logging.getLogger("main")
 from config import (
     IIKO_BASE_URL, IIKO_LOGIN, IIKO_PASSWORD,
     SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_JSON,
-    TELEGRAM_TOKEN, TELEGRAM_OWNER_CHAT_ID,
-    TELEGRAM_ADMIN_CHAT_ID, TELEGRAM_DEV_CHAT_ID,
+    MAX_BOT_TOKEN, MAX_OWNER_USER_ID,
+    MAX_ADMIN_USER_ID, MAX_DEV_USER_ID,
     RESTAURANT_NAME, get_capacity,
 )
 from iiko_client import collect_daily_data, get_token
@@ -55,21 +55,31 @@ def _get_sheets_service():
     return get_service(credentials_path=creds_path)
 
 
-def _send_telegram(chat_id: str, text: str):
-    """Отправить сообщение в Telegram (простой POST без библиотек)."""
-    if not TELEGRAM_TOKEN or not chat_id:
-        logger.warning("Telegram не настроен — пропускаем отправку")
+MAX_API = "https://platform-api.max.ru"
+
+
+def _send_max(user_id: str, text: str):
+    """Отправить сообщение через MAX мессенджер."""
+    if not MAX_BOT_TOKEN or not user_id:
+        logger.warning("MAX не настроен — пропускаем отправку")
         return
     import requests as req
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    resp = req.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=10)
+    resp = req.post(
+        f"{MAX_API}/messages",
+        params={"user_id": user_id},
+        headers={"Authorization": MAX_BOT_TOKEN, "Content-Type": "application/json"},
+        json={"text": text},
+        timeout=10,
+    )
     if not resp.ok:
-        logger.error(f"Telegram ошибка {resp.status_code}: {resp.text}")
+        logger.error(f"MAX ошибка {resp.status_code}: {resp.text}")
+    else:
+        logger.info(f"MAX: сообщение отправлено user_id={user_id}")
 
 
 def _alert_dev(message: str):
     """Отправить алерт разработчику при критической ошибке."""
-    _send_telegram(TELEGRAM_DEV_CHAT_ID, f"🔴 <b>{RESTAURANT_NAME} daily_report</b>: {message}")
+    _send_max(MAX_DEV_USER_ID or MAX_OWNER_USER_ID, f"ОШИБКА {RESTAURANT_NAME}: {message}")
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +121,7 @@ def daily(report_date: date):
     logger.info("Шаг 3: отправка отчёта собственнику...")
     try:
         report_text = _build_owner_report(data, report_date)
-        _send_telegram(TELEGRAM_OWNER_CHAT_ID, report_text)
+        _send_max(MAX_OWNER_USER_ID, report_text)
         logger.info("Отчёт отправлен собственнику")
     except Exception as e:
         logger.error(f"Ошибка отправки отчёта: {e}", exc_info=True)
@@ -120,7 +130,7 @@ def daily(report_date: date):
     logger.info("Шаг 4: запрос ручных данных у администратора...")
     try:
         admin_request = _build_admin_request(report_date)
-        _send_telegram(TELEGRAM_ADMIN_CHAT_ID, admin_request)
+        _send_max(MAX_ADMIN_USER_ID, admin_request)
         logger.info("Запрос ручных данных отправлен администратору")
     except Exception as e:
         logger.error(f"Ошибка отправки запроса администратору: {e}", exc_info=True)
@@ -162,7 +172,7 @@ def weekly(for_date: date = None):
     logger.info("Шаг 3: отправка еженедельного дайджеста...")
     try:
         digest = _build_weekly_digest(weekly_data, monday, sunday, week_num)
-        _send_telegram(TELEGRAM_OWNER_CHAT_ID, digest)
+        _send_max(MAX_OWNER_USER_ID, digest)
         logger.info("Еженедельный дайджест отправлен")
     except Exception as e:
         logger.error(f"Ошибка отправки дайджеста: {e}", exc_info=True)

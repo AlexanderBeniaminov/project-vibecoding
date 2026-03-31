@@ -28,13 +28,13 @@ SHEET_WEEKLY  = "Еженедельно"
 SHEET_DASHBOARD = "Дашборд"
 
 # ---------------------------------------------------------------------------
-# Telegram
+# MAX мессенджер (основной канал уведомлений)
 # ---------------------------------------------------------------------------
 
-TELEGRAM_TOKEN         = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_OWNER_CHAT_ID = os.environ.get("TELEGRAM_OWNER_CHAT_ID", "")
-TELEGRAM_ADMIN_CHAT_ID = os.environ.get("TELEGRAM_ADMIN_CHAT_ID", "")
-TELEGRAM_DEV_CHAT_ID   = os.environ.get("TELEGRAM_DEV_CHAT_ID", "")
+MAX_BOT_TOKEN      = os.environ.get("MAX_BOT_TOKEN", "")
+MAX_OWNER_USER_ID  = os.environ.get("MAX_OWNER_USER_ID", "")   # собственник
+MAX_ADMIN_USER_ID  = os.environ.get("MAX_ADMIN_USER_ID", "")   # администратор
+MAX_DEV_USER_ID    = os.environ.get("MAX_DEV_USER_ID", "")     # разработчик
 
 # ---------------------------------------------------------------------------
 # Ресторан

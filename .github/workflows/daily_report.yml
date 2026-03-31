@@ -40,10 +40,10 @@ jobs:
           IIKO_PASSWORD:               ${{ secrets.IIKO_PASSWORD }}
           GOOGLE_SHEETS_ID:            ${{ secrets.GOOGLE_SHEETS_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          TELEGRAM_BOT_TOKEN:          ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_OWNER_CHAT_ID:      ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
-          TELEGRAM_ADMIN_CHAT_ID:      ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
-          TELEGRAM_DEV_CHAT_ID:        ${{ secrets.TELEGRAM_DEV_CHAT_ID }}
+          MAX_BOT_TOKEN:               ${{ secrets.MAX_BOT_TOKEN }}
+          MAX_OWNER_USER_ID:           ${{ secrets.MAX_OWNER_USER_ID }}
+          MAX_ADMIN_USER_ID:           ${{ secrets.MAX_ADMIN_USER_ID }}
+          MAX_DEV_USER_ID:             ${{ secrets.MAX_DEV_USER_ID }}
         run: |
           DATE_ARG="${{ github.event.inputs.date }}"
           if [ -n "$DATE_ARG" ]; then
