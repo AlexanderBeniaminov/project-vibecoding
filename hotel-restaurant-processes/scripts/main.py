@@ -31,7 +31,7 @@ logger = logging.getLogger("main")
 # Импорты после настройки логирования
 # ---------------------------------------------------------------------------
 from config import (
-    IIKO_BASE_URL, IIKO_LOGIN, IIKO_PASSWORD,
+    IIKO_API_LOGIN, IIKO_ORG_ID,
     SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_JSON,
     MAX_BOT_TOKEN, MAX_OWNER_USER_ID,
     MAX_ADMIN_USER_ID, MAX_DEV_USER_ID,
@@ -90,12 +90,12 @@ def daily(report_date: date):
     logger.info(f"=== СТАРТ daily за {report_date} ===")
 
     # 1. Собрать данные iiko
-    logger.info("Шаг 1: сбор данных из iiko...")
+    logger.info("Шаг 1: сбор данных из iiko Cloud...")
     try:
-        token = get_token(IIKO_BASE_URL, IIKO_LOGIN, IIKO_PASSWORD)
+        token = get_token(IIKO_API_LOGIN)
         data = collect_daily_data(
-            base_url=IIKO_BASE_URL,
             token=token,
+            org_id=IIKO_ORG_ID,
             report_date=date.fromisoformat(fmt_date(report_date)),
         )
         data["date"] = str(report_date)

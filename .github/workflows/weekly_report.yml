@@ -33,9 +33,8 @@ jobs:
 
       - name: Запустить еженедельный дайджест
         env:
-          IIKO_BASE_URL:               ${{ secrets.IIKO_BASE_URL }}
-          IIKO_LOGIN:                  ${{ secrets.IIKO_LOGIN }}
-          IIKO_PASSWORD:               ${{ secrets.IIKO_PASSWORD }}
+          IIKO_API_LOGIN:              ${{ secrets.IIKO_API_LOGIN }}
+          IIKO_ORG_ID:                 ${{ secrets.IIKO_ORG_ID }}
           GOOGLE_SHEETS_ID:            ${{ secrets.GOOGLE_SHEETS_ID }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           MAX_BOT_TOKEN:               ${{ secrets.MAX_BOT_TOKEN }}

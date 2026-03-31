@@ -7,12 +7,13 @@ import os
 from datetime import date
 
 # ---------------------------------------------------------------------------
-# iiko API
+# iiko Cloud API
 # ---------------------------------------------------------------------------
 
-IIKO_BASE_URL = os.environ.get("IIKO_BASE_URL", "https://593-760-434.iiko.it/resto/api")
-IIKO_LOGIN    = os.environ.get("IIKO_LOGIN", "")
-IIKO_PASSWORD = os.environ.get("IIKO_PASSWORD", "")
+# API-ключ из личного кабинета iiko (не логин/пароль)
+IIKO_API_LOGIN = os.environ.get("IIKO_API_LOGIN", "")
+# UUID организации — получить через POST /api/1/organizations
+IIKO_ORG_ID    = os.environ.get("IIKO_ORG_ID", "")
 
 # ---------------------------------------------------------------------------
 # Google Sheets
