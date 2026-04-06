@@ -1,0 +1,24 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Секретные файлы — никогда не коммитить
+agconnect-services.json
+google-services.json
+keystore.jks
+*.keystore
+local.properties
+
+# Vosk модель (бинарный файл, слишком большой для git)
+vosk-model*/
+app/src/main/assets/vosk-model*/
+
+# APK / AAB
+*.apk
+*.aab
+app/release/
+app/debug/
