@@ -47,6 +47,9 @@ class TaskRepository @Inject constructor(
     /** Сохранить новую задачу, вернуть присвоенный id */
     suspend fun save(task: Task): Long = dao.insert(task.toEntity())
 
+    /** Алиас для save — используется в ConfirmViewModel */
+    suspend fun insert(task: Task): Long = save(task)
+
     /** Обновить существующую задачу */
     suspend fun update(task: Task) = dao.update(task.toEntity())
 

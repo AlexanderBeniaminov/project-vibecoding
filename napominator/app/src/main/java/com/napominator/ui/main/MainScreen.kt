@@ -1,5 +1,6 @@
 package com.napominator.ui.main
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,11 +11,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.napominator.domain.model.Task
+import com.napominator.ui.record.RecordActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +27,7 @@ fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -38,7 +42,7 @@ fun MainScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { /* TODO: открыть голосовой ввод */ },
+                onClick = { context.startActivity(Intent(context, RecordActivity::class.java)) },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
