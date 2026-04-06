@@ -93,8 +93,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
 
-    // iCalendar
-    implementation(libs.ical4android)
+    // iCalendar (CalDAV) — подключается в этапе 13
+    // implementation(libs.ical4android)
 
     // Vosk офлайн ASR
     implementation(libs.vosk.android)
