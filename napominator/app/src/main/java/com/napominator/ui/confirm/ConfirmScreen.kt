@@ -101,18 +101,20 @@ fun ConfirmScreen(
             }
 
             // Дата и время
-            if (state.reminderAt != null) {
+            val reminderAt = state.reminderAt
+            if (reminderAt != null) {
                 InfoRow(
                     label = "Когда",
-                    value = formatTimestamp(state.reminderAt)
+                    value = formatTimestamp(reminderAt)
                 )
             }
 
             // Повторение
-            if (state.rrule != null) {
+            val rrule = state.rrule
+            if (rrule != null) {
                 InfoRow(
                     label = "Повтор",
-                    value = formatRrule(state.rrule)
+                    value = formatRrule(rrule)
                 )
             }
 
