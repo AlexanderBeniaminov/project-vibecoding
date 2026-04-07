@@ -44,6 +44,9 @@ class VoskModelDownloader @Inject constructor(
     companion object {
         private const val MODEL_URL =
             "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
+        // Реальное имя папки внутри архива
+        private const val MODEL_DIR_NAME_IN_ZIP = "vosk-model-small-ru-0.22"
+        // Имя под которым храним у себя
         private const val MODEL_DIR_NAME = "vosk-model-small-ru"
         private const val ZIP_TEMP_NAME = "vosk-model-small-ru.zip"
     }
@@ -126,10 +129,25 @@ class VoskModelDownloader @Inject constructor(
             return@flow
         }
 
+        // Архив распаковывается в папку с версией (vosk-model-small-ru-0.22),
+        // переименовываем в стандартное имя (vosk-model-small-ru)
+        val extractedDir = File(context.filesDir, MODEL_DIR_NAME_IN_ZIP)
+        if (extractedDir.exists() && !modelDir.exists()) {
+            extractedDir.renameTo(modelDir)
+        }
+
         if (modelDir.exists()) {
             emit(Progress.Done(modelDir))
         } else {
-            emit(Progress.Error("Папка модели не найдена после распаковки"))
+            // Ищем любую папку vosk в filesDir как запасной вариант
+            val anyVoskDir = context.filesDir.listFiles()
+                ?.firstOrNull { it.isDirectory && it.name.startsWith("vosk-model") }
+            if (anyVoskDir != null) {
+                anyVoskDir.renameTo(modelDir)
+                emit(Progress.Done(modelDir))
+            } else {
+                emit(Progress.Error("Папка модели не найдена после распаковки"))
+            }
         }
     }.flowOn(Dispatchers.IO)
 
