@@ -107,6 +107,10 @@ fun RecordScreen(
                     ProcessingContent()
                 }
 
+                is RecordUiState.DownloadingModel -> {
+                    DownloadingModelContent(state)
+                }
+
                 is RecordUiState.Error -> {
                     ErrorContent(
                         message = state.message,
@@ -225,6 +229,40 @@ private fun RecordingContent(
         text = "Отпустите чтобы сохранить",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
+private fun DownloadingModelContent(state: RecordUiState.DownloadingModel) {
+    val isExtracting = state.totalBytes == 0L
+    Text(
+        text = if (isExtracting) "Распаковка модели..." else "Загрузка голосовой модели",
+        style = MaterialTheme.typography.titleMedium,
+        textAlign = TextAlign.Center
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = if (isExtracting) "Подождите немного"
+               else "${state.percent}% · ${state.bytesLoaded / 1_048_576} МБ из ${state.totalBytes / 1_048_576} МБ",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center
+    )
+    Spacer(Modifier.height(24.dp))
+    if (isExtracting) {
+        CircularProgressIndicator()
+    } else {
+        LinearProgressIndicator(
+            progress = { state.percent / 100f },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+    Spacer(Modifier.height(16.dp))
+    Text(
+        text = "Это нужно сделать только один раз (~50 МБ)",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center
     )
 }
 
