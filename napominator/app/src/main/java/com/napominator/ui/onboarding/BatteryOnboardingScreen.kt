@@ -15,8 +15,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 /**
  * Экран онбординга настроек батареи Huawei.
@@ -26,7 +29,26 @@ import androidx.compose.ui.unit.dp
 fun BatteryOnboardingScreen(onDone: () -> Unit) {
     val context = LocalContext.current
     val powerManager = context.getSystemService(PowerManager::class.java)
-    val isIgnoring = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+
+    // Перепроверяем каждый раз когда экран становится активным (после возврата из Настроек)
+    var isIgnoring by remember { mutableStateOf(
+        powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+    ) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isIgnoring = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Если уже настроено — сразу переходим дальше
+    LaunchedEffect(isIgnoring) {
+        if (isIgnoring) onDone()
+    }
 
     Column(
         modifier = Modifier
