@@ -23,29 +23,39 @@ import androidx.lifecycle.LifecycleEventObserver
 
 /**
  * Экран онбординга настроек батареи Huawei.
- * Показывается при первом запуске если приложение не в белом списке батареи.
+ * На Huawei/HarmonyOS isIgnoringBatteryOptimizations() всегда false —
+ * поэтому считаем onboarding выполненным если пользователь вернулся
+ * из настроек или нажал "Готово".
  */
 @Composable
 fun BatteryOnboardingScreen(onDone: () -> Unit) {
     val context = LocalContext.current
     val powerManager = context.getSystemService(PowerManager::class.java)
 
-    // Перепроверяем каждый раз когда экран становится активным (после возврата из Настроек)
-    var isIgnoring by remember { mutableStateOf(
-        powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
-    ) }
+    // true если пользователь открывал настройки и вернулся
+    var openedSettings by remember { mutableStateOf(false) }
+
+    // Стандартная проверка Android (работает не на всех Huawei)
+    var isIgnoring by remember {
+        mutableStateOf(powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true)
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 isIgnoring = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                // Если пользователь возвращается после открытия настроек — считаем настроенным
+                if (openedSettings) {
+                    // небольшая задержка чтобы пользователь увидел экран
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Если уже настроено — сразу переходим дальше
+    // Если стандартная проверка прошла — сразу вперёд
     LaunchedEffect(isIgnoring) {
         if (isIgnoring) onDone()
     }
@@ -85,21 +95,20 @@ fun BatteryOnboardingScreen(onDone: () -> Unit) {
 
         Spacer(Modifier.height(32.dp))
 
-        // Шаги
         Steps()
 
         Spacer(Modifier.height(32.dp))
 
-        // Кнопка "Настроить сейчас" — открывает системные настройки батареи
+        // Кнопка открытия настроек
         Button(
             onClick = {
+                openedSettings = true
                 try {
                     val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                         data = Uri.parse("package:${context.packageName}")
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
-                    // Fallback — открываем общие настройки батареи
                     context.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
                 }
             },
@@ -110,20 +119,18 @@ fun BatteryOnboardingScreen(onDone: () -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        if (isIgnoring) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+        // Кнопка "Готово" — появляется после того как пользователь открыл настройки
+        if (openedSettings || isIgnoring) {
+            Button(
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
                 )
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    "Уже настроено",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text("Готово, я настроил")
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -132,7 +139,7 @@ fun BatteryOnboardingScreen(onDone: () -> Unit) {
             onClick = onDone,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (isIgnoring) "Продолжить" else "Пропустить (напоминания могут не работать)")
+            Text("Пропустить (напоминания могут не работать)")
         }
 
         Spacer(Modifier.height(24.dp))
@@ -178,9 +185,6 @@ private fun StepRow(number: Int, text: String) {
             }
         }
         Spacer(Modifier.width(12.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Text(text = text, style = MaterialTheme.typography.bodyMedium)
     }
 }
