@@ -56,13 +56,13 @@ class NotificationBuilder @Inject constructor(
             )
             // Кнопка 2: Через 1 час
             .addAction(
-                android.R.drawable.ic_lock_idle_clock,
+                android.R.drawable.ic_popup_reminder,
                 "Через 1 час",
                 snooze1hIntent
             )
             // Кнопка 3: Завтра утром
             .addAction(
-                android.R.drawable.ic_menu_today,
+                android.R.drawable.ic_menu_rotate,
                 "Завтра утром",
                 snoozeTomorrowIntent
             )

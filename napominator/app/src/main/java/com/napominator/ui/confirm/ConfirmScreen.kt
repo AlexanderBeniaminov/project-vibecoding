@@ -9,7 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -73,14 +73,15 @@ fun ConfirmScreen(
                 TimerBar(seconds = state.timerSeconds, progress = timerProgress)
             }
 
-            // Поле заголовка
+            // Поле заголовка — касание останавливает таймер
             OutlinedTextField(
                 value = state.title,
                 onValueChange = { viewModel.updateTitle(it) },
                 label = { Text("Задача") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-                onFocusChangeEvent = { viewModel.stopTimer() }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { if (it.isFocused) viewModel.stopTimer() },
+                minLines = 2
             )
 
             // Сообщение "без времени"
@@ -222,5 +223,3 @@ private fun formatRrule(rrule: String): String = when {
     else -> rrule
 }
 
-// Extension для остановки таймера при фокусе на поле
-private fun Modifier.onFocusChangeEvent(onFocus: () -> Unit): Modifier = this
