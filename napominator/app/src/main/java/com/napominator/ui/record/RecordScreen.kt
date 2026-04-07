@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.napominator.nlp.NlpParser
+import com.napominator.ui.util.rememberHapticFeedback
 
 /**
  * Экран записи голоса.
@@ -37,11 +38,14 @@ fun RecordScreen(
 
     var showTextInput by remember { mutableStateOf(false) }
     var textInputValue by remember { mutableStateOf("") }
+    val haptic = rememberHapticFeedback()
 
     // Когда распознали — передаём вверх
     LaunchedEffect(uiState) {
-        if (uiState is RecordUiState.Recognized) {
-            onRecognized((uiState as RecordUiState.Recognized).parsed)
+        when (uiState) {
+            is RecordUiState.Recognized -> onRecognized((uiState as RecordUiState.Recognized).parsed)
+            is RecordUiState.Error -> haptic.error()
+            else -> {}
         }
     }
 
@@ -346,6 +350,8 @@ private fun MicButton(
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit
 ) {
+    val haptic = rememberHapticFeedback()
+
     // Пульсация при записи
     val pulseScale by animateFloatAsState(
         targetValue = if (isRecording) 1f + amplitude * 0.4f else 1f,
@@ -367,8 +373,10 @@ private fun MicButton(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
+                        haptic.click()
                         onStartRecording()
                         tryAwaitRelease()
+                        haptic.recordStop()
                         onStopRecording()
                     }
                 )

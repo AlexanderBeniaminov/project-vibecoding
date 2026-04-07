@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.napominator.nlp.NlpParser
+import com.napominator.ui.util.rememberHapticFeedback
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -35,9 +36,13 @@ fun ConfirmScreen(
     }
 
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val haptic = rememberHapticFeedback()
 
     LaunchedEffect(state.saved) {
-        if (state.saved) onSaved()
+        if (state.saved) {
+            haptic.success()
+            onSaved()
+        }
     }
 
     val timerProgress by animateFloatAsState(
@@ -134,7 +139,7 @@ fun ConfirmScreen(
                     Text("Перезаписать")
                 }
                 Button(
-                    onClick = { viewModel.saveTask() },
+                    onClick = { haptic.click(); viewModel.saveTask() },
                     modifier = Modifier.weight(1f),
                     enabled = state.title.isNotBlank()
                 ) {
