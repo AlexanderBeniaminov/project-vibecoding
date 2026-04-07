@@ -34,6 +34,13 @@ class AlarmScheduler @Inject constructor(
         alarmManager.setAlarmClock(clockInfo, pendingIntent)
     }
 
+    fun scheduleAt(taskId: Long, triggerAt: Long) {
+        if (triggerAt <= System.currentTimeMillis()) return
+        val pendingIntent = buildPendingIntent(taskId) ?: return
+        val clockInfo = AlarmManager.AlarmClockInfo(triggerAt, buildLaunchIntent())
+        alarmManager.setAlarmClock(clockInfo, pendingIntent)
+    }
+
     fun cancel(taskId: Long) {
         buildPendingIntent(taskId)?.let { alarmManager.cancel(it) }
     }

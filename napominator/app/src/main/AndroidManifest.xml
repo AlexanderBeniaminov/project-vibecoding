@@ -61,6 +61,11 @@
             android:name=".notification.NotificationActionReceiver"
             android:exported="false" />
 
+        <!-- Получатель утренней сводки -->
+        <receiver
+            android:name=".alarm.DailySummaryReceiver"
+            android:exported="false" />
+
         <!-- Получатель загрузки системы — перепланировать будильники и геофенсы -->
         <receiver
             android:name=".alarm.BootReceiver"

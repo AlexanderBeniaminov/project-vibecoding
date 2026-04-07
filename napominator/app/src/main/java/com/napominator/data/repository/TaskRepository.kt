@@ -5,6 +5,7 @@ import com.napominator.domain.model.Task
 import com.napominator.domain.model.toDomain
 import com.napominator.domain.model.toEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,9 @@ class TaskRepository @Inject constructor(
     /** Поток активных (невыполненных) задач */
     fun getActiveTasks(): Flow<List<Task>> =
         dao.getActiveTasks().map { list -> list.map { it.toDomain() } }
+
+    /** Одноразовый снимок активных задач (для сводки) */
+    suspend fun getActiveTasksOnce(): List<Task> = getActiveTasks().first()
 
     /** Поток всех задач */
     fun getAllTasks(): Flow<List<Task>> =

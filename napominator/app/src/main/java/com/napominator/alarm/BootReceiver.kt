@@ -19,6 +19,7 @@ class BootReceiver : BroadcastReceiver() {
 
     @Inject lateinit var taskRepository: TaskRepository
     @Inject lateinit var alarmScheduler: AlarmScheduler
+    @Inject lateinit var dailySummaryScheduler: DailySummaryScheduler
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
@@ -30,6 +31,9 @@ class BootReceiver : BroadcastReceiver() {
                 // Перепланировать все будущие задачи с напоминанием
                 val tasks = taskRepository.getFutureAlarmTasks()
                 tasks.forEach { task -> alarmScheduler.schedule(task) }
+
+                // Перепланировать утреннюю сводку
+                dailySummaryScheduler.scheduleNext()
             } finally {
                 pendingResult.finish()
             }
