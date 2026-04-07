@@ -129,7 +129,7 @@ private fun SnoozeBottomSheet(
     onDismiss: () -> Unit,
     onOptionSelected: (SnoozeAction) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartialExpansion = true)
+    val sheetState = rememberModalBottomSheetState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
