@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.napominator.NapominatorApp
 import com.napominator.domain.model.Task
+import com.napominator.ui.reminder.ReminderSheetActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.text.SimpleDateFormat
 import java.util.*
@@ -93,12 +94,15 @@ class NotificationBuilder @Inject constructor(
     }
 
     private fun buildOpenIntent(taskId: Long): PendingIntent {
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
+        val intent = Intent(context, ReminderSheetActivity::class.java).apply {
+            putExtra(ReminderSheetActivity.EXTRA_TASK_ID, taskId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         return PendingIntent.getActivity(
             context,
             taskId.toInt(),
             intent,
-            PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 }

@@ -51,6 +51,13 @@
             android:theme="@style/Theme.Napominator.Transparent"
             android:launchMode="singleTop" />
 
+        <!-- Bottom sheet переноса напоминания (открывается из уведомления) -->
+        <activity
+            android:name=".ui.reminder.ReminderSheetActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Napominator.Transparent"
+            android:launchMode="singleTop" />
+
         <!-- Получатель будильников -->
         <receiver
             android:name=".alarm.AlarmReceiver"

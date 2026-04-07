@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent">
+
+    <ImageButton
+        android:id="@+id/widget_mic_button"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@android:drawable/ic_btn_speak_now"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:scaleType="centerInside"
+        android:contentDescription="Записать задачу" />
+
+</FrameLayout>
