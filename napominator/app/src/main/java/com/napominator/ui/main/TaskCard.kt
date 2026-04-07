@@ -20,10 +20,9 @@ fun TaskCard(
     task: Task,
     onClick: () -> Unit,
     onComplete: () -> Unit,
+    isOverdue: Boolean = task.isOverdue(),
     modifier: Modifier = Modifier
 ) {
-    val isOverdue = task.isOverdue()
-
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -35,8 +34,7 @@ fun TaskCard(
         )
     ) {
         Row(
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
@@ -64,7 +62,7 @@ fun TaskCard(
                     )
                 }
             }
-            Row {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 if (task.isRepeating) {
                     Icon(
                         Icons.Default.Repeat,
@@ -88,7 +86,6 @@ fun TaskCard(
 }
 
 private fun formatDateTime(timestamp: Long): String {
-    val now = System.currentTimeMillis()
     val sdf = SimpleDateFormat("d MMM, HH:mm", Locale("ru"))
     return sdf.format(Date(timestamp))
 }
