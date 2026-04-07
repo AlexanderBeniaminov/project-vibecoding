@@ -4,6 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,12 +21,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.napominator.ui.backup.BackupState
+import com.napominator.ui.backup.BackupViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    viewModel: SettingsViewModel = hiltViewModel()
+    viewModel: SettingsViewModel = hiltViewModel(),
+    backupViewModel: BackupViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
 
@@ -39,6 +45,37 @@ fun SettingsScreen(
     val asrEngine by viewModel.asrEngine.collectAsStateWithLifecycle()
     val summaryEnabled by viewModel.dailySummaryEnabled.collectAsStateWithLifecycle()
     val summaryTime by viewModel.dailySummaryTime.collectAsStateWithLifecycle()
+
+    val backupState by backupViewModel.state.collectAsStateWithLifecycle()
+
+    // File pickers
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? -> uri?.let { backupViewModel.export(it) } }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { backupViewModel.import(it) } }
+
+    // Показываем результат бэкапа через Snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(backupState) {
+        when (val s = backupState) {
+            is BackupState.ExportSuccess -> {
+                snackbarHostState.showSnackbar("Экспортировано задач: ${s.count}")
+                backupViewModel.resetState()
+            }
+            is BackupState.ImportSuccess -> {
+                snackbarHostState.showSnackbar("Импортировано: ${s.imported}, пропущено: ${s.skipped}")
+                backupViewModel.resetState()
+            }
+            is BackupState.Error -> {
+                snackbarHostState.showSnackbar("Ошибка: ${s.message}")
+                backupViewModel.resetState()
+            }
+            else -> {}
+        }
+    }
 
     // Диалоги
     var showQuietStartPicker by remember { mutableStateOf(false) }
@@ -125,6 +162,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Настройки") },
@@ -244,10 +282,28 @@ fun SettingsScreen(
             SectionHeader("Данные")
 
             SettingsRow(
+                label = "Экспортировать задачи",
+                description = "Сохранить все задачи в JSON-файл",
+                onClick = {
+                    exportLauncher.launch("napominator_backup.json")
+                }
+            )
+            SettingsRow(
+                label = "Импортировать задачи",
+                description = "Загрузить задачи из JSON-файла",
+                onClick = {
+                    importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                }
+            )
+            SettingsRow(
                 label = "Очистить выполненные",
                 description = "Удалить все выполненные задачи",
                 onClick = { showDeleteConfirm = true }
             )
+
+            if (backupState is BackupState.InProgress) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 

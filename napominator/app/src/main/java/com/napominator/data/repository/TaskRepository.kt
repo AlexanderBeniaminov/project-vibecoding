@@ -21,6 +21,9 @@ class TaskRepository @Inject constructor(
     /** Одноразовый снимок активных задач (для сводки) */
     suspend fun getActiveTasksOnce(): List<Task> = getActiveTasks().first()
 
+    /** Одноразовый снимок всех задач (для экспорта) */
+    suspend fun getAllTasksOnce(): List<Task> = getAllTasks().first()
+
     /** Поток всех задач */
     fun getAllTasks(): Flow<List<Task>> =
         dao.getAllTasks().map { list -> list.map { it.toDomain() } }
