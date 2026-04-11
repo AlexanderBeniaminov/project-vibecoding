@@ -1,0 +1,69 @@
+name: Ежедневный отчёт Монблан
+
+on:
+  schedule:
+    # 23:30 UTC+5 = 18:30 UTC (основной запуск)
+    - cron: '30 18 * * *'
+    # 06:30 UTC+5 = 01:30 UTC (резервный — если смена была не закрыта в 23:30)
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Дата отчёта (YYYY-MM-DD). Пусто = вчера'
+        required: false
+        default: ''
+
+jobs:
+  daily_report:
+    name: Собрать и отправить ежедневный отчёт
+    runs-on: ubuntu-latest
+    # 60 минут: 30 мин данные + 30 мин ожидание ответа администратора
+    timeout-minutes: 60
+
+    env:
+      # iikoWeb (основной источник данных)
+      IIKO_WEB_LOGIN:             ${{ secrets.IIKO_WEB_LOGIN }}
+      IIKO_WEB_PASSWORD:          ${{ secrets.IIKO_WEB_PASSWORD }}
+      IIKO_STORE_ID:              ${{ secrets.IIKO_STORE_ID }}
+      # iiko Transport API (резервный)
+      IIKO_API_LOGIN:             ${{ secrets.IIKO_API_LOGIN }}
+      IIKO_ORG_ID:                ${{ secrets.IIKO_ORG_ID }}
+      # Google Sheets
+      GOOGLE_SHEETS_ID:           ${{ secrets.GOOGLE_SHEETS_ID }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      # MAX мессенджер
+      MAX_BOT_TOKEN:              ${{ secrets.MAX_BOT_TOKEN }}
+      MAX_OWNER_USER_ID:          ${{ secrets.MAX_OWNER_USER_ID }}
+      MAX_ADMIN_USER_ID:          ${{ secrets.MAX_ADMIN_USER_ID }}
+      MAX_DEV_USER_ID:            ${{ secrets.MAX_DEV_USER_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Настройка Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: hotel-restaurant-processes/requirements.txt
+
+      - name: Установка зависимостей
+        run: pip install -r hotel-restaurant-processes/requirements.txt
+
+      - name: Запуск ежедневного отчёта
+        working-directory: hotel-restaurant-processes
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python scripts/main.py daily "${{ github.event.inputs.date }}"
+          else
+            python scripts/main.py daily
+          fi
+
+      - name: Загрузка логов при ошибке
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-daily-${{ github.run_id }}
+          path: hotel-restaurant-processes/logs/
+          retention-days: 7

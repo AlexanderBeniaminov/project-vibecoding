@@ -1,0 +1,59 @@
+name: Еженедельный дайджест Монблан
+
+on:
+  schedule:
+    # 07:00 UTC+5 по понедельникам = 02:00 UTC понедельник
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Любая дата из нужной недели (YYYY-MM-DD). Пусто = прошлая неделя'
+        required: false
+        default: ''
+
+jobs:
+  weekly_report:
+    name: Агрегировать и отправить еженедельный дайджест
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      IIKO_API_LOGIN:             ${{ secrets.IIKO_API_LOGIN }}
+      IIKO_ORG_ID:                ${{ secrets.IIKO_ORG_ID }}
+      GOOGLE_SHEETS_ID:           ${{ secrets.GOOGLE_SHEETS_ID }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      MAX_BOT_TOKEN:              ${{ secrets.MAX_BOT_TOKEN }}
+      MAX_OWNER_USER_ID:          ${{ secrets.MAX_OWNER_USER_ID }}
+      MAX_ADMIN_USER_ID:          ${{ secrets.MAX_ADMIN_USER_ID }}
+      MAX_DEV_USER_ID:            ${{ secrets.MAX_DEV_USER_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Настройка Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: hotel-restaurant-processes/requirements.txt
+
+      - name: Установка зависимостей
+        run: pip install -r hotel-restaurant-processes/requirements.txt
+
+      - name: Запуск еженедельного отчёта
+        working-directory: hotel-restaurant-processes
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python scripts/main.py weekly "${{ github.event.inputs.date }}"
+          else
+            python scripts/main.py weekly
+          fi
+
+      - name: Загрузка логов при ошибке
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-weekly-${{ github.run_id }}
+          path: hotel-restaurant-processes/logs/
+          retention-days: 7

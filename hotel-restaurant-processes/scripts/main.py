@@ -38,8 +38,9 @@ from config import (
     RESTAURANT_NAME, get_capacity,
 )
 from iiko_client import collect_daily_data, get_token
+from max_bot import MaxBot, send_or_log
 from sheets_writer import get_service, setup_spreadsheet, write_daily_row, write_weekly_row
-from utils import yesterday_utc5, fmt_date, week_bounds, fmt_date_ru, fmt_money, fmt_int
+from utils import yesterday_utc5, fmt_date, week_bounds, fmt_date_ru, fmt_money, fmt_int, parse_admin_reply
 
 
 # ---------------------------------------------------------------------------
@@ -55,39 +56,37 @@ def _get_sheets_service():
     return get_service(credentials_path=creds_path)
 
 
-MAX_API = "https://platform-api.max.ru"
+def _make_bot() -> MaxBot | None:
+    """Создать MaxBot или вернуть None если токен не настроен."""
+    if not MAX_BOT_TOKEN:
+        logger.warning("MAX_BOT_TOKEN не задан — уведомления отключены")
+        return None
+    try:
+        return MaxBot(MAX_BOT_TOKEN)
+    except Exception as e:
+        logger.error(f"Ошибка инициализации MaxBot: {e}")
+        return None
 
 
-def _send_max(user_id: str, text: str):
-    """Отправить сообщение через MAX мессенджер."""
-    if not MAX_BOT_TOKEN or not user_id:
-        logger.warning("MAX не настроен — пропускаем отправку")
-        return
-    import requests as req
-    resp = req.post(
-        f"{MAX_API}/messages",
-        params={"user_id": user_id},
-        headers={"Authorization": MAX_BOT_TOKEN, "Content-Type": "application/json"},
-        json={"text": text},
-        timeout=10,
-    )
-    if not resp.ok:
-        logger.error(f"MAX ошибка {resp.status_code}: {resp.text}")
-    else:
-        logger.info(f"MAX: сообщение отправлено user_id={user_id}")
-
-
-def _alert_dev(message: str):
+def _alert_dev(bot: MaxBot | None, message: str):
     """Отправить алерт разработчику при критической ошибке."""
-    _send_max(MAX_DEV_USER_ID or MAX_OWNER_USER_ID, f"ОШИБКА {RESTAURANT_NAME}: {message}")
+    dev_id = MAX_DEV_USER_ID or MAX_OWNER_USER_ID
+    send_or_log(bot, dev_id, f"🔴 {RESTAURANT_NAME}: {message}", label="alert_dev")
 
 
 # ---------------------------------------------------------------------------
 # daily — ежедневный отчёт
 # ---------------------------------------------------------------------------
 
+# Время ожидания ответа администратора (секунды)
+ADMIN_POLL_TIMEOUT_SEC = 30 * 60  # 30 минут
+
+SHEETS_URL = f"https://docs.google.com/spreadsheets/d/{SHEETS_ID}/edit"
+
+
 def daily(report_date: date):
     logger.info(f"=== СТАРТ daily за {report_date} ===")
+    bot = _make_bot()
 
     # 1. Собрать данные iiko
     logger.info("Шаг 1: сбор данных из iiko Cloud...")
@@ -102,7 +101,7 @@ def daily(report_date: date):
         logger.info("Данные iiko собраны успешно")
     except Exception as e:
         logger.error(f"Критическая ошибка iiko: {e}", exc_info=True)
-        _alert_dev(f"Ошибка сбора данных iiko за {report_date}: {e}")
+        _alert_dev(bot, f"Ошибка сбора данных iiko за {report_date}: {e}")
         sys.exit(1)
 
     # 2. Записать автоматические данные в Sheets
@@ -114,26 +113,64 @@ def daily(report_date: date):
         logger.info("Данные записаны в Google Sheets")
     except Exception as e:
         logger.error(f"Ошибка Google Sheets: {e}", exc_info=True)
-        _alert_dev(f"Ошибка записи в Sheets за {report_date}: {e}")
+        _alert_dev(bot, f"Ошибка записи в Sheets за {report_date}: {e}")
         sys.exit(1)
 
-    # 3. Сформировать и отправить отчёт собственнику
-    logger.info("Шаг 3: отправка отчёта собственнику...")
+    # 3. Запросить ручные данные у администратора и ждать ответ
+    logger.info("Шаг 3: запрос ручных данных у администратора...")
+    manual_data = None
+
+    if bot and MAX_ADMIN_USER_ID:
+        try:
+            # Сбросить старые обновления, чтобы не принять вчерашний ответ
+            bot.flush_updates()
+
+            admin_request = _build_admin_request(report_date)
+            bot.send_message(MAX_ADMIN_USER_ID, admin_request)
+            logger.info("Запрос отправлен администратору, ожидание ответа...")
+
+            reply_text = bot.poll_for_reply(
+                from_user_id=MAX_ADMIN_USER_ID,
+                timeout_sec=ADMIN_POLL_TIMEOUT_SEC,
+            )
+
+            if reply_text:
+                manual_data = parse_admin_reply(reply_text)
+                if manual_data:
+                    logger.info(f"Ответ администратора разобран: {manual_data}")
+                    # Дописать ручные данные в Sheets
+                    data["manual"] = manual_data
+                    try:
+                        write_daily_row(service, SHEETS_ID, data)
+                        logger.info("Ручные данные записаны в Google Sheets")
+                    except Exception as e:
+                        logger.error(f"Ошибка записи ручных данных: {e}", exc_info=True)
+                else:
+                    logger.warning(f"Не удалось разобрать ответ: {reply_text!r}")
+                    send_or_log(bot, MAX_ADMIN_USER_ID,
+                                "⚠️ Не смог разобрать ответ. Пришлите данные в точном формате из предыдущего сообщения.",
+                                label="admin_parse_error")
+            else:
+                logger.warning("Администратор не ответил за 30 минут")
+                # Ячейки помечаем как не заполненные
+                data["manual"] = {"статус": "⚠️ не заполнено"}
+                try:
+                    write_daily_row(service, SHEETS_ID, data)
+                except Exception as e:
+                    logger.error(f"Ошибка записи статуса отсутствия данных: {e}")
+
+        except Exception as e:
+            logger.error(f"Ошибка при работе с MAX: {e}", exc_info=True)
+    else:
+        logger.warning("MAX не настроен или ADMIN_USER_ID отсутствует — ручной ввод пропущен")
+
+    # 4. Отправить итоговый отчёт собственнику
+    logger.info("Шаг 4: отправка отчёта собственнику...")
     try:
         report_text = _build_owner_report(data, report_date)
-        _send_max(MAX_OWNER_USER_ID, report_text)
-        logger.info("Отчёт отправлен собственнику")
+        send_or_log(bot, MAX_OWNER_USER_ID, report_text, label="owner_daily_report")
     except Exception as e:
         logger.error(f"Ошибка отправки отчёта: {e}", exc_info=True)
-
-    # 4. Запросить ручные данные у администратора
-    logger.info("Шаг 4: запрос ручных данных у администратора...")
-    try:
-        admin_request = _build_admin_request(report_date)
-        _send_max(MAX_ADMIN_USER_ID, admin_request)
-        logger.info("Запрос ручных данных отправлен администратору")
-    except Exception as e:
-        logger.error(f"Ошибка отправки запроса администратору: {e}", exc_info=True)
 
     logger.info(f"=== ФИНИШ daily за {report_date} ===")
 
@@ -146,6 +183,7 @@ def weekly(for_date: date = None):
     monday, sunday = week_bounds(for_date)
     week_num = monday.isocalendar()[1]
     logger.info(f"=== СТАРТ weekly неделя {week_num} ({monday}–{sunday}) ===")
+    bot = _make_bot()
 
     # 1. Читаем данные из листа «Ежедневно» и агрегируем
     logger.info("Шаг 1: чтение и агрегация данных из Google Sheets...")
@@ -155,7 +193,7 @@ def weekly(for_date: date = None):
         logger.info("Агрегация выполнена")
     except Exception as e:
         logger.error(f"Ошибка агрегации: {e}", exc_info=True)
-        _alert_dev(f"Ошибка агрегации за неделю {week_num}: {e}")
+        _alert_dev(bot, f"Ошибка агрегации за неделю {week_num}: {e}")
         sys.exit(1)
 
     # 2. Записать в лист «Еженедельно»
@@ -165,15 +203,14 @@ def weekly(for_date: date = None):
         logger.info("Еженедельные данные записаны")
     except Exception as e:
         logger.error(f"Ошибка записи еженедельных данных: {e}", exc_info=True)
-        _alert_dev(f"Ошибка записи weekly в Sheets: {e}")
+        _alert_dev(bot, f"Ошибка записи weekly в Sheets: {e}")
         sys.exit(1)
 
     # 3. Отправить дайджест собственнику
     logger.info("Шаг 3: отправка еженедельного дайджеста...")
     try:
         digest = _build_weekly_digest(weekly_data, monday, sunday, week_num)
-        _send_max(MAX_OWNER_USER_ID, digest)
-        logger.info("Еженедельный дайджест отправлен")
+        send_or_log(bot, MAX_OWNER_USER_ID, digest, label="owner_weekly_digest")
     except Exception as e:
         logger.error(f"Ошибка отправки дайджеста: {e}", exc_info=True)
 
@@ -183,9 +220,6 @@ def weekly(for_date: date = None):
 # ---------------------------------------------------------------------------
 # Формирование текстов
 # ---------------------------------------------------------------------------
-
-SHEETS_URL = f"https://docs.google.com/spreadsheets/d/{SHEETS_ID}/edit"
-
 
 def _build_owner_report(data: dict, report_date: date) -> str:
     """Сформировать ежедневный отчёт для собственника."""
@@ -206,20 +240,23 @@ def _build_owner_report(data: dict, report_date: date) -> str:
     kitchen = sum(v for k, v in cats.items() if any(w in k.lower() for w in ["кухня", "kitchen", "еда"]))
     bar     = sum(v for k, v in cats.items() if any(w in k.lower() for w in ["бар", "bar", "напитки"]))
 
-    cancellations = data.get("cancellations", 0)
-    writeoffs     = data.get("writeoffs", 0)
+    # None = недоступно в iiko Cloud API
+    cancellations = data.get("cancellations")
+    writeoffs     = data.get("writeoffs")
 
     manual   = data.get("manual") or {}
+    # Проверяем, что это реальные ручные данные, а не маркер отсутствия
+    has_manual = bool(manual) and "статус" not in manual
+
     inkass   = manual.get("инкассация", "—")
     balance  = manual.get("остаток_нал", "—")
     staff_total = 0
     zp_total    = 0
     for role in ["повара", "официанты", "бармены", "посудомойщицы"]:
         r = manual.get(role, {})
-        staff_total += r.get("кол", 0)
-        zp_total    += r.get("зп", 0)
-
-    has_manual = bool(manual)
+        if isinstance(r, dict):
+            staff_total += r.get("кол", 0)
+            zp_total    += r.get("зп", 0)
 
     lines = [
         f"📊 {RESTAURANT_NAME} — {fmt_date_ru(report_date)}",
@@ -238,10 +275,14 @@ def _build_owner_report(data: dict, report_date: date) -> str:
             f"🏦 Инкассация: {fmt_money(inkass)} | Остаток: {fmt_money(balance)}",
         ]
     else:
-        lines += ["", "⚠️ Ручные данные не заполнены"]
+        lines += ["", "⚠️ Ручные данные не заполнены (администратор не ответил)"]
+
+    # Отмены и списания могут быть None (недоступны в iiko Cloud API)
+    cancel_str = fmt_money(cancellations) if cancellations is not None else "⚠️ нет данных"
+    writeoff_str = fmt_money(writeoffs) if writeoffs is not None else "⚠️ нет данных"
     lines += [
         "",
-        f"⚠️ Отмены: {fmt_money(cancellations)} | 🗑 Списания: {fmt_money(writeoffs)}",
+        f"⚠️ Отмены: {cancel_str} | 🗑 Списания: {writeoff_str}",
         "",
         f"📎 Таблица: {SHEETS_URL}",
     ]
@@ -251,9 +292,9 @@ def _build_owner_report(data: dict, report_date: date) -> str:
 def _build_admin_request(report_date: date) -> str:
     """Сформировать запрос ручных данных у администратора."""
     return "\n".join([
-        f"📋 Монблан — данные за {fmt_date_ru(report_date)}",
+        f"📋 Монблан — данные за {fmt_date_ru(report_date)} собраны автоматически.",
         "",
-        "Заполните вручную и ответьте в этом формате:",
+        "Заполните вручную и ответьте в этом чате в точно таком формате:",
         "",
         "Инкассация: 70000",
         "Расход: 3500",
@@ -263,6 +304,8 @@ def _build_admin_request(report_date: date) -> str:
         "Официанты: 4/12000",
         "Бармены: 1/3500",
         "Посудомойщицы: 2/5000",
+        "",
+        "⏱ Жду ответ 30 минут.",
     ])
 
 
@@ -271,8 +314,6 @@ def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dic
     Прочитать лист «Ежедневно» и собрать агрегаты за неделю.
     Возвращает словарь для write_weekly_row().
     """
-    from sheets_writer import HEADERS_DAILY
-
     result = service.spreadsheets().values().get(
         spreadsheetId=SHEETS_ID,
         range="Ежедневно!A:AZ"
@@ -329,7 +370,7 @@ def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dic
     rev_evening  = sum(_f(r, "Вечер (выручка)") for r in week_rows)
     zp_total     = sum(_f(r, "З/п итого")      for r in week_rows)
 
-    avg_check    = round(revenue / orders, 2) if orders else 0
+    avg_check       = round(revenue / orders, 2) if orders else 0
     avg_check_guest = round(revenue / guests, 2) if guests else 0
 
     capacity = get_capacity(monday)
@@ -339,27 +380,27 @@ def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dic
     turnover_seat  = round(guests / seats  / n, 2) if seats  and n else 0
 
     return {
-        "week_num":       week_num,
-        "date_from":      str(monday),
-        "date_to":        str(sunday),
-        "revenue":        revenue,
+        "week_num":        week_num,
+        "date_from":       str(monday),
+        "date_to":         str(sunday),
+        "revenue":         revenue,
         "avg_revenue_day": round(revenue / n, 2) if n else 0,
-        "orders":         orders,
-        "avg_orders_day": round(orders / n, 2) if n else 0,
-        "guests":         guests,
-        "avg_guests_day": round(guests / n, 2) if n else 0,
-        "avg_check":      avg_check,
+        "orders":          orders,
+        "avg_orders_day":  round(orders / n, 2) if n else 0,
+        "guests":          guests,
+        "avg_guests_day":  round(guests / n, 2) if n else 0,
+        "avg_check":       avg_check,
         "avg_check_guest": avg_check_guest,
-        "kitchen":        kitchen,
-        "bar":            bar,
-        "cancellations":  cancels,
-        "writeoffs":      writeoffs_s,
-        "rev_morning":    rev_morning,
-        "rev_day":        rev_day,
-        "rev_evening":    rev_evening,
-        "turnover_table": turnover_table,
-        "turnover_seat":  turnover_seat,
-        "zp_total":       zp_total,
+        "kitchen":         kitchen,
+        "bar":             bar,
+        "cancellations":   cancels,
+        "writeoffs":       writeoffs_s,
+        "rev_morning":     rev_morning,
+        "rev_day":         rev_day,
+        "rev_evening":     rev_evening,
+        "turnover_table":  turnover_table,
+        "turnover_seat":   turnover_seat,
+        "zp_total":        zp_total,
     }
 
 
@@ -417,6 +458,7 @@ def main():
     else:
         target_date = yesterday_utc5()
 
+    bot = _make_bot()
     try:
         if args.mode == "daily":
             daily(target_date)
@@ -424,7 +466,7 @@ def main():
             weekly(target_date)
     except Exception as e:
         logger.critical(f"Необработанная ошибка: {e}", exc_info=True)
-        _alert_dev(str(e))
+        _alert_dev(bot, str(e))
         sys.exit(1)
 
 
