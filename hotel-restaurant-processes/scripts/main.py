@@ -37,6 +37,8 @@ logger = logging.getLogger("main")
 # ---------------------------------------------------------------------------
 # Импорты после настройки логирования
 # ---------------------------------------------------------------------------
+from typing import Optional
+
 from config import (
     SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_JSON,
     MAX_BOT_TOKEN, MAX_OWNER_USER_ID,
@@ -64,7 +66,7 @@ def _get_sheets_service():
     return get_service(credentials_path=creds_path)
 
 
-def _make_bot() -> MaxBot | None:
+def _make_bot() -> Optional[MaxBot]:
     """Создать MaxBot или вернуть None если токен не настроен."""
     if not MAX_BOT_TOKEN:
         logger.warning("MAX_BOT_TOKEN не задан — уведомления отключены")
@@ -76,7 +78,7 @@ def _make_bot() -> MaxBot | None:
         return None
 
 
-def _alert_dev(bot: MaxBot | None, message: str):
+def _alert_dev(bot: Optional[MaxBot], message: str):
     """Отправить алерт разработчику при критической ошибке."""
     dev_id = MAX_DEV_USER_ID or MAX_OWNER_USER_ID
     send_or_log(bot, dev_id, f"🔴 {RESTAURANT_NAME}: {message}", label="alert_dev")
