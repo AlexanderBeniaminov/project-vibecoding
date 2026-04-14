@@ -220,17 +220,13 @@ def _build_owner_report(sheet_data: dict, report_date: date) -> str:
     Сформировать ежедневный отчёт для собственника.
     Читает данные из Google Sheets — включает и авто, и ручной ввод.
     """
-    revenue  = _num(sheet_data, "Выручка итого")
-    nal      = _num(sheet_data, "Нал")
-    sbp      = _num(sheet_data, "СБП")
-    card     = _num(sheet_data, "Карта")
-    invoice  = _num(sheet_data, "По счёту")
-    kitchen  = _num(sheet_data, "Кухня")
-    bar      = _num(sheet_data, "Бар")
-    orders   = _num(sheet_data, "Кол-во чеков")
-    avg_chk  = _num(sheet_data, "Средний чек")
-    guests   = _num(sheet_data, "Гости")
-    cancels  = _num(sheet_data, "Отмены (руб)")
+    SEP = "——————————————"
+
+    revenue   = _num(sheet_data, "Выручка итого")
+    orders    = _num(sheet_data, "Кол-во чеков")
+    avg_chk   = _num(sheet_data, "Средний чек")
+    guests    = _num(sheet_data, "Гости")
+    cancels   = _num(sheet_data, "Отмены (руб)")
     writeoffs = _num(sheet_data, "Списания (руб)")
 
     inkass     = _num(sheet_data, "Инкассация")
@@ -245,33 +241,33 @@ def _build_owner_report(sheet_data: dict, report_date: date) -> str:
 
     lines = [
         f"📊 {RESTAURANT_NAME} — {fmt_date_ru(report_date)}",
-        "",
-        f"💰 Выручка: {fmt_money(revenue)}",
-        f"   Нал: {fmt_money(nal)} | СБП: {fmt_money(sbp)}",
-        f"   Карта: {fmt_money(card)} | Счёт: {fmt_money(invoice)}",
-        "",
-        f"🍽 Кухня: {fmt_money(kitchen)} | 🍹 Бар: {fmt_money(bar)}",
-        f"🧾 Чеков: {fmt_int(orders)} | Ср. чек: {fmt_money(avg_chk)} | Гостей: {fmt_int(guests)}",
+        SEP,
+        f"💰 Выручка:      {fmt_money(revenue)} руб.",
+        f"🧾 Чеков:        {fmt_int(orders)}",
+        f"💵 Средний чек:  {fmt_money(avg_chk)} руб.",
+        f"👥 Гостей:       {fmt_int(guests)}",
     ]
 
+    lines.append(SEP)
     if has_manual:
         lines += [
-            "",
-            f"👥 Персонал: {fmt_int(staff)} чел. | З/п: {fmt_money(zp_total)}",
-            f"🏦 Инкассация: {fmt_money(inkass)} | Расход: {fmt_money(expenses)} | Остаток: {fmt_money(balance)}",
+            f"🏦 Инкассация:   {fmt_money(inkass)} руб.",
+            f"📤 Расход:       {fmt_money(expenses)} руб.",
+            f"💵 Остаток нал:  {fmt_money(balance)} руб.",
+            f"👤 Персонал:     {fmt_int(staff)} чел.",
+            f"💸 З/п итого:    {fmt_money(zp_total)} руб.",
         ]
         if breakfasts:
-            lines.append(f"🍳 Завтраки: {fmt_int(breakfasts)} гостей")
+            lines.append(f"🍳 Завтраки:     {fmt_int(breakfasts)} гостей")
     else:
-        lines += ["", "⚠️ Ручные данные не заполнены администратором"]
+        lines.append("⚠️ Ручные данные не заполнены")
 
-    cancel_str   = fmt_money(cancels)   if cancels   else "0"
-    writeoff_str = fmt_money(writeoffs) if writeoffs else "0"
     lines += [
-        "",
-        f"⚠️ Отмены: {cancel_str} | 🗑 Списания: {writeoff_str}",
-        "",
-        f"📎 Таблица: {SHEETS_URL}",
+        SEP,
+        f"❌ Отмены:       {fmt_money(cancels)} руб.",
+        f"🗑 Списания:     {fmt_money(writeoffs)} руб.",
+        SEP,
+        f"📎 {SHEETS_URL}",
     ]
     return "\n".join(lines)
 
