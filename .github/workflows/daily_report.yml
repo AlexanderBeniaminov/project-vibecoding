@@ -23,17 +23,17 @@ jobs:
         working-directory: hotel-restaurant-processes
 
     env:
-      # iikoWeb OLAP (основной источник данных)
-      IIKO_WEB_LOGIN:              ${{ secrets.IIKO_WEB_LOGIN }}
-      IIKO_WEB_PASSWORD:           ${{ secrets.IIKO_WEB_PASSWORD }}
-      IIKO_STORE_ID:               ${{ secrets.IIKO_STORE_ID }}
+      # iikoWeb OLAP — имена секретов в GitHub отличаются от env vars в коде
+      IIKO_WEB_LOGIN:              ${{ secrets.IIKO_LOGIN }}
+      IIKO_WEB_PASSWORD:           ${{ secrets.IIKO_PASSWORD }}
+      IIKO_STORE_ID:               "82455"
       # Google Sheets
       GOOGLE_SHEETS_ID:            ${{ secrets.GOOGLE_SHEETS_ID }}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
       # MAX мессенджер
       MAX_BOT_TOKEN:               ${{ secrets.MAX_BOT_TOKEN }}
       MAX_OWNER_USER_ID:           ${{ secrets.MAX_OWNER_USER_ID }}
-      MAX_DEV_USER_ID:             ${{ secrets.MAX_DEV_USER_ID }}
+      MAX_DEV_USER_ID:             ${{ secrets.MAX_OWNER_USER_ID }}
 
     steps:
       - uses: actions/checkout@v4

@@ -16,7 +16,7 @@ IIKO_WEB_URL      = os.environ.get("IIKO_WEB_URL", "https://kafe-monblan.iikoweb
 IIKO_WEB_LOGIN    = os.environ.get("IIKO_WEB_LOGIN", "")
 IIKO_WEB_PASSWORD = os.environ.get("IIKO_WEB_PASSWORD", "")
 # Внутренний integer ID магазина в iikoWeb
-IIKO_STORE_ID     = int(os.environ.get("IIKO_STORE_ID", "82455"))
+IIKO_STORE_ID     = int(os.environ.get("IIKO_STORE_ID") or "82455")
 
 # iiko Transport API (не используется — POS-заказы недоступны)
 IIKO_API_LOGIN = os.environ.get("IIKO_API_LOGIN", "")
