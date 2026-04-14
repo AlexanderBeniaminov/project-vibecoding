@@ -31,13 +31,12 @@ logger = logging.getLogger("main")
 # Импорты после настройки логирования
 # ---------------------------------------------------------------------------
 from config import (
-    IIKO_API_LOGIN, IIKO_ORG_ID,
     SHEETS_ID, GOOGLE_SERVICE_ACCOUNT_JSON,
     MAX_BOT_TOKEN, MAX_OWNER_USER_ID,
     MAX_ADMIN_USER_ID, MAX_DEV_USER_ID,
     RESTAURANT_NAME, get_capacity,
 )
-from iiko_client import collect_daily_data, get_token
+from iiko_client import collect_daily_data
 from max_bot import MaxBot, send_or_log
 from sheets_writer import get_service, setup_spreadsheet, write_daily_row, write_weekly_row
 from utils import yesterday_utc5, fmt_date, week_bounds, fmt_date_ru, fmt_money, fmt_int, parse_admin_reply
@@ -89,15 +88,9 @@ def daily(report_date: date):
     bot = _make_bot()
 
     # 1. Собрать данные iiko
-    logger.info("Шаг 1: сбор данных из iiko Cloud...")
+    logger.info("Шаг 1: сбор данных через iikoWeb OLAP...")
     try:
-        token = get_token(IIKO_API_LOGIN)
-        data = collect_daily_data(
-            token=token,
-            org_id=IIKO_ORG_ID,
-            report_date=date.fromisoformat(fmt_date(report_date)),
-        )
-        data["date"] = str(report_date)
+        data = collect_daily_data(report_date)
         logger.info("Данные iiko собраны успешно")
     except Exception as e:
         logger.error(f"Критическая ошибка iiko: {e}", exc_info=True)

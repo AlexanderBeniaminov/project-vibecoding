@@ -8,9 +8,9 @@
 
 Ресторан «Монблан» (курорт Губаха, Пермский край) работает на **iiko**. Администратор тратит 28–41 мин/день + 60–90 мин/нед на ручной перенос данных из iiko в Excel.
 
-**Решение:** Python-скрипт по расписанию забирает данные из iiko API → пишет в Google Sheets → Telegram-бот отправляет отчёт собственнику и собирает ручные данные у администратора.
+**Решение:** Python-скрипт по расписанию забирает данные из iikoWeb OLAP → пишет в Google Sheets → MAX-бот отправляет отчёт собственнику и собирает ручные данные у администратора.
 
-**Стек:** Python 3.10+ · GitHub Actions · Google Sheets API v4 · Telegram Bot API · iiko REST API
+**Стек:** Python 3.10+ · GitHub Actions · Google Sheets API v4 · MAX мессенджер · iikoWeb OLAP API
 **Стоимость:** 0 руб./месяц
 **Важно:** Этот проект — Python. Соседний `otchety/` — Google Apps Script. Не путать.
 
@@ -26,92 +26,151 @@
 
 ---
 
-## iiko API
+## iiko API — iikoWeb OLAP (ЕДИНСТВЕННЫЙ РАБОЧИЙ СПОСОБ)
 
-**Тип:** iiko Cloud API (публичный REST API, `https://api-ru.iiko.services`)
-**Документация:** https://api-ru.iiko.services/api-docs/docs (OpenAPI/Redoc)
-**API-логин:** создаётся в iikoWeb → передаётся в GitHub Secret `IIKO_API_LOGIN`
-**ID организации:** получается через `/api/1/organizations` → Secret `IIKO_ORG_ID`
+> **❌ НЕ ИСПОЛЬЗОВАТЬ** iiko Transport API (`api-ru.iiko.services`):
+> - `POST /api/1/order/by_table` — возвращает только заказы, созданные через API (с `sourceKey`).
+>   POS-заказы с кассы iikoFront **никогда не возвращаются** → всегда 0 руб. выручки.
+> - Проверено на реальных данных в апреле 2026 — все даты дают пустые заказы.
+> - DNS `api-ru.iiko.services` может быть недоступен с mac-машины (timeout), но доступен с GitHub Actions.
+>   Это не имеет значения — Transport API всё равно не даёт POS-данные.
 
-> **⚠️ Важно — два режима сбора данных:**
->
-> **Режим 1 — OLAP (основной):** `POST /api/1/reports/olap` — полные данные продаж.
-> Требует, чтобы в iikoWeb → Настройки → Интеграции → API-логины был включён доступ к OLAP-отчётам.
-> Скрипт автоматически определяет доступность и переключается.
->
-> **Режим 2 — order/by_table (fallback):** Работает без дополнительных прав, но
-> iiko Transport API хранит ТОЛЬКО заказы, созданные через API (с `sourceKey`).
-> POS-заказы с кассы iikoFront в нём отсутствуют → всегда 0 руб. выручки.
-> Режим оставлен как fallback-код до включения OLAP.
->
-> **Что нужно сделать:** попросить клиента открыть
-> `kafe-monblan.iikoweb.ru → Настройки → Интеграции → API-логины`
-> и выдать права OLAP для ключа `42c9095b39264541b93ba7b0b21feb6e`.
+### Рабочий метод: iikoWeb OLAP
 
-### Авторизация ✅
+**Сервер:** `https://kafe-monblan.iikoweb.ru`
+**Логин:** `buh` / `Vjy,kfy2024` (роль ADM, storeId=82455)
+**Токен TTL:** 1200 секунд (20 минут)
+
+#### Авторизация
 ```
-POST https://api-ru.iiko.services/api/1/access_token
-Content-Type: application/json
-{"apiLogin": "ВАШ_API_КЛЮЧ_ИЗ_iikoWEB"}
-
-→ {"token": "...", "correlationId": "..."}
-```
-Токен живёт **60 минут**. Передаётся в заголовке: `Authorization: Bearer {token}`.
-SHA1 **не нужен** — только `apiLogin` (строка из iikoWeb).
-
-### Поток сбора данных за день
-
-```
-1. POST /api/1/access_token          → token
-2. POST /api/1/payment_types         → {id: name} типов оплаты
-3. POST /api/1/nomenclature          → {productId: category} (Кухня/Бар)
-4. POST /api/1/terminal_groups       → ID терминальных групп
-5. POST /api/1/reserve/available_restaurant_sections → ID столов
-6. POST /api/1/order/by_table        → все закрытые заказы за дату
-7. Агрегация в Python                → отчёт
+POST /api/auth/login
+{"login": "buh", "password": "Vjy,kfy2024"}
+→ {"token": "JWT...", "storeId": 82455, "store": "Кафе Монблан"}
 ```
 
-### Все нужные запросы (iiko Cloud API)
+#### OLAP запрос (3 шага)
 
-| Данные | Эндпоинт | Примечание |
+**Шаг 1 — Инициализировать запрос:**
+```
+POST /api/olap/init
+{
+  "storeIds": [82455],
+  "olapType": "SALES",          ← НЕ "reportType"
+  "groupFields": ["OpenDate.Typed"],   ← НЕ "groupByRowFields"
+  "dataFields": ["DishDiscountSumInt", "UniqOrderId.OrdersCount", "GuestNum"],  ← НЕ "aggregateFields"
+  "filters": [
+    {
+      "field": "OpenDate.Typed",
+      "filterType": "date_range",
+      "dateFrom": "2026-04-05",    ← формат YYYY-MM-DD (без времени!)
+      "dateTo": "2026-04-05",
+      "valueMin": null, "valueMax": null,
+      "valueList": [],
+      "includeLeft": true, "includeRight": true, "inclusiveList": true
+    },
+    {
+      "field": "OrderDeleted",
+      "filterType": "value_list",
+      "dateFrom": null, "dateTo": null,
+      "valueMin": null, "valueMax": null,
+      "valueList": ["NOT_DELETED"],
+      "includeLeft": true, "includeRight": false, "inclusiveList": true
+    }
+  ]
+}
+→ {"error": false, "data": "requestId_hash..."}
+```
+
+**Шаг 2 — Проверить статус:**
+```
+GET /api/olap/fetch-status/{requestId}
+→ {"data": "SUCCESS"}   ← статус SUCCESS (не READY!)
+   или "PROCESSING" (ждать 3 сек и повторить)
+   или "ERROR" (неверные поля или нет лицензии OLAP)
+```
+
+**Шаг 3 — Получить данные:**
+```
+POST /api/olap/fetch/{requestId}/DATA
+{"rowOffset": 0, "rowCount": 10000}
+→ {
+    "result": {
+      "rawData": [
+        {"DishDiscountSumInt": 34900, "GuestNum": 25, "OpenDate.Typed": "2026-04-05", "UniqOrderId.OrdersCount": 20}
+      ],
+      "totalRevenueInPeriod": 0,   ← поле summary не всегда заполнено, считать из rawData!
+      ...
+    }
+  }
+```
+
+#### Ключевые поля OLAP
+
+| Поле | Тип | Описание |
 |---|---|---|
-| Авторизация | `POST /api/1/access_token` | `{"apiLogin": "..."}` |
-| Список организаций | `POST /api/1/organizations` | → IIKO_ORG_ID |
-| Типы оплаты | `POST /api/1/payment_types` | `{organizationIds: [...]}` |
-| Номенклатура | `POST /api/1/nomenclature` | `{organizationId: "..."}` → категории |
-| Терминальные группы | `POST /api/1/terminal_groups` | `{organizationIds: [...]}` |
-| Столы | `POST /api/1/reserve/available_restaurant_sections` | `{terminalGroupIds: [...]}` |
-| Заказы за дату | `POST /api/1/order/by_table` | `{tableIds, statuses, dateFrom, dateTo}` |
+| `DishDiscountSumInt` | деньги | Выручка (со скидкой) |
+| `DishSumInt` | деньги | Выручка без скидки |
+| `UniqOrderId.OrdersCount` | кол-во | Число чеков |
+| `GuestNum` | кол-во | Число гостей |
+| `DishDiscountSumInt.average` | деньги | Средний чек |
+| `DishAmountInt` | кол-во | Количество позиций |
+| `DishName` | строка | Название блюда |
+| `DishCategory.Accounting` | строка | Бухгалтерская категория |
+| `PayTypes.Combo` | строка | Тип оплаты |
+| `OpenDate.Typed` | дата | Дата открытия заказа |
 
-### Формат дат в iiko Cloud API
+#### OLAP типы (olapType)
+
+| Значение | Что возвращает |
+|---|---|
+| `SALES` | Продажи (чеки, блюда, гости, типы оплаты) |
+| `TRANSACTIONS` | Складские операции (списания) |
+
+#### Важные ограничения OLAP
+
+- `storeIds` — должен быть массив ровно с **одним** элементом: `[82455]`
+- Статус `SUCCESS` (не `READY`) — иначе ждать бесконечно
+- Данные считать из `result.rawData`, не из `totalRevenueInPeriod`
+- Если `rawData` пуст — за эту дату нет продаж (ресторан не работал)
+- Фильтр по дате: `filterType: "date_range"`, даты в формате `"YYYY-MM-DD"` (без времени)
+- Категории Кухня/Бар: поле `DishCategory.Accounting` — нужно уточнить реальные названия категорий в iikoWeb
+
+#### Проверенные реальные данные
+
 ```
-dateFrom / dateTo: "yyyy-MM-dd HH:mm:ss.fff"
-Пример: "2026-03-29 00:00:00.000" / "2026-03-29 23:59:59.999"
+2026-04-05: выручка 34 900 руб., 20 чеков, 25 гостей
+            оплата: Банковские карты 20 320 руб., СБЕР банк 14 580 руб.
+            топ блюд: глин 400 НОВ 6 210 руб. (9 шт.)
+2024-01-01: выручка 213 305 руб., 365 чеков, 445 гостей
 ```
-⚠️ В отличие от iikoServer API — не просто дата, а datetime.
 
-### Что доступно / что недоступно в iiko Cloud API
+#### Presets OLAP (готовые запросы, сохранённые в iikoWeb)
 
-| Данные | Доступно | Как получить |
+```
+GET /api/analytics/olap/presets/list?show-deleted=false
+→ 8 presets: Почасовой отчет, Продажи по товарам, Отчет по типам оплаты, и др.
+```
+Используй эти presets как образец формата запроса.
+
+#### Другие рабочие эндпоинты iikoWeb
+
+| Эндпоинт | Метод | Что возвращает |
 |---|---|---|
-| Выручка итого | ✅ | `order.sum` из закрытых заказов |
-| Типы оплаты (нал/СБП/карта) | ✅ | `order.payments[].paymentType.id` → payment_types_map |
-| Кол-во чеков | ✅ | `len(orders)` |
-| Гости | ✅ | `order.guestsInfo.count` |
-| Средний чек | ✅ | выручка / кол-во чеков |
-| Выручка Кухня/Бар | ✅ | номенклатура + `order.items[].resultSum` |
-| Временные срезы | ✅ | `order.whenCreated` → парсинг часа |
-| Топ блюд | ✅ | `order.items[].product.name + amount` |
-| Группы гостей | ✅ | `order.guestsInfo.count` |
-| Градация чеков | ✅ | `order.sum` |
-| Отмены (удалённые позиции) | ❌ | Cloud API не возвращает |
-| Списания со склада | ❌ | Cloud API не имеет эндпоинта |
+| `/api/auth/login` | POST | JWT токен |
+| `/api/kpi-metric/stores` | GET | Список магазинов (storeId, uocOrganizationId) |
+| `/api/stores/list` | GET | Полная инфо о магазинах (адрес, часовой пояс) |
+| `/api/kpi/directory/bystores` | POST | Справочник из 407 KPI-метрик |
+| `/api/analytics/olap/presets/list` | GET | Сохранённые OLAP-отчёты |
+| `/api/analytics/olap/enums` | GET | Справочники enum-значений |
+| `/api/olap/fetch/{id}/xls` | GET | Экспорт в Excel |
 
-### Обработка ошибок
-- **401** → токен протух, перезапросить через `get_token()`
-- **400** → неверный формат запроса или ID организации
-- **500 / timeout** → retry 3 раза с паузой 5 сек
-- **Любая ошибка** → не прерывать весь отчёт, пометить поле `⚠️ нет данных`
+#### Что недоступно
+
+| Данные | Причина |
+|---|---|
+| Временны́е срезы (утро/день/вечер) | OLAP не группирует по часам заказа по умолчанию; нужен `groupFields: ["HourClose"]` |
+| Списания со склада | Нужен отдельный OLAP запрос с `olapType: "TRANSACTIONS"` |
+| Отмены | Нужен отдельный OLAP запрос с фильтром `OrderDeleted: ["DELETED"]` |
 
 ---
 
@@ -120,7 +179,7 @@ dateFrom / dateTo: "yyyy-MM-dd HH:mm:ss.fff"
 **ID таблицы:** `1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI`
 **Сервисный аккаунт:** `montblanc-report@composite-wind-449411-d8.iam.gserviceaccount.com`
 
-**Общий принцип обоих листов:** колонка A — названия параметров, данные идут вправо по колонкам.
+**Общий принцип:** колонка A — названия параметров, данные идут вправо по колонкам.
 
 ### Лист «Ежедневно»
 - **Строка 1** — даты (`2026-03-29`, `2026-03-30`, ...)
@@ -129,62 +188,48 @@ dateFrom / dateTo: "yyyy-MM-dd HH:mm:ss.fff"
 
 | Параметр | Источник |
 |---|---|
-| Выручка итого, Нал, СБП, Карта, По счёту | iiko auto |
-| Кол-во чеков, Средний чек, Гости | iiko auto |
-| Кухня, Бар | iiko auto |
-| Утро/День/Вечер — выручка и гости | iiko auto |
-| Отмены (руб), Списания (руб) | iiko auto |
-| Инкассация, Расход из кассы, Остаток нал | Telegram ручной ввод |
-| Повара/Официанты/Бармены/Посудомойщицы — кол-во и з/п | Telegram ручной ввод |
+| Выручка итого, Нал, СБП, Карта, По счёту | iikoWeb OLAP auto |
+| Кол-во чеков, Средний чек, Гости | iikoWeb OLAP auto |
+| Кухня, Бар | iikoWeb OLAP auto (нужно уточнить категории) |
+| Отмены (руб) | iikoWeb OLAP (фильтр DELETED) |
+| Списания (руб) | iikoWeb OLAP (TRANSACTIONS) |
+| Инкассация, Расход из кассы, Остаток нал | MAX ручной ввод |
+| Повара/Официанты/Бармены/Посудомойщицы — кол-во и з/п | MAX ручной ввод |
 | Персонал итого, З/п итого | расчёт |
-| Завтраки (гостей) | Telegram ручной ввод |
+| Завтраки (гостей) | MAX ручной ввод |
 | Статус | авто: `✅ полный` / `⚠️ авто (без кассы)` |
 
 ### Лист «Еженедельно»
 - **Строка 1** — номер недели (`Неделя 13`, `Неделя 14`, ...)
 - **Строка 2** — период пн–вс (`23.03.2026 – 29.03.2026`)
 - **Строки 3..N** — значения параметров (порядок = `METRICS_WEEKLY` в `sheets_writer.py`)
-- Числовой формат: `# ##0`
-
-Агрегируется из листа «Ежедневно» за пн–вс + расчётные показатели:
-оборачиваемость столов/мест, средний чек на гостя, градация чеков, топ блюд, мероприятия.
-
-### Лист «Дашборд»
-Создаётся автоматически. Наполнение — после завершения основной системы.
 
 ---
 
-## Telegram-бот: потоки
+## MAX мессенджер (вместо Telegram)
+
+**Мессенджер:** MAX (max.ru, formerly TamTam)
+**Bot API:** `https://botapi.max.ru`
+**Авторизация:** `?access_token=MAX_BOT_TOKEN` (query param)
 
 ### Поток А — Ежедневный (23:30)
 ```
-1. iiko → данные за день → Лист 1 (автоматические колонки)
-2. → Администратору:
-   "📋 Монблан — данные за {дата} собраны.
-    Осталось заполнить вручную:
-    1️⃣ Инкассация в банк (руб.):
-    2️⃣ Расход из кассы (руб.):
-    3️⃣ Остаток нал (руб.):
-    4️⃣ Завтраки — кол-во гостей:
-    5️⃣ Персонал (формат: Повара 3/9000, Официанты 4/12000, Бармены 1/3500, Посудомойщицы 2/5000)"
-3. Ответ администратора → парсинг → Лист 1 (ручные колонки)
-4. → Собственнику: итоговый отчёт (формат ниже)
+1. iikoWeb OLAP → данные за день → Лист 1 (авто)
+2. → Администратору: запрос ручных данных (касса, персонал, завтраки)
+3. Ожидание ответа 30 мин → парсинг → Лист 1 (ручные)
+4. → Собственнику: итоговый отчёт
 ```
 
-### Поток Б — Нет ответа администратора
-- Через 30 мин — повторный запрос
-- После 06:00 следующего дня — ячейки пустые, `⚠️ не заполнено`, собственнику отчёт без ручных данных
-
-### Поток В — Еженедельный (07:00 понедельник)
+### Формат запроса администратору
 ```
-1. Агрегация Листа 1 за пн–вс → Лист 2
-2. → Собственнику: еженедельный дайджест
-   "📊 Монблан — неделя {N}, {дата_от}–{дата_до}
-    💰 Выручка за неделю: {X} руб.
-    🧾 Чеков: {X} | Ср. чек: {X} руб.
-    👥 Гостей за неделю: {X}
-    🏆 Лучший день: {день} ({X} руб.)
-    📎 Полный отчёт → {ссылка}"
+Инкассация: 70000
+Расход: 3500
+Остаток: 26500
+Завтраки: 12
+Повара: 3/9000
+Официанты: 4/12000
+Бармены: 1/3500
+Посудомойщицы: 2/5000
 ```
 
 ### Формат ежедневного отчёта собственнику
@@ -192,88 +237,14 @@ dateFrom / dateTo: "yyyy-MM-dd HH:mm:ss.fff"
 📊 Монблан — {дата}
 
 💰 Выручка: {итого} руб.
-   · Нал: {нал} | СБП: {сбп} | Карта: {карта} | Счёт: {счёт}
+   Нал: {нал} | СБП: {сбп} | Карта: {карта}
 🍽 Кухня: {кухня} | 🍹 Бар: {бар}
 🧾 Чеков: {чеки} | Ср. чек: {ср_чек} руб. | Гостей: {гости}
 
 👥 Персонал: {кол} чел. | З/п: {зп} руб.
 🏦 Инкассация: {инкасс} | Остаток: {остаток} руб.
 
-⚠️ Отмены: {отмены} руб. | 🗑 Списания: {списания} руб.
-
 📎 Таблица → {ссылка}
-```
-
----
-
-## Логирование (обязательно)
-
-Каждый запуск пишет лог в файл и отправляет summary в отдельный Telegram-чат (технический, для разработчика):
-
-```python
-# В начале main.py
-import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.FileHandler('logs/report_{date}.log'),
-        logging.StreamHandler()  # для GitHub Actions stdout
-    ]
-)
-```
-
-**Что логировать:**
-- Старт / финиш скрипта + общее время
-- Каждый запрос к iiko: endpoint, статус, время ответа
-- Количество записанных строк в Sheets
-- Отправка Telegram: кому, статус
-- Все ошибки с traceback
-
-**При падении скрипта в GitHub Actions** → уведомление в Telegram разработчику:
-`"🔴 daily_report упал: {краткое описание ошибки}. Смотри Actions → {ссылка на run}"`
-
----
-
-## Тип iiko-системы
-
-**iiko Cloud** — подтверждено (`isCloud: true` в ответе `/api/1/organizations`).
-Клиентский URL: `kafe-monblan.iikoweb.ru` (iikoWeb 9.6.6), терминалы iikoFront 9.2.7014.0.
-Transport API: `https://api-ru.iiko.services` (публичный REST).
-OLAP-отчёты: доступны через `POST /api/1/reports/olap` при наличии прав в API-логине.
-
----
-
-## Константы
-
-| Параметр | Значение | Статус |
-|---|---|---|
-| Посадочных мест (текущее) | 90 | ✅ Известно |
-| Кол-во столов (текущее) | 15 | ✅ Известно |
-| Посадочных мест (до 15.12.2025) | 58 | ✅ Известно |
-| Кол-во столов (до 15.12.2025) | 14 | ✅ Известно |
-| Дата изменения зала | 15 декабря 2025 | ✅ Известно |
-| Часовой пояс | `Asia/Yekaterinburg` (UTC+5) | ✅ Известно |
-| iiko тип | iiko Cloud API (`api-ru.iiko.services`) | ✅ Подтверждено |
-| API-логин | создаётся в iikoWeb, хранится в Secret `IIKO_API_LOGIN` | ❓ Ждём от клиента |
-| IIKO_ORG_ID | UUID организации, получается через `/api/1/organizations` | ❓ После получения API-логина |
-| Время ежедневного запуска | 23:30 UTC+5 = 18:30 UTC | ✅ |
-| Мероприятия в iiko | тег или тип заказа? | ❓ Уточнить |
-
-### Важно для расчёта оборачиваемости при YoY-сравнении
-
-При сравнении данных до и после 15.12.2025 нормализовать по вместимости:
-- До 15.12.2025: 14 столов, 58 мест
-- С 15.12.2025: 15 столов, 90 мест
-
-```python
-# В utils.py — функция получения вместимости по дате
-CAPACITY_CHANGE_DATE = date(2025, 12, 15)
-
-def get_capacity(report_date):
-    if report_date < CAPACITY_CHANGE_DATE:
-        return {"tables": 14, "seats": 58}
-    return {"tables": 15, "seats": 90}
 ```
 
 ---
@@ -281,32 +252,53 @@ def get_capacity(report_date):
 ## Переменные окружения (GitHub Actions Secrets)
 
 ```
-IIKO_API_LOGIN               # API-ключ из iikoWeb ❓ ждём от клиента
-IIKO_ORG_ID                  # UUID организации в iiko Cloud ❓ получить после IIKO_API_LOGIN
-GOOGLE_SHEETS_ID             # ID таблицы ✅ добавлен
-GOOGLE_SERVICE_ACCOUNT_JSON  # весь credentials.json одной строкой ✅ добавлен
-MAX_BOT_TOKEN                # токен бота MAX ❓ ждём от клиента
-MAX_OWNER_USER_ID            # user_id собственника в MAX ❓ ждём
-MAX_ADMIN_USER_ID            # user_id администратора в MAX ❓ ждём
-MAX_DEV_USER_ID              # user_id разработчика (алерты) ❓ ждём
+# iikoWeb OLAP (основной источник данных) ✅ есть
+IIKO_WEB_LOGIN    = buh
+IIKO_WEB_PASSWORD = Vjy,kfy2024
+IIKO_STORE_ID     = 82455
+
+# iiko Transport API (не используется, оставлено для справки)
+IIKO_API_LOGIN    = 42c9095b39264541b93ba7b0b21feb6e
+IIKO_ORG_ID       = 6551e510-21d3-4ae1-8034-5eb229987543
+
+# Google Sheets ✅ добавлены
+GOOGLE_SHEETS_ID             = 1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI
+GOOGLE_SERVICE_ACCOUNT_JSON  = {...json...}
+
+# MAX мессенджер ❓ ждём от клиента
+MAX_BOT_TOKEN       = ...
+MAX_OWNER_USER_ID   = ...
+MAX_ADMIN_USER_ID   = ...
+MAX_DEV_USER_ID     = ...
 ```
 
-### Как получить IIKO_ORG_ID
+---
 
-После получения `IIKO_API_LOGIN` от клиента:
-```bash
-curl -X POST https://api-ru.iiko.services/api/1/access_token \
-  -H "Content-Type: application/json" \
-  -d '{"apiLogin": "ВАШ_API_ЛОГИН"}'
-# → {"token": "TOKEN"}
+## Тип iiko-системы
 
-curl -X POST https://api-ru.iiko.services/api/1/organizations \
-  -H "Authorization: Bearer TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-# → {"organizations": [{"id": "UUID", "name": "Монблан"}]}
-```
-UUID из поля `id` → добавить как Secret `IIKO_ORG_ID`.
+**iiko Cloud** — подтверждено.
+- Клиентский URL: `kafe-monblan.iikoweb.ru` (iikoWeb 9.6.6)
+- Терминалы: iikoFront 9.2.7014.0 (POS-кассы в ресторане)
+- storeId в iikoWeb: `82455`
+- uocOrganizationId (Transport API): `6551e510-21d3-4ae1-8034-5eb229987543`
+- Часовой пояс: UTC+5 (Asia/Yekaterinburg)
+
+---
+
+## Константы
+
+| Параметр | Значение | Статус |
+|---|---|---|
+| Посадочных мест (текущее) | 90 | ✅ |
+| Кол-во столов (текущее) | 15 | ✅ |
+| Посадочных мест (до 15.12.2025) | 58 | ✅ |
+| Кол-во столов (до 15.12.2025) | 14 | ✅ |
+| Дата изменения зала | 15 декабря 2025 | ✅ |
+| Часовой пояс | UTC+5 | ✅ |
+| iikoWeb storeId | 82455 | ✅ |
+| iikoWeb логин | buh / Vjy,kfy2024 | ✅ |
+| Категории Кухня/Бар | ❓ нужно уточнить в `DishCategory.Accounting` | ❓ |
+| MAX токены | ❓ ждём от клиента | ❓ |
 
 ---
 
@@ -316,34 +308,31 @@ UUID из поля `id` → добавить как Secret `IIKO_ORG_ID`.
 hotel-restaurant-processes/
   scripts/
     main.py           — точка входа: daily() / weekly(); логирование; MAX-отчёты
-    iiko_client.py    — iiko Cloud API: auth + сбор заказов + агрегация в Python
-    sheets_writer.py  — транспонированная запись в Sheets (параметры в строках, даты в колонках)
+    iiko_client.py    — iikoWeb OLAP: IikoWebSession + _olap_query() + collect_daily_data()
+    sheets_writer.py  — запись в Sheets (параметры в строках, даты в колонках)
     max_bot.py        — MAX мессенджер: отправка + polling ответа администратора
-    config.py         — константы (без секретов); get_capacity() для YoY
+    config.py         — константы (без секретов); IIKO_WEB_* + get_capacity()
     utils.py          — UTC+5, retry(), fmt_money(), parse_admin_reply()
-    test_iiko.py      — быстрая проверка iiko Cloud API
-    test_sheets.py    — быстрая проверка Google Sheets
+    test_iiko.py      — тест iikoWeb OLAP (ищет дату с данными за 30 дней)
+    test_sheets.py    — тест Google Sheets
   .github/
     workflows/
       daily_report.yml   — cron: '30 18 * * *' UTC + резервный '30 1 * * *' + workflow_dispatch
       weekly_report.yml  — cron: '0 2 * * 1' UTC + workflow_dispatch
-  logs/                  — в .gitignore
-  requirements.txt       — requests, google-auth, google-api-python-client
+  logs/
+  requirements.txt
 ```
 
 ---
 
 ## Открытые вопросы
 
-| # | Вопрос | Статус | Блокирует |
-|---|---|---|---|
-| 1 | iiko Cloud API-логин | ❓ Ждём от клиента (создаётся в iikoWeb) | Этапы 2, 7 |
-| 2 | IIKO_ORG_ID | ❓ Получить после API-логина через `/api/1/organizations` | Этап 7 |
-| 3 | Кол-во столов / мест | ✅ 15 / 90 (с 15.12.2025) | — |
-| 4 | Google Sheets + сервисный аккаунт | ✅ Создано, работает | — |
-| 5 | GitHub Actions + Secrets (Google) | ✅ Настроено | — |
-| 6 | MAX мессенджер: токен бота + user_id (3 шт.) | ❓ Ждём от клиента | Этап 5 финальный тест |
-| 7 | Мероприятия в iiko: тег или тип заказа? | ❓ Не уточнено | — |
+| # | Вопрос | Статус |
+|---|---|---|
+| 1 | Реальные названия категорий `DishCategory.Accounting` для Кухня/Бар | ❓ Нужно проверить в iikoWeb |
+| 2 | MAX мессенджер: токен бота + user_id (3 шт.) | ❓ Ждём от клиента |
+| 3 | Мероприятия в iiko: тег или тип заказа? | ❓ Не уточнено |
+| 4 | Ресторан не работал 6–12 апреля 2026 — почему? | ℹ️ Данных нет, это нормально |
 
 ---
 
@@ -351,12 +340,11 @@ hotel-restaurant-processes/
 
 | Проблема | Решение |
 |---|---|
-| Токен iiko истёк (401) | Перезапросить `get_token()` + повтор |
+| Токен iikoWeb истёк (401) | `IikoWebSession._login()` вызывается автоматически через `_ensure_token()` |
+| OLAP статус ERROR | Неверные имена полей или нет лицензии OLAP у пользователя |
+| OLAP пустые данные | За эту дату нет продаж — это нормально |
+| storeIds != 1 элемент | Ошибка "Restaurant must be array with length = 1" — всегда передавать `[82455]` |
 | Смена не закрыта в 23:30 | Резервный запуск в 06:30, данные за вчера |
-| Отмены/Списания | ❌ Недоступны в iiko Cloud API — помечать `⚠️ нет данных` |
-| Нет столов (нет terminal_groups) | Заказы не получить — алерт разработчику |
-| Номенклатура недоступна | Кухня/Бар = `{}`, в отчёте `⚠️` — остальное работает |
-| Мероприятия без тега | Предупреждение в отчёте, не ошибка |
 | Администратор не ответил | Ожидание 30 мин, затем `⚠️ не заполнено` в Sheets |
 | Google Sheets: новая дата → новая колонка | `_find_or_create_date_column()` в sheets_writer.py |
 | GitHub Actions упал | Уведомление MAX разработчику + ссылка на run |
@@ -367,8 +355,8 @@ hotel-restaurant-processes/
 
 - Python 3.10+, зависимости в `requirements.txt`
 - Ключи только через env vars, никогда в коде
-- Все даты: локальное время UTC+5 при запросах в iiko; UTC в GitHub Actions cron
-- Retry обязателен для всех внешних запросов (iiko, Sheets, Telegram)
+- Все даты UTC+5 при запросах в iikoWeb; UTC в GitHub Actions cron
+- Retry обязателен для всех внешних запросов
 - При любой ошибке API — продолжать отчёт, пометить поле `⚠️ нет данных`
 - Комментарии на русском
 - Логировать каждый внешний запрос и его результат
@@ -379,5 +367,5 @@ hotel-restaurant-processes/
 
 | Папка | Отношение |
 |---|---|
-| `otchety/` | Параллельный проект курорта целиком (отель + ресторан), Google Apps Script, iiko Этап 3 там не реализован. Данные iiko одни и те же, таблицы разные. Не конфликтуют. |
-| `google-apps-script/` | Скрипты для `otchety/`. Из этой папки не трогать. |
+| `otchety/` | Параллельный проект курорта (отель + ресторан), Google Apps Script. Не конфликтуют. |
+| `google-apps-script/` | Скрипты для `otchety/`. Не трогать. |

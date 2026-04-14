@@ -7,12 +7,19 @@ import os
 from datetime import date
 
 # ---------------------------------------------------------------------------
-# iiko Cloud API
+# iikoWeb OLAP (основной источник данных)
 # ---------------------------------------------------------------------------
 
-# API-ключ из личного кабинета iiko (не логин/пароль)
+# URL iikoWeb-сервера ресторана
+IIKO_WEB_URL      = os.environ.get("IIKO_WEB_URL", "https://kafe-monblan.iikoweb.ru")
+# Логин/пароль пользователя iikoWeb (роль ADM)
+IIKO_WEB_LOGIN    = os.environ.get("IIKO_WEB_LOGIN", "")
+IIKO_WEB_PASSWORD = os.environ.get("IIKO_WEB_PASSWORD", "")
+# Внутренний integer ID магазина в iikoWeb
+IIKO_STORE_ID     = int(os.environ.get("IIKO_STORE_ID", "82455"))
+
+# iiko Transport API (не используется — POS-заказы недоступны)
 IIKO_API_LOGIN = os.environ.get("IIKO_API_LOGIN", "")
-# UUID организации — получить через POST /api/1/organizations
 IIKO_ORG_ID    = os.environ.get("IIKO_ORG_ID", "")
 
 # ---------------------------------------------------------------------------
