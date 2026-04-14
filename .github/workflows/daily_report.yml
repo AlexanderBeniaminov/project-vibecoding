@@ -1,60 +1,65 @@
-name: Монблан — ежедневный отчёт
+name: Сбор данных Монблан (23:30)
 
 on:
   schedule:
-    # 18:30 UTC = 23:30 UTC+5 (каждый день)
+    # 23:30 UTC+5 = 18:30 UTC (основной запуск)
     - cron: '30 18 * * *'
-    # Резервный запуск: 01:30 UTC = 06:30 UTC+5 (если смена не была закрыта)
+    # 06:30 UTC+5 = 01:30 UTC (резервный — если смена закрыта после полуночи)
     - cron: '30 1 * * *'
   workflow_dispatch:
     inputs:
       date:
-        description: 'Дата отчёта (YYYY-MM-DD). Пусто = вчера.'
+        description: 'Дата отчёта (YYYY-MM-DD). Пусто = вчера'
         required: false
         default: ''
 
 jobs:
-  daily:
+  daily_collect:
+    name: Сбор iiko → Google Sheets
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: hotel-restaurant-processes
 
+    env:
+      # iikoWeb OLAP (основной источник данных)
+      IIKO_WEB_LOGIN:              ${{ secrets.IIKO_WEB_LOGIN }}
+      IIKO_WEB_PASSWORD:           ${{ secrets.IIKO_WEB_PASSWORD }}
+      IIKO_STORE_ID:               ${{ secrets.IIKO_STORE_ID }}
+      # Google Sheets
+      GOOGLE_SHEETS_ID:            ${{ secrets.GOOGLE_SHEETS_ID }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      # MAX мессенджер
+      MAX_BOT_TOKEN:               ${{ secrets.MAX_BOT_TOKEN }}
+      MAX_OWNER_USER_ID:           ${{ secrets.MAX_OWNER_USER_ID }}
+      MAX_DEV_USER_ID:             ${{ secrets.MAX_DEV_USER_ID }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Установить Python 3.11
+      - name: Настройка Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: hotel-restaurant-processes/requirements.txt
 
-      - name: Установить зависимости
+      - name: Установка зависимостей
         run: pip install -r requirements.txt
 
-      - name: Запустить ежедневный отчёт
-        env:
-          IIKO_API_LOGIN:              ${{ secrets.IIKO_API_LOGIN }}
-          IIKO_ORG_ID:                 ${{ secrets.IIKO_ORG_ID }}
-          GOOGLE_SHEETS_ID:            ${{ secrets.GOOGLE_SHEETS_ID }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          MAX_BOT_TOKEN:               ${{ secrets.MAX_BOT_TOKEN }}
-          MAX_OWNER_USER_ID:           ${{ secrets.MAX_OWNER_USER_ID }}
-          MAX_ADMIN_USER_ID:           ${{ secrets.MAX_ADMIN_USER_ID }}
-          MAX_DEV_USER_ID:             ${{ secrets.MAX_DEV_USER_ID }}
+      - name: Сбор данных iiko → Google Sheets
         run: |
-          DATE_ARG="${{ github.event.inputs.date }}"
-          if [ -n "$DATE_ARG" ]; then
-            python3 scripts/main.py daily "$DATE_ARG"
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python3 scripts/main.py collect "${{ github.event.inputs.date }}"
           else
-            python3 scripts/main.py daily
+            python3 scripts/main.py collect
           fi
 
-      - name: Сохранить лог
-        if: always()
+      - name: Загрузка логов при ошибке
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: daily-log-${{ github.run_id }}
+          name: logs-daily-${{ github.run_id }}
           path: hotel-restaurant-processes/logs/
-          retention-days: 30
+          retention-days: 7
