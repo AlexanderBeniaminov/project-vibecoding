@@ -1,0 +1,11 @@
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+playwright>=1.40.0
+gspread>=5.12.0
+google-auth>=2.25.0
+APScheduler>=3.10.4
+fake-useragent>=1.4.0
+python-dotenv>=1.0.0
+loguru>=0.7.2
+telethon>=1.33.0
+lxml>=4.9.4

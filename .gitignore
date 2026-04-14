@@ -3,6 +3,9 @@
 *.json
 !package.json
 hotel-restaurant-processes/scripts/credentials.json
+# Конфиги парсера объявлений (не секреты)
+!obyavlenia/keywords_config.json
+!obyavlenia/telegram_sources.json
 
 # Логи
 hotel-restaurant-processes/logs/

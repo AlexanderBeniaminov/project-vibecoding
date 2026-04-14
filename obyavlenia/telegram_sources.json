@@ -1,0 +1,16 @@
+{
+  "_comment": "Список Telegram-каналов и групп для парсинга объявлений о продаже бизнеса.",
+  "_how_to_add": "Добавь username канала (начинается с @) или числовой chat_id в массив 'channels'",
+  "_examples": [
+    "@biznes_channel",
+    "@prodazha_biznesa_rf",
+    "-1001234567890"
+  ],
+  "channels": [],
+  "settings": {
+    "max_messages_per_channel": 200,
+    "_comment_max": "Сколько последних сообщений проверять при первом запуске",
+    "days_lookback": 30,
+    "_comment_days": "При обновлении — сколько дней назад смотреть"
+  }
+}

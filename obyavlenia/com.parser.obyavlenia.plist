@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.parser.obyavlenia</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/user/Desktop/ИИ вайбкодинг/Project vibecoding/obyavlenia/venv/bin/python</string>
+        <string>/Users/user/Desktop/ИИ вайбкодинг/Project vibecoding/obyavlenia/main.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/user/Desktop/ИИ вайбкодинг/Project vibecoding/obyavlenia</string>
+
+    <!-- Запускать каждый день в 12:00.
+         Если Mac спал в 12:00 — запустит при первом пробуждении после полудня. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>12</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/user/Desktop/ИИ вайбкодинг/Project vibecoding/obyavlenia/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/user/Desktop/ИИ вайбкодинг/Project vibecoding/obyavlenia/launchd_stderr.log</string>
+</dict>
+</plist>
