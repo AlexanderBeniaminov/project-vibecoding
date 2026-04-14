@@ -327,10 +327,42 @@ def collect_daily_data_iiko_web(
         result["cancellations"] = None
         result["errors"].append(f"cancellations: {e}")
 
-    result["hourly"]             = None
+    # --- 5. Временные срезы по часам (утро 9-11, день 11-17, вечер 17-21) ---
+    try:
+        rows = _olap_query(
+            session, "SALES",
+            group_fields=["HourClose"],
+            data_fields=["DishDiscountSumInt", "GuestNum"],
+            filters=df,
+        )
+        slots = {
+            "утро":  {"revenue": 0.0, "guests": 0},
+            "день":  {"revenue": 0.0, "guests": 0},
+            "вечер": {"revenue": 0.0, "guests": 0},
+        }
+        for row in rows:
+            hour    = int(row.get("HourClose") or 0)
+            revenue = row.get("DishDiscountSumInt") or 0
+            guests  = row.get("GuestNum") or 0
+            if 9 <= hour < 11:
+                slots["утро"]["revenue"]  += revenue
+                slots["утро"]["guests"]   += guests
+            elif 11 <= hour < 17:
+                slots["день"]["revenue"]  += revenue
+                slots["день"]["guests"]   += guests
+            elif 17 <= hour < 21:
+                slots["вечер"]["revenue"] += revenue
+                slots["вечер"]["guests"]  += guests
+        result["hourly"] = slots
+        logger.info(f"[OLAP] Срезы: утро={slots['утро']['revenue']} день={slots['день']['revenue']} вечер={slots['вечер']['revenue']}")
+    except Exception as e:
+        logger.error(f"[OLAP] Временные срезы: {e}", exc_info=True)
+        result["hourly"] = None
+        result["errors"].append(f"hourly: {e}")
+
     result["guest_groups"]       = None
     result["check_distribution"] = None
-    result["writeoffs"]          = None
+    result["writeoffs"]          = None   # TRANSACTIONS недоступен для пользователя buh
 
     return result
 

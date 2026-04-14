@@ -157,6 +157,30 @@ def setup_spreadsheet(service, spreadsheet_id: str):
         ).execute()
         logger.info(f"Созданы листы: {[r['addSheet']['properties']['title'] for r in requests]}")
 
+    # Расширяем лист «Ежедневно» до 500 колонок (хватит на ~2 года данных)
+    meta2 = sheets_api.get(spreadsheetId=spreadsheet_id).execute()
+    expand_requests = []
+    for sheet in meta2["sheets"]:
+        props = sheet["properties"]
+        if props["title"] == "Ежедневно":
+            current_cols = props.get("gridProperties", {}).get("columnCount", 0)
+            if current_cols < 500:
+                expand_requests.append({
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": props["sheetId"],
+                            "gridProperties": {"columnCount": 500}
+                        },
+                        "fields": "gridProperties.columnCount"
+                    }
+                })
+    if expand_requests:
+        sheets_api.batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": expand_requests}
+        ).execute()
+        logger.info("Лист «Ежедневно» расширен до 500 колонок")
+
     _write_metric_columns(service, spreadsheet_id)
     _apply_number_format(service, spreadsheet_id)
     logger.info("Структура таблицы готова")
