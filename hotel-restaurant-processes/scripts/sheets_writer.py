@@ -405,6 +405,53 @@ def write_weekly_row(service, spreadsheet_id: str, data: dict):
 
 
 # ---------------------------------------------------------------------------
+# Чтение ежедневных данных
+# ---------------------------------------------------------------------------
+
+def read_daily_row(service, spreadsheet_id: str, report_date: str) -> dict:
+    """
+    Прочитать все метрики за указанную дату из листа «Ежедневно».
+    Возвращает словарь {название метрики: значение}.
+    Если дата не найдена — возвращает пустой словарь.
+    """
+    result = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range="Ежедневно!A:AZ"
+    ).execute()
+    rows = result.get("values", [])
+
+    if not rows or len(rows) < 2:
+        logger.warning(f"Лист «Ежедневно» пуст или только заголовок")
+        return {}
+
+    header_row = rows[0]  # строка 1: «Показатель», дата1, дата2, ...
+
+    # Ищем колонку с нужной датой
+    col_idx = None
+    for i, cell in enumerate(header_row):
+        if str(cell).strip() == str(report_date):
+            col_idx = i
+            break
+
+    if col_idx is None:
+        logger.warning(f"Дата {report_date} не найдена в листе «Ежедневно»")
+        return {}
+
+    # Читаем значения: строка → {метрика: значение}
+    data = {}
+    for row in rows[1:]:
+        if not row:
+            continue
+        metric_name = str(row[0]).strip() if row else ""
+        value = row[col_idx] if col_idx < len(row) else ""
+        if metric_name:
+            data[metric_name] = value
+
+    logger.info(f"Прочитано {len(data)} метрик за {report_date}")
+    return data
+
+
+# ---------------------------------------------------------------------------
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
 

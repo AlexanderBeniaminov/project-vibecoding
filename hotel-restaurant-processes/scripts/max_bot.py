@@ -2,21 +2,21 @@
 max_bot.py — работа с MAX мессенджером (max.ru, бывш. TamTam).
 
 Документация API: https://dev.max.ru/
-Base URL: https://botapi.max.ru
+Base URL: https://platform-api.max.ru  (новый API с 2026)
+         https://botapi.max.ru         (для /me и /updates)
 
 Авторизация:
-    Все запросы: ?access_token=MAX_BOT_TOKEN
+    Заголовок: Authorization: <token>  (без префикса Bearer/access_token)
 
 Основные методы:
-    GET  /me                          — информация о боте
-    POST /messages                    — отправить сообщение (user_id или chat_id)
-    GET  /updates                     — получить новые обновления (long-polling)
+    GET  /me                                      — информация о боте (botapi)
+    POST /messages?user_id={id}                   — отправить сообщение (platform-api)
+    GET  /updates                                 — получить новые обновления (botapi)
 
 Переменные окружения:
-    MAX_BOT_TOKEN      — токен бота (из личного кабинета MAX)
-    MAX_OWNER_USER_ID  — user_id собственника
-    MAX_ADMIN_USER_ID  — user_id администратора
-    MAX_DEV_USER_ID    — user_id разработчика (алерты)
+    MAX_BOT_TOKEN      — токен бота (из business.max.ru → Интеграция)
+    MAX_OWNER_USER_ID  — user_id получателя отчётов
+    MAX_DEV_USER_ID    — user_id разработчика (алерты об ошибках)
 """
 
 import logging
@@ -27,8 +27,9 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-MAX_API_BASE = "https://botapi.max.ru"
-DEFAULT_TIMEOUT = 30
+MAX_API_BASE     = "https://botapi.max.ru"       # для /me и /updates
+MAX_PLATFORM_API = "https://platform-api.max.ru"  # для отправки сообщений
+DEFAULT_TIMEOUT  = 30
 LONG_POLL_TIMEOUT = 60  # секунд, максимальный long-poll для одного запроса
 
 
@@ -40,7 +41,7 @@ class MaxBot:
             raise ValueError("MAX_BOT_TOKEN не задан")
         self.token = token
         self._session = requests.Session()
-        self._session.params = {"access_token": token}  # type: ignore[assignment]
+        self._session.headers.update({"Authorization": token})
         self._marker: Optional[int] = None  # маркер для getUpdates
 
     # ------------------------------------------------------------------
@@ -50,19 +51,20 @@ class MaxBot:
     def send_message(self, user_id: str, text: str) -> bool:
         """
         Отправить текстовое сообщение пользователю.
+        Использует platform-api.max.ru (новый API).
         Возвращает True при успехе.
         """
         if not user_id:
             logger.warning("send_message: user_id не задан, пропускаем")
             return False
-        url = f"{MAX_API_BASE}/messages"
-        payload = {
-            "recipient": {"user_id": int(user_id)},
-            "type": "message",
-            "body": {"text": text},
-        }
+        url = f"{MAX_PLATFORM_API}/messages"
         try:
-            resp = self._session.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
+            resp = self._session.post(
+                url,
+                params={"user_id": int(user_id)},
+                json={"text": text},
+                timeout=DEFAULT_TIMEOUT,
+            )
             if resp.ok:
                 logger.info(f"MAX: сообщение отправлено user_id={user_id}")
                 return True

@@ -1,10 +1,10 @@
-name: Ежедневный отчёт Монблан
+name: Сбор данных Монблан (23:30)
 
 on:
   schedule:
     # 23:30 UTC+5 = 18:30 UTC (основной запуск)
     - cron: '30 18 * * *'
-    # 06:30 UTC+5 = 01:30 UTC (резервный — если смена была не закрыта в 23:30)
+    # 06:30 UTC+5 = 01:30 UTC (резервный — если смена закрыта после полуночи)
     - cron: '30 1 * * *'
   workflow_dispatch:
     inputs:
@@ -15,10 +15,9 @@ on:
 
 jobs:
   daily_report:
-    name: Собрать и отправить ежедневный отчёт
+    name: Сбор iiko → Google Sheets
     runs-on: ubuntu-latest
-    # 60 минут: 30 мин данные + 30 мин ожидание ответа администратора
-    timeout-minutes: 60
+    timeout-minutes: 15
 
     env:
       # iikoWeb (основной источник данных)
@@ -51,13 +50,13 @@ jobs:
       - name: Установка зависимостей
         run: pip install -r hotel-restaurant-processes/requirements.txt
 
-      - name: Запуск ежедневного отчёта
+      - name: Сбор данных iiko → Google Sheets
         working-directory: hotel-restaurant-processes
         run: |
           if [ -n "${{ github.event.inputs.date }}" ]; then
-            python scripts/main.py daily "${{ github.event.inputs.date }}"
+            python scripts/main.py collect "${{ github.event.inputs.date }}"
           else
-            python scripts/main.py daily
+            python scripts/main.py collect
           fi
 
       - name: Загрузка логов при ошибке
