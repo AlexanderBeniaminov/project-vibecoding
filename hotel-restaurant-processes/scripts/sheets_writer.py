@@ -248,20 +248,44 @@ def _apply_number_format(service, spreadsheet_id: str):
         logger.info("Числовой формат применён")
 
 
+def _excel_serial_to_date(serial: int) -> str:
+    """
+    Конвертировать Excel serial number в ISO дату (YYYY-MM-DD).
+    Нужно когда дата записана через USER_ENTERED и Sheets преобразовал
+    строку «2026-03-30» в число (серийный номер дня).
+    Эпоха Excel: 30 декабря 1899 (с учётом ошибки Lotus 1-2-3).
+    """
+    from datetime import date as _date, timedelta
+    base = _date(1899, 12, 30)
+    return (base + timedelta(days=int(serial))).strftime("%Y-%m-%d")
+
+
 def _find_or_create_date_column(service, spreadsheet_id: str, sheet_name: str, key: str, search_row: int = 1) -> int:
     """
     Найти колонку с нужным ключом в указанной строке или создать новую.
+    Обрабатывает два варианта хранения дат:
+      - строка «2026-03-30» (правильный, RAW)
+      - Excel serial number (неправильный, появляется при USER_ENTERED)
     Возвращает номер колонки (1-based, где 1=A, 2=B...).
     """
     result = service.spreadsheets().values().get(
         spreadsheetId=spreadsheet_id,
-        range=f"{sheet_name}!{search_row}:{search_row}"
+        range=f"{sheet_name}!{search_row}:{search_row}",
+        valueRenderOption="UNFORMATTED_VALUE",
     ).execute()
     row = result.get("values", [[]])[0] if result.get("values") else []
 
     for i, cell in enumerate(row):
+        # Прямое совпадение строки
         if str(cell).strip() == key:
             return i + 1  # 1-based
+        # Excel serial number → пробуем конвертировать в ISO и сравнить
+        if isinstance(cell, (int, float)) and cell > 10000:
+            try:
+                if _excel_serial_to_date(int(cell)) == key:
+                    return i + 1
+            except Exception:
+                pass
 
     # Не нашли — новая колонка после последней заполненной, минимум B (2)
     return max(len(row), 1) + 1
@@ -349,14 +373,22 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
     col_num = _find_or_create_date_column(service, spreadsheet_id, "Ежедневно", report_date, search_row=1)
     col_ltr = _col_letter(col_num)
 
-    # Строка 1 — дата, строки 2..N — значения
-    col_data = [[report_date]] + [[v] for v in values]
-
+    # Строка 1 — дата: записываем как RAW-строку, чтобы Sheets не превращал
+    # «2026-03-30» в Excel serial number (который отображается как «пн/вт/...»).
     service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
         range=f"Ежедневно!{col_ltr}1",
+        valueInputOption="RAW",
+        body={"values": [[report_date]]},
+    ).execute()
+
+    # Строки 2..N — числа и текст: USER_ENTERED чтобы числа корректно
+    # интерпретировались формулами Sheets.
+    service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id,
+        range=f"Ежедневно!{col_ltr}2",
         valueInputOption="USER_ENTERED",
-        body={"values": col_data}
+        body={"values": [[v] for v in values]},
     ).execute()
 
     logger.info(f"Данные за {report_date} записаны в колонку {col_ltr}")
