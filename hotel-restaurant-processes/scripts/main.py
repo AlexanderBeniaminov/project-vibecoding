@@ -228,6 +228,8 @@ def _build_owner_report(sheet_data: dict, report_date: date) -> str:
     orders    = _num(sheet_data, "Кол-во чеков")
     avg_chk   = _num(sheet_data, "Средний чек")
     guests    = _num(sheet_data, "Гости")
+    kitchen   = _num(sheet_data, "Кухня")
+    bar       = _num(sheet_data, "Бар")
     cancels   = _num(sheet_data, "Отмены (руб)")
     writeoffs = _num(sheet_data, "Списания (руб)")
 
@@ -248,6 +250,8 @@ def _build_owner_report(sheet_data: dict, report_date: date) -> str:
         f"🧾 Чеков:        {fmt_int(orders)}",
         f"💵 Средний чек:  {fmt_money(avg_chk)} руб.",
         f"👥 Гостей:       {fmt_int(guests)}",
+        f"🍽 Кухня:        {fmt_money(kitchen)} руб.",
+        f"🍹 Бар:          {fmt_money(bar)} руб.",
     ]
 
     lines.append(SEP)
