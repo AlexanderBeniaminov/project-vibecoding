@@ -410,7 +410,7 @@ def collect_daily_data_iiko_web(
             elif 11 <= hour < 17:
                 slots["день"]["revenue"]  += revenue
                 slots["день"]["guests"]   += guests
-            elif 17 <= hour < 21:
+            elif 17 <= hour < 23:
                 slots["вечер"]["revenue"] += revenue
                 slots["вечер"]["guests"]  += guests
         result["hourly"] = slots

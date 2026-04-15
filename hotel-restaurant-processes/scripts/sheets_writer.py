@@ -22,34 +22,27 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 # ---------------------------------------------------------------------------
 
 METRICS_DAILY = [
-    # --- Выручка ---
+    # --- Строка 2: день недели (авто) ---
+    "День недели",
+    # --- Авто-данные из iiko (строки 3–16) ---
     "Выручка итого",
-    "Нал",
-    "СБП",
-    "Карта",
-    "По счёту",
-    # --- Трафик ---
     "Кол-во чеков",
     "Средний чек",
     "Гости",
-    # --- Категории ---
     "Кухня",
     "Бар",
-    # --- Временные срезы ---
     "Утро — выручка (09–11)",
-    "Утро — гости",
+    "Утро — гости (09-11)",
     "День — выручка (11–17)",
-    "День — гости",
-    "Вечер — выручка (17–21)",
-    "Вечер — гости",
-    # --- Потери ---
+    "День — гости (11-17)",
+    "Вечер — выручка (17–23)",
+    "Вечер — гости (17-23)",
     "Отмены (руб)",
     "Списания (руб)",
-    # --- Касса (ручной ввод) ---
+    # --- Ручной ввод (строки 17+) ---
     "Инкассация",
     "Расход из кассы",
     "Остаток нал",
-    # --- Персонал (ручной ввод) ---
     "Повара — кол-во",
     "Повара — з/п",
     "Официанты — кол-во",
@@ -58,11 +51,9 @@ METRICS_DAILY = [
     "Бармены — з/п",
     "Посудомойщицы — кол-во",
     "Посудомойщицы — з/п",
-    "Персонал итого",
+    "Персонал кол-во итого",
     "З/п итого",
-    # --- Прочее ---
-    "Завтраки (гостей)",
-    "Статус",
+    "Завтраки (кол-во гостей по жетонам)",
 ]
 
 # Параметры листа «Еженедельно»
@@ -188,8 +179,8 @@ def setup_spreadsheet(service, spreadsheet_id: str):
 
 def _write_metric_columns(service, spreadsheet_id: str):
     """Записать названия параметров в колонку A каждого листа."""
-    # Ежедневно: A1 — «Показатель», A2:An — параметры
-    daily_col = [["Показатель"]] + [[m] for m in METRICS_DAILY]
+    # Ежедневно: A1 — «Дата», A2:An — параметры
+    daily_col = [["Дата"]] + [[m] for m in METRICS_DAILY]
 
     # Еженедельно: A1 — «Неделя №», A2 — «Период (пн–вс)», A3:An — параметры
     weekly_col = [["Неделя №"], ["Период (пн–вс)"]] + [[m] for m in METRICS_WEEKLY]
@@ -304,15 +295,25 @@ def _col_letter(n: int) -> str:
 # Запись ежедневных данных
 # ---------------------------------------------------------------------------
 
+_WEEKDAYS_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+
+
 def write_daily_row(service, spreadsheet_id: str, data: dict):
     """
     Записать данные за день в колонку с соответствующей датой.
-    Строка 1 — дата, строки 2..N — значения параметров.
+    Строка 1 — дата (RAW), строка 2 — день недели, строки 3..16 — авто-данные iiko,
+    строки 17+ — ручной ввод администратора.
     """
     report_date = data.get("date", str(date.today()))
 
+    # День недели на русском
+    try:
+        d = date.fromisoformat(report_date)
+        weekday_ru = _WEEKDAYS_RU[d.weekday()]
+    except (ValueError, IndexError):
+        weekday_ru = ""
+
     summary  = data.get("orders_summary") or {}
-    payments = data.get("payment_types") or {}
     cats     = data.get("category_revenue") or {}
     hourly   = data.get("hourly") or {}
     manual   = data.get("manual") or {}
@@ -322,8 +323,8 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
     guests   = summary.get("guests", 0)
     avg_chk  = summary.get("avg_check", 0)
 
-    kitchen = _find_category(cats, ["кухня", "kitchen", "еда", "food"])
-    bar     = _find_category(cats, ["бар", "bar", "напитки", "drink"])
+    kitchen = cats.get("Кухня", 0)
+    bar     = cats.get("Бар", 0)
 
     утро  = hourly.get("утро",  {})
     день  = hourly.get("день",  {})
@@ -342,22 +343,24 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         бармены.get("кол", 0), посудомой.get("кол", 0),
     ])
 
-    has_manual = bool(manual)
-    status = "✅ полный" if has_manual else "⚠️ авто (без кассы)"
-
-    # Значения в том же порядке, что METRICS_DAILY
+    # Значения в том же порядке, что METRICS_DAILY (строки 2..N)
     values = [
-        _v(revenue), _v(payments.get("Наличные", payments.get("Нал", 0))),
-        _v(payments.get("СБП", payments.get("Безналичный", 0))),
-        _v(payments.get("Банковская карта", payments.get("Карта", 0))),
-        _v(payments.get("По счёту", payments.get("Безнал", 0))),
-        _v(orders), _v(avg_chk), _v(guests),
-        _v(kitchen), _v(bar),
-        _v(утро.get("revenue", 0)),  _v(утро.get("guests", 0)),
-        _v(день.get("revenue", 0)),  _v(день.get("guests", 0)),
-        _v(вечер.get("revenue", 0)), _v(вечер.get("guests", 0)),
-        _v(data.get("cancellations", 0)),
-        _v(data.get("writeoffs", 0)),
+        weekday_ru,                          # День недели
+        _v(revenue),                         # Выручка итого
+        _v(orders),                          # Кол-во чеков
+        _v(avg_chk),                         # Средний чек
+        _v(guests),                          # Гости
+        _v(kitchen),                         # Кухня
+        _v(bar),                             # Бар
+        _v(утро.get("revenue", 0)),          # Утро — выручка (09–11)
+        _v(утро.get("guests", 0)),           # Утро — гости (09-11)
+        _v(день.get("revenue", 0)),          # День — выручка (11–17)
+        _v(день.get("guests", 0)),           # День — гости (11-17)
+        _v(вечер.get("revenue", 0)),         # Вечер — выручка (17–23)
+        _v(вечер.get("guests", 0)),          # Вечер — гости (17-23)
+        _v(data.get("cancellations", 0)),    # Отмены (руб)
+        _v(data.get("writeoffs", 0)),        # Списания (руб)
+        # --- Ручной ввод ---
         _v(manual.get("инкассация", "")),
         _v(manual.get("расход_кассы", "")),
         _v(manual.get("остаток_нал", "")),
@@ -367,7 +370,6 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         _v(посудомой.get("кол", "")), _v(посудомой.get("зп", "")),
         _v(staff_total or ""), _v(zp_total or ""),
         _v(manual.get("завтраки", "")),
-        status,
     ]
 
     col_num = _find_or_create_date_column(service, spreadsheet_id, "Ежедневно", report_date, search_row=1)
