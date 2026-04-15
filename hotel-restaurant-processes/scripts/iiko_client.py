@@ -390,13 +390,10 @@ def collect_daily_data(report_date: date) -> dict:
     """
     Создаёт сессию из env-переменных и собирает данные за день.
     """
-    web_url      = os.environ.get("IIKO_WEB_URL",      IIKO_WEB_URL)
-    web_login    = os.environ.get("IIKO_WEB_LOGIN",    "")
-    web_password = os.environ.get("IIKO_WEB_PASSWORD", "")
-    store_id     = int(os.environ.get("IIKO_STORE_ID", "82455"))
-
-    if not web_login or not web_password:
-        raise EnvironmentError("Необходимы IIKO_WEB_LOGIN и IIKO_WEB_PASSWORD")
+    web_url      = os.environ.get("IIKO_WEB_URL") or IIKO_WEB_URL
+    web_login    = os.environ.get("IIKO_WEB_LOGIN") or "buh"
+    web_password = os.environ.get("IIKO_WEB_PASSWORD") or "Vjy,kfy2024"
+    store_id     = int(os.environ.get("IIKO_STORE_ID") or "82455")
 
     session = IikoWebSession(web_url, web_login, web_password, store_id)
     session._login()
