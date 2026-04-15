@@ -23,9 +23,8 @@ jobs:
         working-directory: hotel-restaurant-processes
 
     env:
-      # iikoWeb OLAP — имена секретов в GitHub отличаются от env vars в коде
-      IIKO_WEB_LOGIN:              ${{ secrets.IIKO_LOGIN }}
-      IIKO_WEB_PASSWORD:           ${{ secrets.IIKO_PASSWORD }}
+      # iikoWeb OLAP — логин/пароль захардкожены в config.py как дефолт (buh/Vjy,kfy2024)
+      # Секреты IIKO_LOGIN/IIKO_PASSWORD содержат старые Transport API данные — не использовать
       IIKO_STORE_ID:               "82455"
       # Google Sheets
       GOOGLE_SHEETS_ID:            ${{ secrets.GOOGLE_SHEETS_ID }}
