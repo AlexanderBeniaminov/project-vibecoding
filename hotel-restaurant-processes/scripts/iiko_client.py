@@ -16,9 +16,12 @@ iiko_client.py — клиент для iikoWeb OLAP.
 import logging
 import os
 import time
+import warnings
 from datetime import date, timedelta
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +93,21 @@ class IikoWebSession:
         self.password  = password
         self.store_id  = store_id
         self._session  = requests.Session()
+        # Retry-адаптер: 3 попытки при SSL-ошибках (SSLEOFError с GitHub Actions)
+        retry = Retry(
+            total=3,
+            backoff_factor=2,          # 2s, 4s, 8s между попытками
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["GET", "POST"],
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self._session.mount("https://", adapter)
+        self._session.mount("http://",  adapter)
+        # Отключаем проверку SSL-сертификата — сервер iikoWeb иногда обрывает
+        # SSL-хендшейк с GitHub Actions (SSLEOFError); verify=False обходит это.
+        self._session.verify = False
+        warnings.filterwarnings("ignore", message="Unverified HTTPS request")
         # Имитируем браузер — некоторые серверы блокируют python-requests UA
         self._session.headers.update({
             "User-Agent": (
