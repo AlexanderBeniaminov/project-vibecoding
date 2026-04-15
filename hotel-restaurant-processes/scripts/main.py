@@ -279,10 +279,14 @@ def _build_owner_report(sheet_data: dict, report_date: date) -> str:
 
 
 def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dict:
-    """Прочитать лист «Ежедневно» и собрать агрегаты за неделю."""
+    """
+    Прочитать лист «Ежедневно» и собрать агрегаты за неделю.
+    Структура листа: строка 1 — даты, колонка A — названия метрик.
+    """
     result = service.spreadsheets().values().get(
         spreadsheetId=SHEETS_ID,
-        range="Ежедневно!A:AZ"
+        range="Ежедневно!A:AZ",
+        valueRenderOption="UNFORMATTED_VALUE",
     ).execute()
     rows = result.get("values", [])
 
@@ -290,44 +294,60 @@ def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dic
         logger.warning("Лист «Ежедневно» пустой или только заголовок")
         return _empty_weekly(week_num, monday, sunday)
 
-    headers = rows[0]
+    # Строка 1: ["Дата", "2026-03-30", "2026-03-31", ...]
+    date_row = rows[0]
 
-    def _f(row, name):
+    # Находим индексы колонок для дат внутри недели пн–вс
+    week_col_indices = []
+    for i, cell in enumerate(date_row):
+        if i == 0:
+            continue  # пропускаем колонку A
         try:
-            idx = headers.index(name)
+            d = date.fromisoformat(str(cell).strip())
+            if monday <= d <= sunday:
+                week_col_indices.append(i)
         except ValueError:
-            return 0
-        if idx >= len(row):
-            return 0
-        try:
-            return float(str(row[idx]).replace(" ", "").replace(",", ".") or 0)
-        except (ValueError, TypeError):
-            return 0
+            pass
 
-    week_rows = []
-    for row in rows[1:]:
-        if not row:
-            continue
-        try:
-            row_date = date.fromisoformat(str(row[0]))
-        except (ValueError, IndexError):
-            continue
-        if monday <= row_date <= sunday:
-            week_rows.append(row)
-
-    if not week_rows:
+    if not week_col_indices:
         logger.warning(f"Нет данных за неделю {monday}–{sunday}")
         return _empty_weekly(week_num, monday, sunday)
 
-    n = len(week_rows)
-    revenue     = sum(_f(r, "Выручка итого") for r in week_rows)
-    orders      = sum(_f(r, "Кол-во чеков")  for r in week_rows)
-    guests      = sum(_f(r, "Гости")          for r in week_rows)
-    kitchen     = sum(_f(r, "Кухня")          for r in week_rows)
-    bar         = sum(_f(r, "Бар")            for r in week_rows)
-    cancels     = sum(_f(r, "Отмены (руб)")   for r in week_rows)
-    writeoffs_s = sum(_f(r, "Списания (руб)") for r in week_rows)
-    zp_total    = sum(_f(r, "З/п итого")      for r in week_rows)
+    # Строим словарь: название метрики → список значений за каждый день недели
+    metric_values: dict = {}
+    for row in rows[1:]:
+        if not row:
+            continue
+        metric_name = str(row[0]).strip() if row else ""
+        if not metric_name:
+            continue
+        vals = []
+        for col_idx in week_col_indices:
+            if col_idx < len(row):
+                try:
+                    v = float(str(row[col_idx]).replace(" ", "").replace(",", ".") or 0)
+                except (ValueError, TypeError):
+                    v = 0.0
+            else:
+                v = 0.0
+            vals.append(v)
+        metric_values[metric_name] = vals
+
+    def _sum(key: str) -> float:
+        return sum(metric_values.get(key, []))
+
+    n = len(week_col_indices)
+    revenue     = _sum("Выручка итого")
+    orders      = _sum("Кол-во чеков")
+    guests      = _sum("Гости")
+    kitchen     = _sum("Кухня")
+    bar         = _sum("Бар")
+    cancels     = _sum("Отмены (руб)")
+    writeoffs_s = _sum("Списания (руб)")
+    zp_total    = _sum("З/п итого")
+    rev_morning = _sum("Утро — выручка (09–11)")
+    rev_day     = _sum("День — выручка (11–17)")
+    rev_evening = _sum("Вечер — выручка (17–23)")
 
     avg_check       = round(revenue / orders, 2) if orders else 0
     avg_check_guest = round(revenue / guests, 2) if guests else 0
@@ -338,15 +358,20 @@ def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dic
     turnover_table = round(guests / tables / n, 2) if tables and n else 0
     turnover_seat  = round(guests / seats  / n, 2) if seats  and n else 0
 
+    logger.info(
+        f"Неделя {week_num}: {n} дней, выручка={revenue}, "
+        f"чеков={int(orders)}, гостей={int(guests)}"
+    )
+
     return {
         "week_num":        week_num,
         "date_from":       str(monday),
         "date_to":         str(sunday),
         "revenue":         revenue,
         "avg_revenue_day": round(revenue / n, 2) if n else 0,
-        "orders":          orders,
+        "orders":          int(orders),
         "avg_orders_day":  round(orders / n, 2) if n else 0,
-        "guests":          guests,
+        "guests":          int(guests),
         "avg_guests_day":  round(guests / n, 2) if n else 0,
         "avg_check":       avg_check,
         "avg_check_guest": avg_check_guest,
@@ -354,9 +379,9 @@ def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dic
         "bar":             bar,
         "cancellations":   cancels,
         "writeoffs":       writeoffs_s,
-        "rev_morning":     0,
-        "rev_day":         0,
-        "rev_evening":     0,
+        "rev_morning":     rev_morning,
+        "rev_day":         rev_day,
+        "rev_evening":     rev_evening,
         "turnover_table":  turnover_table,
         "turnover_seat":   turnover_seat,
         "zp_total":        zp_total,
