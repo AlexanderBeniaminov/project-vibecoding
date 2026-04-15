@@ -13,8 +13,8 @@ from datetime import date
 # URL iikoWeb-сервера ресторана
 IIKO_WEB_URL      = os.environ.get("IIKO_WEB_URL", "https://kafe-monblan.iikoweb.ru")
 # Логин/пароль пользователя iikoWeb (роль ADM)
-IIKO_WEB_LOGIN    = os.environ.get("IIKO_WEB_LOGIN", "")
-IIKO_WEB_PASSWORD = os.environ.get("IIKO_WEB_PASSWORD", "")
+IIKO_WEB_LOGIN    = os.environ.get("IIKO_WEB_LOGIN") or "buh"
+IIKO_WEB_PASSWORD = os.environ.get("IIKO_WEB_PASSWORD") or "Vjy,kfy2024"
 # Внутренний integer ID магазина в iikoWeb
 IIKO_STORE_ID     = int(os.environ.get("IIKO_STORE_ID") or "82455")
 
