@@ -90,6 +90,16 @@ class IikoWebSession:
         self.password  = password
         self.store_id  = store_id
         self._session  = requests.Session()
+        # Имитируем браузер — некоторые серверы блокируют python-requests UA
+        self._session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+        })
         self._token    = ""
         self._token_ts = 0.0
 
@@ -98,15 +108,20 @@ class IikoWebSession:
             self._login()
 
     def _login(self) -> None:
+        logger.info(f"iikoWeb: попытка авторизации как {self.login_str} на {self.base_url}")
         resp = self._session.post(
             f"{self.base_url}/api/auth/login",
             json={"login": self.login_str, "password": self.password},
             timeout=TIMEOUT,
         )
+        logger.info(f"iikoWeb login HTTP {resp.status_code}, body[:200]: {resp.text[:200]!r}")
         resp.raise_for_status()
         data = resp.json()
         if data.get("error"):
-            raise PermissionError(f"iikoWeb login: {data.get('errorMessage')}")
+            raise PermissionError(
+                f"iikoWeb login отклонён (login={self.login_str!r}): "
+                f"{data.get('errorMessage')} | raw={resp.text[:300]!r}"
+            )
         self._token    = data["token"]
         self._token_ts = time.time()
         logger.info(f"iikoWeb: авторизован как {self.login_str} (store={self.store_id})")
