@@ -323,23 +323,17 @@ def collect_daily_data_iiko_web(
             data_fields=["DishDiscountSumInt"],
             filters=df,
         )
-        cats: dict = {"Кухня": 0.0, "Бар": 0.0, "Другое": 0.0}
+        cats: dict = {"Кухня": 0.0, "Бар": 0.0}
         for row in rows:
             cat_name  = (row.get("DishCategory") or "").strip().lower()
             dish_name = (row.get("DishName") or "").strip().lower()
             amount    = row.get("DishDiscountSumInt") or 0
-            if cat_name in KITCHEN_CATEGORIES:
-                cats["Кухня"] += amount
-            elif cat_name in BAR_CATEGORIES:
-                cats["Бар"] += amount
-            elif _dish_name_is_bar(dish_name):
-                # Позиция без категории, но по названию это бар/глинтвейн
-                cats["Бар"] += amount
-            elif _dish_name_is_kitchen(dish_name):
-                # Позиция без категории, но по названию это кухня
+            if cat_name in KITCHEN_CATEGORIES or _dish_name_is_kitchen(dish_name):
                 cats["Кухня"] += amount
             else:
-                cats["Другое"] += amount
+                # Всё остальное — бар: категории бара, глинтвейн без категории,
+                # сиропы/молоко/миксеры и прочие добавки к напиткам
+                cats["Бар"] += amount
         result["category_revenue"] = cats
         logger.info(f"[OLAP] Категории: {cats}")
     except Exception as e:
