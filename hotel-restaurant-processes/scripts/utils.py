@@ -101,15 +101,15 @@ def parse_admin_reply(text: str):
     """
     Разобрать текстовый ответ администратора.
 
-    Ожидаемый формат:
+    Ожидаемый формат (администратор вводит только количество персонала):
         Инкассация: 70000
         Расход: 3500
         Остаток: 26500
         Завтраки: 12
-        Повара: 3/9000
-        Официанты: 4/12000
-        Бармены: 1/3500
-        Посудомойщицы: 2/5000
+        Повара: 3
+        Официанты: 4
+        Бармены: 1
+        Посудомойщицы: 2
 
     Поддерживает разные форматы разделителей (: / =).
     Возвращает None если текст не распознан.
@@ -143,12 +143,9 @@ def _parse_admin_field(key: str, val: str, result: dict):
         except ValueError:
             return 0
 
-    def _staff(s):
-        """Разобрать 'кол/зп' → {"кол": int, "зп": float}"""
-        if "/" in s:
-            parts = s.split("/", 1)
-            return {"кол": int(_num(parts[0])), "зп": _num(parts[1])}
-        return {"кол": int(_num(s)), "зп": 0}
+    def _staff_count(s):
+        """Разобрать количество персонала → {"кол": int}"""
+        return {"кол": int(_num(s))}
 
     # Маппинг ключевых слов → поля result
     if any(w in key for w in ["инкасс"]):
@@ -160,10 +157,10 @@ def _parse_admin_field(key: str, val: str, result: dict):
     elif any(w in key for w in ["завтрак"]):
         result["завтраки"] = int(_num(val))
     elif any(w in key for w in ["повар"]):
-        result["повара"] = _staff(val)
+        result["повара"] = _staff_count(val)
     elif any(w in key for w in ["официант"]):
-        result["официанты"] = _staff(val)
+        result["официанты"] = _staff_count(val)
     elif any(w in key for w in ["бармен", "барман"]):
-        result["бармены"] = _staff(val)
+        result["бармены"] = _staff_count(val)
     elif any(w in key for w in ["посудомо"]):
-        result["посудомойщицы"] = _staff(val)
+        result["посудомойщицы"] = _staff_count(val)

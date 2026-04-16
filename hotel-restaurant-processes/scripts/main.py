@@ -220,7 +220,8 @@ def _num(sheet_data: dict, key: str, default: float = 0) -> float:
 def _build_owner_report(sheet_data: dict, report_date: date) -> str:
     """
     Сформировать ежедневный отчёт для собственника.
-    Читает данные из Google Sheets — включает и авто, и ручной ввод.
+    Читает данные из Google Sheets — включает и авто (строки 2–16),
+    и ручной ввод администратора (строки 17–25).
     """
     SEP = "——————————————"
 
@@ -236,32 +237,30 @@ def _build_owner_report(sheet_data: dict, report_date: date) -> str:
     inkass     = _num(sheet_data, "Инкассация")
     expenses   = _num(sheet_data, "Расход из кассы")
     balance    = _num(sheet_data, "Остаток нал")
-    staff      = _num(sheet_data, "Персонал итого")
-    zp_total   = _num(sheet_data, "З/п итого")
-    breakfasts = _num(sheet_data, "Завтраки (гостей)")
+    staff      = _num(sheet_data, "Персонал кол-во итого")
+    breakfasts = _num(sheet_data, "Завтраки (кол-во гостей по жетонам)")
 
-    status = str(sheet_data.get("Статус", ""))
-    has_manual = "✅" in status
+    # Ручные данные считаются заполненными если есть хоть одно ненулевое значение
+    has_manual = inkass > 0 or balance > 0 or staff > 0 or expenses > 0
 
     lines = [
         f"📊 {RESTAURANT_NAME} — {fmt_date_ru(report_date)}",
         SEP,
-        f"💰 Выручка:      {fmt_money(revenue)} руб.",
+        f"💰 Выручка:      {fmt_money(revenue)}",
         f"🧾 Чеков:        {fmt_int(orders)}",
-        f"💵 Средний чек:  {fmt_money(avg_chk)} руб.",
+        f"💵 Средний чек:  {fmt_money(avg_chk)}",
         f"👥 Гостей:       {fmt_int(guests)}",
-        f"🍽 Кухня:        {fmt_money(kitchen)} руб.",
-        f"🍹 Бар:          {fmt_money(bar)} руб.",
+        f"🍽 Кухня:        {fmt_money(kitchen)}",
+        f"🍹 Бар:          {fmt_money(bar)}",
     ]
 
     lines.append(SEP)
     if has_manual:
         lines += [
-            f"🏦 Инкассация:   {fmt_money(inkass)} руб.",
-            f"📤 Расход:       {fmt_money(expenses)} руб.",
-            f"💵 Остаток нал:  {fmt_money(balance)} руб.",
+            f"🏦 Инкассация:   {fmt_money(inkass)}",
+            f"📤 Расход:       {fmt_money(expenses)}",
+            f"💵 Остаток нал:  {fmt_money(balance)}",
             f"👤 Персонал:     {fmt_int(staff)} чел.",
-            f"💸 З/п итого:    {fmt_money(zp_total)} руб.",
         ]
         if breakfasts:
             lines.append(f"🍳 Завтраки:     {fmt_int(breakfasts)} гостей")
@@ -270,8 +269,8 @@ def _build_owner_report(sheet_data: dict, report_date: date) -> str:
 
     lines += [
         SEP,
-        f"❌ Отмены:       {fmt_money(cancels)} руб.",
-        f"🗑 Списания:     {fmt_money(writeoffs)} руб.",
+        f"❌ Отмены:       {fmt_money(cancels)}",
+        f"🗑 Списания:     {fmt_money(writeoffs)}",
         SEP,
         f"📎 {SHEETS_URL}",
     ]
