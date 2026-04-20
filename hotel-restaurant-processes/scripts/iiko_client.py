@@ -63,16 +63,12 @@ def _dish_name_is_bar(dish_name_lower: str) -> bool:
 def _dish_name_is_kitchen(dish_name_lower: str) -> bool:
     return any(kw in dish_name_lower for kw in _KITCHEN_NAME_KEYWORDS)
 
-# Фильтры: только не удалённые позиции и заказы
+# Фильтр: только незакрытые/непустые заказы.
+# Намеренно НЕ фильтруем по DeletedWithWriteoff — iikoWeb-отчёты включают
+# позиции с DeletedWithWriteoff=DELETED (удалённые с удалением из складa),
+# и их DishDiscountSumInt учитывается в «Выручке». Без этого фильтра
+# данные точно совпадают с ручными отчётами iiko.
 FILTER_NOT_DELETED = [
-    {
-        "field": "DeletedWithWriteoff",
-        "filterType": "value_list",
-        "dateFrom": None, "dateTo": None,
-        "valueMin": None, "valueMax": None,
-        "valueList": ["NOT_DELETED"],
-        "includeLeft": True, "includeRight": False, "inclusiveList": True,
-    },
     {
         "field": "OrderDeleted",
         "filterType": "value_list",
@@ -269,7 +265,7 @@ def collect_daily_data_iiko_web(
         rows = _olap_query(
             session, "SALES",
             group_fields=["OpenDate.Typed"],
-            data_fields=["DishDiscountSumInt", "UniqOrderId.OrdersCount", "GuestNum", "DishDiscountSumInt.average"],
+            data_fields=["DishDiscountSumInt", "UniqOrderId.OrdersCount", "GuestNum"],
             filters=df,
         )
         rev = orders = guests = 0

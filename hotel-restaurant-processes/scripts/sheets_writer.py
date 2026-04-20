@@ -488,6 +488,79 @@ def read_daily_row(service, spreadsheet_id: str, report_date: str) -> dict:
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
 
+def delete_columns_before_date(service, spreadsheet_id: str, cutoff_date) -> int:
+    """
+    Удалить из листа «Ежедневно» все столбцы, где дата в строке 1
+    строго раньше cutoff_date (тип datetime.date или строка YYYY-MM-DD).
+    Возвращает количество удалённых столбцов.
+    """
+    from datetime import date as _date
+    if isinstance(cutoff_date, str):
+        cutoff_date = _date.fromisoformat(cutoff_date)
+
+    meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_id = None
+    for s in meta["sheets"]:
+        if s["properties"]["title"] == "Ежедневно":
+            sheet_id = s["properties"]["sheetId"]
+            break
+    if sheet_id is None:
+        logger.warning("Лист «Ежедневно» не найден — удаление не выполнено")
+        return 0
+
+    result = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range="Ежедневно!1:1",
+        valueRenderOption="UNFORMATTED_VALUE",
+    ).execute()
+    header = result.get("values", [[]])[0] if result.get("values") else []
+
+    # Собираем индексы (0-based) колонок, которые нужно удалить (дата < cutoff)
+    cols_to_delete = []
+    for i, cell in enumerate(header):
+        if i == 0:
+            continue  # колонка A — метки
+        cell_str = str(cell).strip()
+        # Обработка Excel serial number
+        if isinstance(cell, (int, float)) and cell > 10000:
+            try:
+                cell_str = _excel_serial_to_date(int(cell))
+            except Exception:
+                continue
+        try:
+            d = _date.fromisoformat(cell_str)
+            if d < cutoff_date:
+                cols_to_delete.append(i)
+        except ValueError:
+            pass
+
+    if not cols_to_delete:
+        logger.info(f"Нет столбцов до {cutoff_date} — ничего не удаляем")
+        return 0
+
+    # Удаляем от большего индекса к меньшему, чтобы не сдвигать предыдущие
+    cols_to_delete.sort(reverse=True)
+    requests = [
+        {
+            "deleteDimension": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "dimension": "COLUMNS",
+                    "startIndex": col_idx,
+                    "endIndex": col_idx + 1,
+                }
+            }
+        }
+        for col_idx in cols_to_delete
+    ]
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": requests},
+    ).execute()
+    logger.info(f"Удалено {len(cols_to_delete)} столбцов до {cutoff_date}: индексы {cols_to_delete}")
+    return len(cols_to_delete)
+
+
 def _v(val):
     """Заменить None на пустую строку."""
     return val if val is not None else ""

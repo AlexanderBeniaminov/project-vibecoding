@@ -50,6 +50,7 @@ from max_bot import MaxBot, send_or_log
 from sheets_writer import (
     get_service, setup_spreadsheet,
     write_daily_row, write_weekly_row, read_daily_row,
+    delete_columns_before_date,
 )
 from utils import yesterday_utc5, fmt_date, week_bounds, fmt_date_ru, fmt_money, fmt_int
 
@@ -424,22 +425,45 @@ def _build_weekly_digest(data: dict, monday: date, sunday: date, week_num: int) 
 # CLI
 # ---------------------------------------------------------------------------
 
+def trim_sheet(cutoff_date_str: str):
+    """
+    Удалить из листа «Ежедневно» столбцы с датами раньше cutoff_date_str.
+    Пример: python3 scripts/main.py trim 2026-04-01
+    """
+    try:
+        cutoff = date.fromisoformat(cutoff_date_str)
+    except ValueError:
+        logger.error(f"Неверный формат даты: {cutoff_date_str}. Используйте YYYY-MM-DD.")
+        sys.exit(1)
+
+    logger.info(f"=== Удаление столбцов до {cutoff} из листа «Ежедневно» ===")
+    service = _get_sheets_service()
+    deleted = delete_columns_before_date(service, SHEETS_ID, cutoff)
+    logger.info(f"Удалено столбцов: {deleted}. Таблица теперь начинается с {cutoff}.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Монблан — автоматический отчёт")
     parser.add_argument(
         "mode",
-        choices=["collect", "report", "weekly"],
+        choices=["collect", "report", "weekly", "trim"],
         help=(
             "collect — сбор iiko → Sheets (23:30); "
             "report  — чтение Sheets → отчёт в MAX (10:00); "
-            "weekly  — агрегация за прошлую неделю"
+            "weekly  — агрегация за прошлую неделю; "
+            "trim    — удалить столбцы до указанной даты"
         ),
     )
     parser.add_argument(
         "date", nargs="?", default=None,
-        help="Дата в формате YYYY-MM-DD (по умолчанию: вчера)"
+        help="Дата YYYY-MM-DD (для collect/report/weekly — дата отчёта; для trim — дата отсечки)"
     )
     args = parser.parse_args()
+
+    if args.mode == "trim":
+        cutoff = args.date or "2026-04-01"
+        trim_sheet(cutoff)
+        return
 
     if args.date:
         try:
