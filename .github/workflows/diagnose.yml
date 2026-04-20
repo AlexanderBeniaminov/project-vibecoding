@@ -1,0 +1,45 @@
+name: Монблан — диагностика категорий iiko
+
+on:
+  workflow_dispatch:
+    inputs:
+      dates:
+        description: 'Даты через пробел (YYYY-MM-DD), например: 2026-04-01 2026-04-02 2026-04-04'
+        required: true
+        default: '2026-04-01 2026-04-02 2026-04-03 2026-04-04'
+
+jobs:
+  diagnose:
+    name: Диагностика категорий
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: hotel-restaurant-processes
+
+    env:
+      IIKO_STORE_ID: "82455"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Настройка Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: hotel-restaurant-processes/requirements.txt
+
+      - name: Установка зависимостей
+        run: pip install -r requirements.txt
+
+      - name: Диагностика категорий iiko
+        run: python3 scripts/diagnose_categories.py ${{ github.event.inputs.dates }}
+
+      - name: Сохранить лог
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnose-${{ github.run_id }}
+          path: hotel-restaurant-processes/logs/
+          retention-days: 7
