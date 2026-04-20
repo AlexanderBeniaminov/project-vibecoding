@@ -308,27 +308,24 @@ def collect_daily_data_iiko_web(
         result["errors"].append(f"payment_types: {e}")
 
     # --- 3. Категории (Кухня / Бар) ---
-    # Группируем по DishName + DishCategory чтобы:
-    # а) сопоставить по категории iiko,
-    # б) для позиций без категории — по ключевым словам в названии блюда
-    # (напр. "глин 400 НОВ" → Бар, т.к. у глинтвейна категория не проставлена в iiko)
+    # Позиции без категории (пусто) → Бар — совпадает с поведением iiko.
     try:
         rows = _olap_query(
             session, "SALES",
-            group_fields=["DishName", "DishCategory"],
+            group_fields=["DishCategory"],
             data_fields=["DishDiscountSumInt"],
             filters=df,
         )
         cats: dict = {"Кухня": 0.0, "Бар": 0.0}
         for row in rows:
-            cat_name  = (row.get("DishCategory") or "").strip().lower()
-            dish_name = (row.get("DishName") or "").strip().lower()
-            amount    = row.get("DishDiscountSumInt") or 0
-            if cat_name in KITCHEN_CATEGORIES or _dish_name_is_kitchen(dish_name):
+            cat_name = (row.get("DishCategory") or "").strip().lower()
+            amount   = row.get("DishDiscountSumInt") or 0
+            # Только по категории iiko — keyword-матч по названию блюда даёт
+            # ложные срабатывания и расходится с отчётами iikoWeb.
+            # Позиции без категории (пусто) → Бар (так и делает iiko).
+            if cat_name in KITCHEN_CATEGORIES:
                 cats["Кухня"] += amount
             else:
-                # Всё остальное — бар: категории бара, глинтвейн без категории,
-                # сиропы/молоко/миксеры и прочие добавки к напиткам
                 cats["Бар"] += amount
         result["category_revenue"] = cats
         logger.info(f"[OLAP] Категории: {cats}")
