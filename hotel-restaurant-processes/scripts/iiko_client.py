@@ -81,9 +81,9 @@ FILTER_NOT_DELETED = [
 
 
 def _date_filter(date_from: str, date_to: str) -> dict:
-    """Фильтр по дате открытия заказа (формат YYYY-MM-DD)."""
+    """Фильтр по дате закрытия заказа — совпадает с датой в iikoWeb-отчётах."""
     return {
-        "field": "OpenDate.Typed",
+        "field": "CloseDate.Typed",
         "filterType": "date_range",
         "dateFrom": date_from,
         "dateTo": date_to,
@@ -264,7 +264,7 @@ def collect_daily_data_iiko_web(
     try:
         rows = _olap_query(
             session, "SALES",
-            group_fields=["OpenDate.Typed"],
+            group_fields=["CloseDate.Typed"],
             data_fields=["DishDiscountSumInt", "UniqOrderId.OrdersCount", "GuestNum"],
             filters=df,
         )
