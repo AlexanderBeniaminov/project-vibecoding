@@ -121,8 +121,10 @@ function refreshDashboard() {
   clearDataRows_(dash);
 
   if (deviations.length === 0) {
-    dash.getRange(R_DATA, 1).setValue('✅ Все показатели недели ' + week + ' в норме — отклонений нет');
-    saveAiStartRow_(R_DATA + 3);
+    dash.getRange(R_DATA, 1, 1, 5).merge()
+      .setValue('✅ Все показатели недели ' + week + ' в норме — отклонений нет')
+      .setBackground('#d9ead3').setFontWeight('bold');
+    saveAiStartRow_(R_DATA + 4);
     ss.toast('✅ Отклонений нет — неделя ' + week, '🔶 Монблан', 5);
     return;
   }
@@ -130,8 +132,11 @@ function refreshDashboard() {
   // Записать строки отклонений
   writeDeviationRows_(dash, deviations);
 
+  // Записать блок «Сигналы недели» (🔴🟡🟢)
+  var signalsEnd = writeSignalsSection_(dash, R_DATA + deviations.length + 2, deviations);
+
   // Сохранить строку начала AI-блока
-  var aiRow = R_DATA + deviations.length + 2;
+  var aiRow = signalsEnd + 2;
   saveAiStartRow_(aiRow);
 
   ss.toast('✅ ' + deviations.length + ' отклонений — неделя ' + week, '🔶 Монблан', 5);
@@ -290,6 +295,68 @@ function writeStaticHeaders_(dash) {
   dash.setColumnWidth(3, 120);
   dash.setColumnWidth(4, 80);
   dash.setColumnWidth(5, 50);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// БЛОК «СИГНАЛЫ НЕДЕЛИ» — группировка отклонений по цветам
+// Пишется сразу после таблицы отклонений
+// ═══════════════════════════════════════════════════════════════
+function writeSignalsSection_(dash, startRow, deviations) {
+  var red    = deviations.filter(function(d) { return d.delta < T_RED; });
+  var yellow = deviations.filter(function(d) { return d.delta >= T_RED && d.delta < T_YELLOW; });
+  var green  = deviations.filter(function(d) { return d.delta > T_GREEN; });
+
+  var row = startRow;
+
+  function writeHeader(text, bg, fg) {
+    dash.getRange(row, 1, 1, 5).merge()
+      .setValue(text)
+      .setBackground(bg)
+      .setFontColor(fg || '#ffffff')
+      .setFontWeight('bold')
+      .setFontSize(9)
+      .setHorizontalAlignment('left')
+      .setVerticalAlignment('middle');
+    row++;
+  }
+
+  function writeItems(items, bg) {
+    if (items.length === 0) {
+      dash.getRange(row, 1, 1, 5).merge()
+        .setValue('—')
+        .setBackground(bg)
+        .setFontSize(9)
+        .setVerticalAlignment('middle');
+      row++;
+    } else {
+      items.forEach(function(d) {
+        dash.getRange(row, 1, 1, 5).merge()
+          .setValue(d.label)
+          .setBackground(bg)
+          .setFontSize(9)
+          .setVerticalAlignment('middle');
+        row++;
+      });
+    }
+  }
+
+  // Заголовок секции
+  writeHeader('🚨  СИГНАЛЫ НЕДЕЛИ', '#333333');
+
+  // 🔴 Проблемные зоны
+  writeHeader('🔴  ПРОБЛЕМНЫЕ ЗОНЫ  (отклонение > −10%)', '#b43232');
+  writeItems(red, '#ffcccc');
+
+  // 🟡 Требуют внимания
+  writeHeader('🟡  ТРЕБУЮТ ВНИМАНИЯ  (−10% до −3%)', '#997800');
+  writeItems(yellow, '#fff2cc');
+
+  // 🟢 Работает хорошо
+  writeHeader('🟢  РАБОТАЕТ ХОРОШО  (рост > +5%)', '#19622a');
+  writeItems(green, '#d9ead3');
+
+  return row;  // возвращаем следующую свободную строку
 }
 
 
