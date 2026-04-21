@@ -135,9 +135,10 @@ function refreshDashboard() {
   // Записать блок «Сигналы недели» (🔴🟡🟢)
   var signalsEnd = writeSignalsSection_(dash, R_DATA + deviations.length + 2, deviations);
 
-  // Сохранить строку начала AI-блока
+  // Сохранить строку начала AI-блока и сразу показать заглушки
   var aiRow = signalsEnd + 2;
   saveAiStartRow_(aiRow);
+  writeAiSkeleton_(dash, aiRow, week);
 
   ss.toast('✅ ' + deviations.length + ' отклонений — неделя ' + week, '🔶 Монблан', 5);
 }
@@ -185,6 +186,9 @@ function getDeviations_(sh, col25, col26) {
     // Дельта: (2026 − 2025) / |2025|
     if (v25 === 0) continue;  // нет базы для сравнения
     var delta = (v26 - v25) / Math.abs(v25);
+
+    // Аномалия: |delta| > 300% — база слишком мала, пропускаем
+    if (Math.abs(delta) > 3) continue;
 
     // Норма ⚪: −3% < delta ≤ +5% — не показываем
     if (delta > T_YELLOW && delta <= T_GREEN) continue;
@@ -303,71 +307,102 @@ function writeStaticHeaders_(dash) {
 // Пишется сразу после таблицы отклонений
 // ═══════════════════════════════════════════════════════════════
 function writeSignalsSection_(dash, startRow, deviations) {
-  var red    = deviations.filter(function(d) { return d.delta < T_RED; });
-  var yellow = deviations.filter(function(d) { return d.delta >= T_RED && d.delta < T_YELLOW; });
-  var green  = deviations.filter(function(d) { return d.delta > T_GREEN; });
+  // Сортируем и берём топ-5 по величине отклонения в каждой зоне
+  var red = deviations
+    .filter(function(d) { return d.delta < T_RED; })
+    .sort(function(a, b) { return a.delta - b.delta; })  // самые красные — первые
+    .slice(0, 5);
+
+  var yellow = deviations
+    .filter(function(d) { return d.delta >= T_RED && d.delta < T_YELLOW; })
+    .sort(function(a, b) { return a.delta - b.delta; })  // самые жёлтые — первые
+    .slice(0, 5);
+
+  var green = deviations
+    .filter(function(d) { return d.delta > T_GREEN; })
+    .sort(function(a, b) { return b.delta - a.delta; })  // самые зелёные — первые
+    .slice(0, 5);
 
   var row = startRow;
 
-  function writeHeader(text, bg, fg) {
-    dash.getRange(row, 1, 1, 5).merge()
-      .setValue(text)
-      .setBackground(bg)
-      .setFontColor(fg || '#ffffff')
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setHorizontalAlignment('left')
-      .setVerticalAlignment('middle');
-    row++;
-  }
-
-  function writeItems(items, bg) {
-    if (items.length === 0) {
-      dash.getRange(row, 1, 1, 5).merge()
-        .setValue('—')
-        .setBackground(bg)
-        .setFontSize(9)
-        .setVerticalAlignment('middle');
-      row++;
-    } else {
-      items.forEach(function(d) {
-        dash.getRange(row, 1, 1, 5).merge()
-          .setValue(d.label)
-          .setBackground(bg)
-          .setFontSize(9)
-          .setVerticalAlignment('middle');
-        row++;
-      });
-    }
-  }
-
-  // Заголовок секции
-  writeHeader('🚨  СИГНАЛЫ НЕДЕЛИ', '#333333');
+  // Заголовок «СИГНАЛЫ НЕДЕЛИ»
+  dash.getRange(row, 1, 1, 5).merge()
+    .setValue('🚨  СИГНАЛЫ НЕДЕЛИ  (топ-5 по каждой зоне)')
+    .setBackground('#333333').setFontColor('#ffffff')
+    .setFontWeight('bold').setFontSize(10)
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  row++;
 
   // 🔴 Проблемные зоны
-  writeHeader('🔴  ПРОБЛЕМНЫЕ ЗОНЫ  (отклонение > −10%)', '#b43232');
-  writeItems(red, '#ffcccc');
+  dash.getRange(row, 1, 1, 5).merge()
+    .setValue('🔴  ПРОБЛЕМНЫЕ ЗОНЫ  (падение > 10%)')
+    .setBackground('#b43232').setFontColor('#ffffff')
+    .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
+  row++;
+  if (red.length === 0) {
+    dash.getRange(row, 1, 1, 5).merge().setValue('— нет').setBackground('#ffcccc').setFontSize(9);
+    row++;
+  } else {
+    red.forEach(function(d) {
+      var pct = Math.round(d.delta * 1000) / 10;
+      dash.getRange(row, 1, 1, 4).merge().setValue(d.label).setBackground('#ffcccc').setFontSize(9).setVerticalAlignment('middle');
+      dash.getRange(row, 5).setValue(pct + '%').setBackground('#ffcccc').setFontSize(9)
+        .setHorizontalAlignment('center').setFontWeight('bold').setFontColor('#b43232');
+      row++;
+    });
+  }
 
   // 🟡 Требуют внимания
-  writeHeader('🟡  ТРЕБУЮТ ВНИМАНИЯ  (−10% до −3%)', '#997800');
-  writeItems(yellow, '#fff2cc');
+  dash.getRange(row, 1, 1, 5).merge()
+    .setValue('🟡  ТРЕБУЮТ ВНИМАНИЯ  (−3% … −10%)')
+    .setBackground('#997800').setFontColor('#ffffff')
+    .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
+  row++;
+  if (yellow.length === 0) {
+    dash.getRange(row, 1, 1, 5).merge().setValue('— нет').setBackground('#fff2cc').setFontSize(9);
+    row++;
+  } else {
+    yellow.forEach(function(d) {
+      var pct = Math.round(d.delta * 1000) / 10;
+      dash.getRange(row, 1, 1, 4).merge().setValue(d.label).setBackground('#fff2cc').setFontSize(9).setVerticalAlignment('middle');
+      dash.getRange(row, 5).setValue(pct + '%').setBackground('#fff2cc').setFontSize(9)
+        .setHorizontalAlignment('center').setFontWeight('bold').setFontColor('#997800');
+      row++;
+    });
+  }
 
   // 🟢 Работает хорошо
-  writeHeader('🟢  РАБОТАЕТ ХОРОШО  (рост > +5%)', '#19622a');
-  writeItems(green, '#d9ead3');
+  dash.getRange(row, 1, 1, 5).merge()
+    .setValue('🟢  РАБОТАЕТ ХОРОШО  (рост > 5%)')
+    .setBackground('#19622a').setFontColor('#ffffff')
+    .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
+  row++;
+  if (green.length === 0) {
+    dash.getRange(row, 1, 1, 5).merge().setValue('— нет').setBackground('#d9ead3').setFontSize(9);
+    row++;
+  } else {
+    green.forEach(function(d) {
+      var pct = Math.round(d.delta * 1000) / 10;
+      dash.getRange(row, 1, 1, 4).merge().setValue(d.label).setBackground('#d9ead3').setFontSize(9).setVerticalAlignment('middle');
+      dash.getRange(row, 5).setValue('+' + pct + '%').setBackground('#d9ead3').setFontSize(9)
+        .setHorizontalAlignment('center').setFontWeight('bold').setFontColor('#19622a');
+      row++;
+    });
+  }
 
-  return row;  // возвращаем следующую свободную строку
+  return row;
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-// ОЧИСТКА ДИНАМИЧЕСКОЙ ЗОНЫ (строки 4 и ниже)
+// ОЧИСТКА ДИНАМИЧЕСКОЙ ЗОНЫ (строки 4 и ниже, 10 колонок)
+// 10 колонок — чтобы гарантированно стереть остатки старого дашборда
 // ═══════════════════════════════════════════════════════════════
 function clearDataRows_(dash) {
   var lastRow = dash.getLastRow();
   if (lastRow < R_DATA) return;
   var numRows = lastRow - R_DATA + 1;
-  var zone = dash.getRange(R_DATA, 1, numRows, 5);
+  var zone = dash.getRange(R_DATA, 1, numRows, 10);
   zone.clearContent();
   zone.clearFormat();
   zone.breakApart();
@@ -420,6 +455,40 @@ function runAiAnalysis() {
   var aiRow = getAiStartRow_() || (R_DATA + deviations.length + 2);
   writeAiBlock_(dash, aiRow, week, aiText);
   ss.toast('✅ AI-анализ готов', '🔶 Монблан', 5);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ЗАГЛУШКА AI-БЛОКА — пишется сразу при обновлении дашборда
+// Показывает структуру, приглашает нажать «Обновить AI-анализ»
+// ═══════════════════════════════════════════════════════════════
+function writeAiSkeleton_(dash, startRow, week) {
+  var placeholder = '← Нажмите «🔶 Монблан» → «Обновить AI-анализ»';
+
+  function writeSkeletonSection(headerRow, headerText) {
+    dash.getRange(headerRow, 1, 1, 5).merge()
+      .setValue(headerText)
+      .setBackground('#3d3d3d')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold')
+      .setFontSize(9)
+      .setVerticalAlignment('middle');
+    for (var i = 0; i < 3; i++) {
+      dash.getRange(headerRow + 1 + i, 1, 1, 5).merge()
+        .setValue(placeholder)
+        .setBackground('#f0f0f0')
+        .setFontColor('#888888')
+        .setFontStyle('italic')
+        .setFontSize(9)
+        .setWrap(true)
+        .setVerticalAlignment('middle')
+        .setHorizontalAlignment('center');
+    }
+  }
+
+  writeSkeletonSection(startRow,      '🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI-анализ — неделя ' + week + ')');
+  writeSkeletonSection(startRow + 5,  '💡  РЕКОМЕНДАЦИИ  (AI)');
+  writeSkeletonSection(startRow + 10, '📋  УПРАВЛЕНЧЕСКИЕ ВЫВОДЫ  (AI)');
 }
 
 
