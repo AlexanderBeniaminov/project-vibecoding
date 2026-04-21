@@ -173,24 +173,19 @@ def setup_spreadsheet(service, spreadsheet_id: str):
 
 
 def _write_metric_columns(service, spreadsheet_id: str):
-    """Записать названия параметров в колонку A каждого листа."""
-    # Ежедневно: A1 — «Дата», A2:An — параметры
+    """Записать названия параметров в колонку A листа «Ежедневно».
+    Лист «Монблан»/«Еженедельно» (gid=2051236241) — НЕ ТРОГАТЬ:
+    его 96-строчная структура управляется setup_weekly_structure.py + monblan_protect.gs.
+    """
     daily_col = [["Дата"]] + [[m] for m in METRICS_DAILY]
 
-    # Еженедельно: A1 — «Неделя №», A2 — «Период (пн–вс)», A3:An — параметры
-    weekly_col = [["Неделя №"], ["Период (пн–вс)"]] + [[m] for m in METRICS_WEEKLY]
-
-    service.spreadsheets().values().batchUpdate(
+    service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
-        body={
-            "valueInputOption": "RAW",
-            "data": [
-                {"range": "Ежедневно!A1",   "values": daily_col},
-                {"range": "Еженедельно!A1", "values": weekly_col},
-            ]
-        }
+        range="Ежедневно!A1",
+        valueInputOption="RAW",
+        body={"values": daily_col},
     ).execute()
-    logger.info("Колонка A с параметрами записана")
+    logger.info("Колонка A листа «Ежедневно» записана")
 
 
 # ---------------------------------------------------------------------------
@@ -199,39 +194,34 @@ def _write_metric_columns(service, spreadsheet_id: str):
 
 def _apply_number_format(service, spreadsheet_id: str):
     """
-    Применить числовой формат с пробелом как разделителем тысяч
-    ко всем ячейкам с данными (колонки B+) на обоих листах.
+    Применить числовой формат # ##0 к листу «Ежедневно» (колонки B+, строки 2+).
+    Лист «Монблан»/«Еженедельно» (gid=2051236241) — НЕ ТРОГАТЬ:
+    его форматы (# ##0 и 0% по строкам) управляются fix_formats_and_dates.py.
     """
     meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     sheet_ids = {s["properties"]["title"]: s["properties"]["sheetId"] for s in meta["sheets"]}
 
-    fmt_number  = {"type": "NUMBER", "pattern": "# ##0"}
-    fmt_decimal = {"type": "NUMBER", "pattern": "# ##0.00"}
+    sid = sheet_ids.get("Ежедневно")
+    if sid is None:
+        logger.warning("Лист «Ежедневно» не найден — формат не применён")
+        return
 
-    requests = []
-    for sheet_name, data_start_row in [("Ежедневно", 1), ("Еженедельно", 2)]:
-        sid = sheet_ids.get(sheet_name)
-        if sid is None:
-            continue
-        # Все данные начиная с колонки B (index 1), строка data_start_row+1 (0-based)
-        requests.append({
+    fmt_number = {"type": "NUMBER", "pattern": "# ##0"}
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{
             "repeatCell": {
                 "range": {
                     "sheetId": sid,
-                    "startRowIndex": data_start_row,
-                    "startColumnIndex": 1,
+                    "startRowIndex": 1,   # строка 2 (0-based)
+                    "startColumnIndex": 1, # колонка B
                 },
                 "cell": {"userEnteredFormat": {"numberFormat": fmt_number}},
                 "fields": "userEnteredFormat.numberFormat",
             }
-        })
-
-    if requests:
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id,
-            body={"requests": requests}
-        ).execute()
-        logger.info("Числовой формат применён")
+        }]},
+    ).execute()
+    logger.info("Числовой формат # ##0 применён к листу «Ежедневно»")
 
 
 def _excel_serial_to_date(serial: int) -> str:
