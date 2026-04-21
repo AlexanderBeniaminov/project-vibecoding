@@ -230,6 +230,67 @@ function removeColumnAProtection() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// 5. ВОССТАНОВЛЕНИЕ ЧИСЛОВЫХ ФОРМАТОВ ЛИСТА МОНБЛАН
+// Запустите из редактора Apps Script если форматы сбились.
+// Применяет: # ##0 для числовых строк, 0% для процентных строк.
+// ═══════════════════════════════════════════════════════════════
+function fixFormatsMonblan() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = getMonblanSheetForProtect_(ss);
+  if (!sh) { SpreadsheetApp.getUi().alert('Лист Монблан не найден'); return; }
+
+  var sheetId = sh.getSheetId();
+
+  // Строки с форматом 0% (остальные 4-96 → # ##0)
+  var pctRows = [6,8,11,13,15,18,20,22,24,26,28,30,
+                 33,35,37,62,64,66,69,71,73,76,78,80,82,84,86];
+  var pctSet = {};
+  pctRows.forEach(function(r) { pctSet[r] = true; });
+
+  var fmtNumber  = { numberFormat: { type: 'NUMBER',  pattern: '#,##0' } };
+  var fmtPercent = { numberFormat: { type: 'PERCENT', pattern: '0%'    } };
+
+  var requests = [];
+  for (var row = 4; row <= 96; row++) {
+    requests.push({
+      repeatCell: {
+        range: {
+          sheetId:          sheetId,
+          startRowIndex:    row - 1,
+          endRowIndex:      row,
+          startColumnIndex: 1,        // столбец B
+          endColumnIndex:   500,
+        },
+        cell: { userEnteredFormat: pctSet[row] ? fmtPercent : fmtNumber },
+        fields: 'userEnteredFormat.numberFormat',
+      }
+    });
+  }
+
+  // Шлём по 50 запросов
+  for (var i = 0; i < requests.length; i += 50) {
+    Sheets.Spreadsheets.batchUpdate(
+      { requests: requests.slice(i, i + 50) },
+      ss.getId()
+    );
+  }
+
+  SpreadsheetApp.getUi().alert(
+    '✅ Форматы восстановлены!\n\n' +
+    '• Числовые строки (4–96): # ##0  (1 000 000)\n' +
+    '• Процентные строки: 0%  (' + pctRows.join(', ') + ')'
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 6. ПОЛНОЕ ВОССТАНОВЛЕНИЕ — столбец A + форматы за один клик
+// ═══════════════════════════════════════════════════════════════
+function restoreAll() {
+  restoreColumnAStructure();
+  fixFormatsMonblan();
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ВСПОМОГАТЕЛЬНАЯ — ПОИСК ЛИСТА
 // ═══════════════════════════════════════════════════════════════
 function getMonblanSheetForProtect_(ss) {
