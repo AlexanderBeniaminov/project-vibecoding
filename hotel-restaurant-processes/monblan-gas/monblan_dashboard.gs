@@ -169,7 +169,7 @@ function writeStaticRows_(dash, mb, col25, col26, week) {
     .setFontWeight('bold').setFontSize(10)
     .setHorizontalAlignment('left').setVerticalAlignment('middle');
   var b2 = dash.getRange(R_SEL, 2);
-  if (!b2.getValue()) b2.setValue(1);
+  b2.setValue(week || 1);  // восстанавливаем после clearContent
   b2.setBackground('#e8f0fe').setFontColor('#1a3a5c')
     .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center');
   if (!b2.getDataValidation()) {
@@ -216,7 +216,19 @@ function writeStaticRows_(dash, mb, col25, col26, week) {
 // Дата-диапазон недели с русскими месяцами
 function weekDateRange_(mb, col, year, week) {
   var stored = mb.getRange(3, col, 1, 1).getValue();
-  if (stored && String(stored).trim()) return String(stored).trim();
+  if (stored) {
+    var s = String(stored).trim();
+    // Парсим формат "DD-MM" (день-месяц начала недели) → "27 фев – 5 мар"
+    var m = s.match(/^(\d{1,2})[.\-\/](\d{1,2})$/);
+    if (m) {
+      var day = parseInt(m[1]);
+      var mon = parseInt(m[2]) - 1;
+      var start = new Date(year, mon, day);
+      var end   = new Date(year, mon, day + 6);
+      function f(x) { return x.getDate() + ' ' + MONTHS_RU[x.getMonth()]; }
+      return f(start) + ' – ' + f(end);
+    }
+  }
   return isoWeekRu_(year, week);
 }
 
