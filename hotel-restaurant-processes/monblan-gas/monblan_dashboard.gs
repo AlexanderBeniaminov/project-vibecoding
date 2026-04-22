@@ -213,43 +213,20 @@ function writeStaticRows_(dash, mb, col25, col26, week) {
   dash.setColumnWidth(5, 40);
 }
 
-// Дата-диапазон недели (Пн–Вс).
-// Якорь — понедельник первой недели года; остальные = якорь + (week-1)*7 дней.
+// Дата-диапазон недели (Пн–Вс) по ISO 8601.
+// Неделя 1 = неделя, содержащая первый четверг года (4 янв всегда в нед. 1).
+// 2025, нед.1: 30 дек 2024 – 5 янв 2025; 2026, нед.1: 29 дек 2025 – 4 янв 2026.
 function weekDateRange_(mb, year, week) {
-  var col1 = findWeekCol_(mb, year, 1);
-  if (!col1) return isoWeekRu_(year, week);
+  var jan4 = new Date(year, 0, 4);
+  var dow   = jan4.getDay();                          // 0=Вс, 1=Пн … 6=Сб
+  var offsetToMon = (dow === 0) ? -6 : (1 - dow);    // сдвиг к понедельнику
+  var week1Mon = new Date(year, 0, 4 + offsetToMon);
 
-  var mon1 = parseDateToMonday_(mb.getRange(3, col1, 1, 1).getValue(), year);
-  if (!mon1) return isoWeekRu_(year, week);
-
-  var start = new Date(mon1.getFullYear(), mon1.getMonth(), mon1.getDate() + (week - 1) * 7);
+  var start = new Date(week1Mon.getFullYear(), week1Mon.getMonth(),
+                       week1Mon.getDate() + (week - 1) * 7);
   var end   = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
   function f(x) { return x.getDate() + ' ' + MONTHS_RU[x.getMonth()]; }
   return f(start) + ' – ' + f(end);
-}
-
-// Парсим значение ячейки → дата → ближайший понедельник (не позже этой даты)
-function parseDateToMonday_(stored, year) {
-  var date = null;
-  if (stored instanceof Date && !isNaN(stored.getTime())) {
-    date = stored;
-  } else {
-    var s = String(stored || '').trim();
-    var m = s.match(/^(\d{1,2})[.\-\/](\d{1,2})$/);  // DD.MM или DD-MM
-    if (m) date = new Date(year, parseInt(m[2]) - 1, parseInt(m[1]));
-  }
-  if (!date) return null;
-  var dow = date.getDay();                       // 0=Вс 1=Пн … 6=Сб
-  var offset = (dow === 0) ? -6 : (1 - dow);    // сдвиг к понедельнику
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset);
-}
-
-function isoWeekRu_(year, week) {
-  var d = new Date(year, 0, 4);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + (week - 1) * 7);
-  var sun = new Date(d); sun.setDate(d.getDate() + 6);
-  function f(x) { return x.getDate() + ' ' + MONTHS_RU[x.getMonth()]; }
-  return f(d) + ' – ' + f(sun);
 }
 
 
