@@ -1,5 +1,6 @@
 
 # Секреты — никогда не коммитить
+.env
 *.json
 !package.json
 hotel-restaurant-processes/scripts/credentials.json
