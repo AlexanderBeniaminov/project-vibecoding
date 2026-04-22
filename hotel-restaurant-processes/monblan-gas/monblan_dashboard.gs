@@ -105,10 +105,10 @@ function refreshDashboard() {
   // Строки 1–4 (заголовок, выбор, года, даты)
   writeStaticRows_(dash, mb, col25, col26, week);
 
-  if (!week || isNaN(week) || week < 1 || week > 5) {
+  if (!week || isNaN(week) || week < 1 || week > 52) {
     clearDataRows_(dash);
     dash.getRange(R_DATA, 1, 1, 5).merge()
-      .setValue('⚠️ Выберите неделю в ячейке B2 (1–5)')
+      .setValue('⚠️ Выберите неделю в ячейке B2 (1–52)')
       .setBackground('#fff3cd').setHorizontalAlignment('center').setFontWeight('bold');
     return;
   }
@@ -164,7 +164,7 @@ function writeStaticRows_(dash, mb, col25, col26, week) {
   dash.setRowHeight(R_TITLE, 34);
 
   // Строка 2 — выбор недели
-  dash.getRange(R_SEL, 1).setValue('Выберите неделю 2026 (1–5):')
+  dash.getRange(R_SEL, 1).setValue('Выберите неделю 2026 (1–52):')
     .setBackground('#e8f0fe').setFontColor('#1a3a5c')
     .setFontWeight('bold').setFontSize(10)
     .setHorizontalAlignment('left').setVerticalAlignment('middle');
@@ -172,10 +172,8 @@ function writeStaticRows_(dash, mb, col25, col26, week) {
   b2.setValue(week || 1);  // восстанавливаем после clearContent
   b2.setBackground('#e8f0fe').setFontColor('#1a3a5c')
     .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center');
-  if (!b2.getDataValidation()) {
-    b2.setDataValidation(SpreadsheetApp.newDataValidation()
-      .requireValueInList(['1','2','3','4','5'], true).build());
-  }
+  b2.setDataValidation(SpreadsheetApp.newDataValidation()
+    .requireNumberBetween(1, 52).build());
   dash.getRange(R_SEL, 3, 1, 3).setBackground('#e8f0fe');
   dash.setRowHeight(R_SEL, 28);
 
