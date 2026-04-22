@@ -1,10 +1,8 @@
 /**
  * КОНФИГУРАЦИЯ — МОНБЛАН ЕЖЕНЕДЕЛЬНЫЙ ТРЕКИНГ
  *
- * Заполните все поля перед запуском скриптов.
- * Файл хранится в Apps Script редактора второй таблицы.
- *
- * Google Таблица: https://docs.google.com/spreadsheets/d/1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI/edit
+ * Файл хранится в Apps Script редактора таблицы:
+ * https://docs.google.com/spreadsheets/d/1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI/edit
  */
 
 const MB_CONFIG = {
@@ -35,8 +33,8 @@ const MB_CONFIG = {
   IIKO: {
     WEB_URL:  'https://kafe-monblan.iikoweb.ru',
     STORE_ID: 82455,           // integer ID в iikoWeb
-    LOGIN:    '',              // ← логин iikoWeb (вставьте в Apps Script редакторе)
-    PASSWORD: '',              // ← пароль iikoWeb
+    LOGIN:    'buh',
+    PASSWORD: 'Vjy,kfy2024',
   },
 
   // ── УВЕДОМЛЕНИЯ ───────────────────────────────────────────────
@@ -46,9 +44,9 @@ const MB_CONFIG = {
   },
 
   // ── РАСПИСАНИЕ ────────────────────────────────────────────────
-  // Запуск каждый понедельник в 06:00 (сбор данных за прошедший Пн–Вс)
+  // Триггер installWeeklyTrigger() — каждый понедельник в 09:00 UTC+5
   SCHEDULE: {
     DAY_OF_WEEK: 1,  // 1 = понедельник
-    HOUR:        6,
+    HOUR:        9,
   },
 };
