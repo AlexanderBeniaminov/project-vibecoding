@@ -332,6 +332,7 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
   }
 
   // ── Запрос 2: выручка по категориям (кухня / бар) ───────────
+  Utilities.sleep(15000);
   var catRows = olapQuery_(token, 'SALES', ['DishCategory.Accounting'],
     ['DishDiscountSumInt'], baseFilters);
 
@@ -348,6 +349,7 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
   }
 
   // ── Запрос 3: выручка/гости/чеки по часу закрытия ───────────
+  Utilities.sleep(15000);
   var hourRows = olapQuery_(token, 'SALES', ['HourClose'],
     ['DishDiscountSumInt', 'GuestNum', 'UniqOrderId.OrdersCount'], baseFilters);
 
