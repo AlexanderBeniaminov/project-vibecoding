@@ -147,7 +147,7 @@ function findWeekCol_(sh, year, week) {
 // ═══════════════════════════════════════════════════════════════
 function writeStaticRows_(dash, mb, col25, col26, week) {
   // Очищаем строки 1–4
-  dash.getRange(R_TITLE, 1, 4, 5).clearContent().clearFormat().breakApart();
+  dash.getRange(R_TITLE, 1, 4, 5).breakApart().clearContent().clearFormat();
 
   // Строка 1 — заголовок
   dash.getRange(R_TITLE, 1, 1, 5).merge()
@@ -290,7 +290,7 @@ function writeAllMetricRows_(dash, mb, col25, col26) {
     var cStr = fmtCell_(v26, isPct);
     var dStr = hasDelta ? fmtDelta_(delta, isPct) : '';
     var eStr = hasDelta ? getSignal_(delta, isPct) : '';
-    var rowLabel = isPct ? '' : label;
+    var rowLabel = isPct ? ('  % ' + lastLabel) : label;
 
     dash.getRange(dashRow, 1, 1, 5).setValues([[rowLabel, bStr, cStr, dStr, eStr]]);
 
