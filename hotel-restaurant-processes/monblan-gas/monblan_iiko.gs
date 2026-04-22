@@ -114,25 +114,34 @@ function getIikoToken_() {
 
   var cfg = MB_CONFIG.IIKO;
   var url = cfg.WEB_URL + '/api/auth/login';
+  var options = {
+    method:             'POST',
+    contentType:        'application/json',
+    payload:            JSON.stringify({login: cfg.LOGIN, password: cfg.PASSWORD}),
+    muteHttpExceptions: true,
+  };
 
-  try {
-    var resp = UrlFetchApp.fetch(url, {
-      method:           'POST',
-      contentType:      'application/json',
-      payload:          JSON.stringify({login: cfg.LOGIN, password: cfg.PASSWORD}),
-      muteHttpExceptions: true,
-    });
-    if (resp.getResponseCode() === 200) {
-      var data = JSON.parse(resp.getContentText());
-      if (!data.error && data.token) {
-        _iikoTokenCache_ = data.token;
-        Logger.log('iikoWeb: авторизован');
-        return data.token;
-      }
-      Logger.log('iikoWeb login error: ' + JSON.stringify(data));
+  for (var attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      Logger.log('iikoWeb: пауза 60 сек перед попыткой ' + (attempt + 1));
+      Utilities.sleep(60000);
     }
-  } catch(e) {
-    Logger.log('Ошибка авторизации iikoWeb: ' + e.message);
+    try {
+      var resp = UrlFetchApp.fetch(url, options);
+      if (resp.getResponseCode() === 200) {
+        var data = JSON.parse(resp.getContentText());
+        if (!data.error && data.token) {
+          _iikoTokenCache_ = data.token;
+          Logger.log('iikoWeb: авторизован');
+          return data.token;
+        }
+        Logger.log('iikoWeb login error: ' + JSON.stringify(data));
+      } else {
+        Logger.log('iikoWeb HTTP ' + resp.getResponseCode() + ': ' + resp.getContentText().slice(0, 200));
+      }
+    } catch(e) {
+      Logger.log('Ошибка авторизации iikoWeb: ' + e.message);
+    }
   }
   return null;
 }
