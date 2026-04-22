@@ -247,11 +247,16 @@ function fixFormatsMonblan() {
   var pctSet = {};
   pctRows.forEach(function(r) { pctSet[r] = true; });
 
-  var fmtNumber  = { numberFormat: { type: 'NUMBER',  pattern: '#,##0' } };
-  var fmtPercent = { numberFormat: { type: 'PERCENT', pattern: '0%'    } };
+  var fmtNumber  = { numberFormat: { type: 'NUMBER',  pattern: '#,##0'   } };
+  var fmtDecimal = { numberFormat: { type: 'NUMBER',  pattern: '#,##0.0' } };
+  var fmtPercent = { numberFormat: { type: 'PERCENT', pattern: '0%'      } };
+
+  // Строки с одним знаком после запятой (Оборачиваемость столов/мест)
+  var decimalSet = {52:1, 53:1, 54:1, 55:1, 56:1, 57:1, 58:1, 59:1};
 
   var requests = [];
   for (var row = 4; row <= 96; row++) {
+    var fmt = pctSet[row] ? fmtPercent : (decimalSet[row] ? fmtDecimal : fmtNumber);
     requests.push({
       repeatCell: {
         range: {
@@ -261,7 +266,7 @@ function fixFormatsMonblan() {
           startColumnIndex: 1,        // столбец B
           endColumnIndex:   500,
         },
-        cell: { userEnteredFormat: pctSet[row] ? fmtPercent : fmtNumber },
+        cell: { userEnteredFormat: fmt },
         fields: 'userEnteredFormat.numberFormat',
       }
     });

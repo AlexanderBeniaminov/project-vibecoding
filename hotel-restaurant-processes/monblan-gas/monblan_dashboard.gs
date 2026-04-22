@@ -37,6 +37,12 @@ var PCT_ROWS_MB = {
 // ── Исключённые строки (Столов=87, Посадочных мест=88) ───────
 var SKIP_ROWS_MB = {87:1, 88:1};
 
+// ── Явные заголовки секций (никогда не имеют собственных данных) ──
+var HEADER_ROWS_MB = {60:1, 74:1, 90:1};
+
+// ── Строки с одним знаком после запятой (Оборачиваемость) ────
+var DECIMAL_ROWS_MB = {52:1, 53:1, 54:1, 55:1, 56:1, 57:1, 58:1, 59:1};
+
 // ── Строки дашборда ──────────────────────────────────────────
 var R_TITLE = 1;
 var R_SEL   = 2;
@@ -260,8 +266,8 @@ function writeAllMetricRows_(dash, mb, col25, col26) {
 
     if (!isPct && !label) continue;  // пустые разделители — пропускаем
 
-    if (!isPct && v25 === 0 && v26 === 0) {
-      // Заголовок секции (нет данных)
+    if (!isPct && HEADER_ROWS_MB[rowNum]) {
+      // Явный заголовок секции (без данных)
       dash.getRange(dashRow, 1, 1, 5).merge()
         .setValue('  ' + label)
         .setBackground('#cfd8e8').setFontColor('#1a2a4a')
@@ -272,24 +278,27 @@ function writeAllMetricRows_(dash, mb, col25, col26) {
       continue;
     }
 
+    var isDecimal = !!DECIMAL_ROWS_MB[rowNum];
+    var isNoBase  = (!isPct && v25 === 0);  // нет базы 2025 → зелёный, дельта "0"
+
     // Вычисляем дельту
     var delta    = null;
     var hasDelta = false;
     if (isPct) {
-      delta    = v26 - v25;  // разница в п.п. (в долях: -0.05 = -5 п.п.)
+      delta    = v26 - v25;
       hasDelta = true;
-    } else if (v25 !== 0) {
+    } else if (!isNoBase) {
       var d = (v26 - v25) / Math.abs(v25);
       if (Math.abs(d) <= 3) { delta = d; hasDelta = true; }
     }
 
-    var bg = hasDelta ? getBgColor_(delta, isPct) : null;
+    var bg   = isNoBase ? '#c3e6cb' : (hasDelta ? getBgColor_(delta, isPct) : null);
+    var dStr = isNoBase ? '0' : (hasDelta ? fmtDelta_(delta, isPct) : '');
+    var eStr = isNoBase ? '🟢' : (hasDelta ? getSignal_(delta, isPct) : '');
 
     // Форматирование значений для ячеек
-    var bStr = fmtCell_(v25, isPct);
-    var cStr = fmtCell_(v26, isPct);
-    var dStr = hasDelta ? fmtDelta_(delta, isPct) : '';
-    var eStr = hasDelta ? getSignal_(delta, isPct) : '';
+    var bStr = fmtCell_(v25, isPct, isDecimal);
+    var cStr = fmtCell_(v26, isPct, isDecimal);
     var rowLabel = isPct ? ('  % ' + lastLabel) : label;
 
     dash.getRange(dashRow, 1, 1, 5).setValues([[rowLabel, bStr, cStr, dStr, eStr]]);
@@ -580,10 +589,14 @@ function fmtDelta_(delta, isPct) {
   return sign + (Math.round(delta * 1000) / 10) + '%';
 }
 
-function fmtCell_(v, isPct) {
+function fmtCell_(v, isPct, isDecimal) {
   if (v === null || v === undefined) return '—';
   if (isPct) return (Math.round(v * 1000) / 10) + '%';
   if (!v) return '0';
+  if (isDecimal) {
+    var s = (Math.round(v * 10) / 10).toFixed(1).split('.');
+    return s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + s[1];
+  }
   return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
