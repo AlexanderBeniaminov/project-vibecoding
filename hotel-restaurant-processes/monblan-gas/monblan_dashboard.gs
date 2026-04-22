@@ -1,52 +1,54 @@
 /**
- * МОНБЛАН — ДАШБОРД: ВСЕ ОТКЛОНЕНИЯ + AI-АНАЛИЗ
+ * МОНБЛАН — ДАШБОРД
  *
- * Показывает ВСЕ метрики листа «Монблан» у которых есть отклонение:
- *   🔴 падение > 10%  |  🟡 падение 3–10%  |  🟢 рост > 5%
- *   ⚪ норма (−3% … +5%) — НЕ показывается.
+ * Строки 1–4: заголовок, выбор недели, годы, даты
+ * Строки 5+:  ВСЕ показатели листа «Монблан» (кроме Столов и Посадочных мест)
+ *             включая процентные строки, заголовки секций
+ * После:      Сигналы недели (топ-5) + AI-блок
  *
- * Если у недели 3 отклонения — показывает 3 строки.
- * Если 25 — показывает 25. Структура динамическая.
- *
- * Структура дашборда:
- *   Строка 1 — заголовок
- *   Строка 2 — B2: выбор недели (1–5)
- *   Строка 3 — шапка таблицы (Показатель | 2025 | 2026 | Δ% | ●)
- *   Строки 4+ — динамические строки отклонений (количество = факт)
- *   +2 строки отступ
- *   AI-блок: Причины / Рекомендации / Выводы
- *
- * Установка:
- *   1. Вставьте этот файл в Apps Script таблицы
- *   2. Выберите функцию installTrigger → запустите (один раз)
- *   3. Меню «🔶 Монблан» → «Обновить дашборд» — для первого заполнения
+ * Цвета — абсолютные строки (относительное изменение):
+ *   🔴 > 10% снижения  🟡 3–10%  ⚪ норма  🟢 > 5% роста
+ * Цвета — % строки (процентные пункты):
+ *   🔴 > 5 п.п. снижения  🟡 1–5 п.п.  ⚪ норма  🟢 > 3 п.п. роста
+ * Цвет закрашивает ВСЮ строку по горизонтали.
  */
 
 var DASH_GID    = 1669207980;
 var DASH_NAME   = 'Дашборд';
-var MONBLAN_GID = 2051236241;  // лист «Монблан» (он же «Еженедельно»)
+var MONBLAN_GID = 2051236241;
 
-// ── Пороги отклонений ────────────────────────────────────────
-var T_RED    = -0.10;  // 🔴 падение > 10%
-var T_YELLOW = -0.03;  // 🟡 падение 3–10%
-var T_GREEN  =  0.05;  // 🟢 рост > 5%
+// ── Пороги: абсолютные строки ────────────────────────────────
+var T_RED    = -0.10;
+var T_YELLOW = -0.03;
+var T_GREEN  =  0.05;
 
-// ── Строки с процентным форматом в листе Монблан ─────────────
+// ── Пороги: процентные строки (п.п.) ─────────────────────────
+var T_RED_PP    = -0.05;
+var T_YELLOW_PP = -0.01;
+var T_GREEN_PP  =  0.03;
+
+// ── % строки листа «Монблан» ─────────────────────────────────
 var PCT_ROWS_MB = {
   6:1, 8:1, 11:1, 13:1, 15:1, 18:1, 20:1, 22:1, 24:1, 26:1, 28:1, 30:1,
   33:1, 35:1, 37:1, 62:1, 64:1, 66:1, 69:1, 71:1, 73:1,
   76:1, 78:1, 80:1, 82:1, 84:1, 86:1
 };
 
-// ── Фиксированные строки дашборда ────────────────────────────
+// ── Исключённые строки (Столов=87, Посадочных мест=88) ───────
+var SKIP_ROWS_MB = {87:1, 88:1};
+
+// ── Строки дашборда ──────────────────────────────────────────
 var R_TITLE = 1;
-var R_SEL   = 2;   // B2 — выбор недели
-var R_HDR   = 3;   // шапка колонок
-var R_DATA  = 4;   // первая строка данных (количество динамическое)
+var R_SEL   = 2;
+var R_HDR   = 3;
+var R_DATE  = 4;
+var R_DATA  = 5;
+
+var MONTHS_RU = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
 
 
 // ═══════════════════════════════════════════════════════════════
-// УСТАНОВКА ТРИГГЕРА — запустите один раз
+// УСТАНОВКА ТРИГГЕРА
 // ═══════════════════════════════════════════════════════════════
 function installTrigger() {
   ScriptApp.getProjectTriggers().forEach(function(t) {
@@ -54,15 +56,10 @@ function installTrigger() {
   });
   ScriptApp.newTrigger('onEditDashboard')
     .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
-    .onEdit()
-    .create();
-  SpreadsheetApp.getUi().alert('✅ Триггер установлен!\nТеперь при смене недели в B2 дашборд обновляется автоматически.');
+    .onEdit().create();
+  SpreadsheetApp.getUi().alert('✅ Триггер установлен!\nПри смене недели в B2 дашборд обновляется автоматически.');
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-// КАСТОМНОЕ МЕНЮ
-// ═══════════════════════════════════════════════════════════════
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🔶 Монблан')
@@ -73,10 +70,6 @@ function onOpen() {
     .addToUi();
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-// ONEIT-ТРИГГЕР — срабатывает при изменении B2
-// ═══════════════════════════════════════════════════════════════
 function onEditDashboard(e) {
   if (!e) return;
   var rng = e.range;
@@ -88,7 +81,7 @@ function onEditDashboard(e) {
 
 
 // ═══════════════════════════════════════════════════════════════
-// ГЛАВНАЯ ФУНКЦИЯ — обновить дашборд
+// ГЛАВНАЯ ФУНКЦИЯ
 // ═══════════════════════════════════════════════════════════════
 function refreshDashboard() {
   var ss   = SpreadsheetApp.getActiveSpreadsheet();
@@ -98,55 +91,44 @@ function refreshDashboard() {
   if (!dash) { SpreadsheetApp.getUi().alert('Лист «Дашборд» не найден (GID=' + DASH_GID + ')'); return; }
   if (!mb)   { SpreadsheetApp.getUi().alert('Лист «Монблан» не найден (GID=' + MONBLAN_GID + ')'); return; }
 
-  // Написать статичные заголовки (строки 1–3) если их нет
-  writeStaticHeaders_(dash);
-
   var week = parseInt(dash.getRange(R_SEL, 2).getValue());
+
+  var col25 = week ? findWeekCol_(mb, 2025, week) : null;
+  var col26 = week ? findWeekCol_(mb, 2026, week) : null;
+
+  // Строки 1–4 (заголовок, выбор, года, даты)
+  writeStaticRows_(dash, mb, col25, col26, week);
+
   if (!week || isNaN(week) || week < 1 || week > 5) {
     clearDataRows_(dash);
-    dash.getRange(R_DATA, 1).setValue('⚠️ Выберите неделю в ячейке B2 (1–5)');
+    dash.getRange(R_DATA, 1, 1, 5).merge()
+      .setValue('⚠️ Выберите неделю в ячейке B2 (1–5)')
+      .setBackground('#fff3cd').setHorizontalAlignment('center').setFontWeight('bold');
     return;
   }
 
-  ss.toast('Читаем данные Монблан...', '🔶 Монблан', 30);
+  ss.toast('Загружаем данные...', '🔶 Монблан', 60);
 
-  // Найти столбцы года/недели
-  var col25 = findWeekCol_(mb, 2025, week);
-  var col26 = findWeekCol_(mb, 2026, week);
-
-  // Посчитать все отклонения
-  var deviations = getDeviations_(mb, col25, col26);
-
-  // Очистить старые строки данных
   clearDataRows_(dash);
 
-  if (deviations.length === 0) {
-    dash.getRange(R_DATA, 1, 1, 5).merge()
-      .setValue('✅ Все показатели недели ' + week + ' в норме — отклонений нет')
-      .setBackground('#d9ead3').setFontWeight('bold');
-    saveAiStartRow_(R_DATA + 4);
-    ss.toast('✅ Отклонений нет — неделя ' + week, '🔶 Монблан', 5);
-    return;
-  }
+  // Все метрики (строки 5+)
+  var lastDataRow = writeAllMetricRows_(dash, mb, col25, col26);
 
-  // Записать строки отклонений
-  writeDeviationRows_(dash, deviations);
+  // Сигналы недели
+  var signals    = computeSignals_(mb, col25, col26);
+  var signalsEnd = writeSignalsSection_(dash, lastDataRow + 2, signals);
 
-  // Записать блок «Сигналы недели» (🔴🟡🟢)
-  var signalsEnd = writeSignalsSection_(dash, R_DATA + deviations.length + 2, deviations);
-
-  // Сохранить строку начала AI-блока и сразу показать заглушки
+  // AI-заглушка
   var aiRow = signalsEnd + 2;
   saveAiStartRow_(aiRow);
   writeAiSkeleton_(dash, aiRow, week);
 
-  ss.toast('✅ ' + deviations.length + ' отклонений — неделя ' + week, '🔶 Монблан', 5);
+  ss.toast('✅ Дашборд обновлён — неделя ' + week, '🔶 Монблан', 5);
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-// ПОИСК СТОЛБЦА ГОДА/НЕДЕЛИ В ЛИСТЕ МОНБЛАН
-// Строка 1 = год, строка 2 = номер недели
+// ПОИСК СТОЛБЦА ГОДА/НЕДЕЛИ
 // ═══════════════════════════════════════════════════════════════
 function findWeekCol_(sh, year, week) {
   var lastCol = sh.getLastColumn();
@@ -154,263 +136,317 @@ function findWeekCol_(sh, year, week) {
   var yearRow = sh.getRange(1, 1, 1, lastCol).getValues()[0];
   var weekRow = sh.getRange(2, 1, 1, lastCol).getValues()[0];
   for (var i = 1; i < yearRow.length; i++) {
-    if (parseInt(yearRow[i]) === year && parseInt(weekRow[i]) === week) {
-      return i + 1;  // 1-based
-    }
+    if (parseInt(yearRow[i]) === year && parseInt(weekRow[i]) === week) return i + 1;
   }
   return null;
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-// ЧТЕНИЕ МЕТРИК И РАСЧЁТ ДЕЛЬТ
-// Возвращает только строки с отклонением (не ⚪)
+// СТРОКИ 1–4: ЗАГОЛОВОК / ВЫБОР НЕДЕЛИ / ГОДЫ / ДАТЫ
 // ═══════════════════════════════════════════════════════════════
-function getDeviations_(sh, col25, col26) {
+function writeStaticRows_(dash, mb, col25, col26, week) {
+  // Очищаем строки 1–4
+  dash.getRange(R_TITLE, 1, 4, 5).clearContent().clearFormat().breakApart();
+
+  // Строка 1 — заголовок
+  dash.getRange(R_TITLE, 1, 1, 5).merge()
+    .setValue('ДАШБОРД — МОНБЛАН')
+    .setBackground('#1a3a5c').setFontColor('#ffffff')
+    .setFontWeight('bold').setFontSize(14)
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  dash.setRowHeight(R_TITLE, 34);
+
+  // Строка 2 — выбор недели
+  dash.getRange(R_SEL, 1).setValue('Выберите неделю 2026 (1–5):')
+    .setBackground('#e8f0fe').setFontColor('#1a3a5c')
+    .setFontWeight('bold').setFontSize(10)
+    .setHorizontalAlignment('left').setVerticalAlignment('middle');
+  var b2 = dash.getRange(R_SEL, 2);
+  if (!b2.getValue()) b2.setValue(1);
+  b2.setBackground('#e8f0fe').setFontColor('#1a3a5c')
+    .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center');
+  if (!b2.getDataValidation()) {
+    b2.setDataValidation(SpreadsheetApp.newDataValidation()
+      .requireValueInList(['1','2','3','4','5'], true).build());
+  }
+  dash.getRange(R_SEL, 3, 1, 3).setBackground('#e8f0fe');
+  dash.setRowHeight(R_SEL, 28);
+
+  // Строка 3 — годы
+  dash.getRange(R_HDR, 1, 1, 5).setValues([['Показатель', '2025', '2026', 'Δ', '●']])
+    .setBackground('#2d6a9f').setFontColor('#ffffff')
+    .setFontWeight('bold').setFontSize(10)
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  dash.getRange(R_HDR, 1).setHorizontalAlignment('left');
+  dash.setRowHeight(R_HDR, 24);
+
+  // Строка 4 — даты
+  var date25 = (col25 && week) ? weekDateRange_(mb, col25, 2025, week) : '—';
+  var date26 = (col26 && week) ? weekDateRange_(mb, col26, 2026, week) : '—';
+  dash.getRange(R_DATE, 1).setValue('Период:')
+    .setBackground('#dce8fc').setFontColor('#1a3a5c')
+    .setFontStyle('italic').setFontSize(9).setVerticalAlignment('middle');
+  dash.getRange(R_DATE, 2).setValue(date25)
+    .setBackground('#dce8fc').setFontColor('#1a3a5c')
+    .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  dash.getRange(R_DATE, 3).setValue(date26)
+    .setBackground('#dce8fc').setFontColor('#1a3a5c')
+    .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  dash.getRange(R_DATE, 4, 1, 2).setBackground('#dce8fc');
+  dash.setRowHeight(R_DATE, 20);
+
+  // Заморозить строки 1–4
+  dash.setFrozenRows(4);
+
+  // Ширины колонок
+  dash.setColumnWidth(1, 260);
+  dash.setColumnWidth(2, 120);
+  dash.setColumnWidth(3, 120);
+  dash.setColumnWidth(4, 90);
+  dash.setColumnWidth(5, 40);
+}
+
+// Дата-диапазон недели с русскими месяцами
+function weekDateRange_(mb, col, year, week) {
+  var stored = mb.getRange(3, col, 1, 1).getValue();
+  if (stored && String(stored).trim()) return String(stored).trim();
+  return isoWeekRu_(year, week);
+}
+
+function isoWeekRu_(year, week) {
+  var d = new Date(year, 0, 4);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + (week - 1) * 7);
+  var sun = new Date(d); sun.setDate(d.getDate() + 6);
+  function f(x) { return x.getDate() + ' ' + MONTHS_RU[x.getMonth()]; }
+  return f(d) + ' – ' + f(sun);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ОЧИСТКА СТРОК ДАННЫХ (5+)
+// ═══════════════════════════════════════════════════════════════
+function clearDataRows_(dash) {
+  var lastRow = dash.getLastRow();
+  if (lastRow < R_DATA) return;
+  dash.getRange(R_DATA, 1, lastRow - R_DATA + 1, 5)
+    .clearContent().clearFormat().breakApart();
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ВСЕ МЕТРИКИ (строки 5+)
+// Полная копия листа «Монблан», кроме Столов и Посадочных мест
+// ═══════════════════════════════════════════════════════════════
+function writeAllMetricRows_(dash, mb, col25, col26) {
   var N      = 96;
-  var labels = sh.getRange(1, 1, N, 1).getValues();
-  var vals25 = col25 ? sh.getRange(1, col25, N, 1).getValues() : null;
-  var vals26 = col26 ? sh.getRange(1, col26, N, 1).getValues() : null;
+  var labels = mb.getRange(1, 1, N, 1).getValues();
+  var v25arr = col25 ? mb.getRange(1, col25, N, 1).getValues() : null;
+  var v26arr = col26 ? mb.getRange(1, col26, N, 1).getValues() : null;
 
-  var result = [];
-  for (var i = 3; i < N; i++) {  // строки 4–96 (0-based: 3–95)
+  var dashRow   = R_DATA;
+  var lastLabel = '';
+
+  for (var i = 3; i < N; i++) {
+    var rowNum = i + 1;
+    if (SKIP_ROWS_MB[rowNum]) continue;
+
     var label = String(labels[i][0] || '').trim();
-    if (!label) continue;
+    var isPct = !!PCT_ROWS_MB[rowNum];
+    var v25   = v25arr ? (parseFloat(v25arr[i][0]) || 0) : 0;
+    var v26   = v26arr ? (parseFloat(v26arr[i][0]) || 0) : 0;
 
-    var v25 = vals25 ? (parseFloat(vals25[i][0]) || 0) : 0;
-    var v26 = vals26 ? (parseFloat(vals26[i][0]) || 0) : 0;
+    if (label) lastLabel = label;
 
-    // Нет данных ни за один год — пропускаем
+    if (!isPct && !label) continue;  // пустые разделители — пропускаем
+
+    if (!isPct && v25 === 0 && v26 === 0) {
+      // Заголовок секции (нет данных)
+      dash.getRange(dashRow, 1, 1, 5).merge()
+        .setValue('  ' + label)
+        .setBackground('#cfd8e8').setFontColor('#1a2a4a')
+        .setFontWeight('bold').setFontSize(9)
+        .setHorizontalAlignment('left').setVerticalAlignment('middle');
+      dash.setRowHeight(dashRow, 20);
+      dashRow++;
+      continue;
+    }
+
+    // Вычисляем дельту
+    var delta    = null;
+    var hasDelta = false;
+    if (isPct) {
+      delta    = v26 - v25;  // разница в п.п. (в долях: -0.05 = -5 п.п.)
+      hasDelta = true;
+    } else if (v25 !== 0) {
+      var d = (v26 - v25) / Math.abs(v25);
+      if (Math.abs(d) <= 3) { delta = d; hasDelta = true; }
+    }
+
+    var bg = hasDelta ? getBgColor_(delta, isPct) : null;
+
+    // Форматирование значений для ячеек
+    var bStr = fmtCell_(v25, isPct);
+    var cStr = fmtCell_(v26, isPct);
+    var dStr = hasDelta ? fmtDelta_(delta, isPct) : '';
+    var eStr = hasDelta ? getSignal_(delta, isPct) : '';
+    var rowLabel = isPct ? '' : label;
+
+    dash.getRange(dashRow, 1, 1, 5).setValues([[rowLabel, bStr, cStr, dStr, eStr]]);
+
+    var rowRng = dash.getRange(dashRow, 1, 1, 5);
+    rowRng.setFontSize(9).setVerticalAlignment('middle');
+    rowRng.setBackground(bg || (dashRow % 2 === 0 ? '#f8f9fa' : '#ffffff'));
+
+    if (isPct) {
+      rowRng.setFontStyle('italic').setFontColor('#555555');
+      if (!bg) rowRng.setBackground('#f2f4f8');
+    } else {
+      dash.getRange(dashRow, 1).setFontColor('#000000').setFontStyle('normal');
+    }
+
+    dash.getRange(dashRow, 1).setHorizontalAlignment('left');
+    dash.getRange(dashRow, 2, 1, 2).setHorizontalAlignment('right');
+    dash.getRange(dashRow, 4, 1, 2).setHorizontalAlignment('center');
+    if (hasDelta && bg) dash.getRange(dashRow, 4).setFontWeight('bold');
+
+    dash.setRowHeight(dashRow, isPct ? 18 : 20);
+    dashRow++;
+  }
+
+  return dashRow;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// СИГНАЛЫ: вычислить список отклонений для сигнальной секции
+// ═══════════════════════════════════════════════════════════════
+function computeSignals_(mb, col25, col26) {
+  var N      = 96;
+  var labels = mb.getRange(1, 1, N, 1).getValues();
+  var v25arr = col25 ? mb.getRange(1, col25, N, 1).getValues() : null;
+  var v26arr = col26 ? mb.getRange(1, col26, N, 1).getValues() : null;
+
+  var result    = [];
+  var lastLabel = '';
+
+  for (var i = 3; i < N; i++) {
+    var rowNum = i + 1;
+    if (SKIP_ROWS_MB[rowNum]) continue;
+
+    var label = String(labels[i][0] || '').trim();
+    var isPct = !!PCT_ROWS_MB[rowNum];
+    if (label) lastLabel = label;
+
+    var dispLabel = isPct ? ('% ' + lastLabel) : label;
+    if (!dispLabel) continue;
+
+    var v25 = v25arr ? (parseFloat(v25arr[i][0]) || 0) : 0;
+    var v26 = v26arr ? (parseFloat(v26arr[i][0]) || 0) : 0;
     if (v25 === 0 && v26 === 0) continue;
 
-    // Дельта: (2026 − 2025) / |2025|
-    if (v25 === 0) continue;  // нет базы для сравнения
-    var delta = (v26 - v25) / Math.abs(v25);
+    var delta;
+    if (isPct) {
+      delta = v26 - v25;
+    } else {
+      if (v25 === 0) continue;
+      delta = (v26 - v25) / Math.abs(v25);
+      if (Math.abs(delta) > 3) continue;
+    }
 
-    // Аномалия: |delta| > 300% — база слишком мала, пропускаем
-    if (Math.abs(delta) > 3) continue;
+    var sig = getSignal_(delta, isPct);
+    if (sig === '⚪') continue;
 
-    // Норма ⚪: −3% < delta ≤ +5% — не показываем
-    if (delta > T_YELLOW && delta <= T_GREEN) continue;
-
-    result.push({
-      label: label,
-      v2025: v25,
-      v2026: v26,
-      delta: delta,
-      isPct: !!PCT_ROWS_MB[i + 1],  // i+1 = 1-based row number
-    });
+    result.push({label: dispLabel, delta: delta, isPct: isPct, signal: sig});
   }
   return result;
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-// ЗАПИСЬ СТРОК ОТКЛОНЕНИЙ
+// СИГНАЛЫ НЕДЕЛИ (топ-5 по зоне)
 // ═══════════════════════════════════════════════════════════════
-function writeDeviationRows_(dash, deviations) {
-  var values = deviations.map(function(d) {
-    var sign     = d.delta > 0 ? '+' : '';
-    var deltaStr = sign + Math.round(d.delta * 1000) / 10 + '%';
-    return [
-      d.label,
-      formatValue_(d.v2025, d.isPct),
-      formatValue_(d.v2026, d.isPct),
-      deltaStr,
-      getSignal_(d.delta),
-    ];
-  });
-
-  var dataRange = dash.getRange(R_DATA, 1, values.length, 5);
-  dataRange.setValues(values);
-  dataRange.setFontSize(9);
-  dataRange.setVerticalAlignment('middle');
-
-  // Форматирование по строкам
-  for (var i = 0; i < deviations.length; i++) {
-    var row    = R_DATA + i;
-    var delta  = deviations[i].delta;
-    var bg     = getBgColor_(delta);
-
-    // Фон строки
-    if (bg) dash.getRange(row, 1, 1, 5).setBackground(bg);
-
-    // Выравнивание
-    dash.getRange(row, 1).setHorizontalAlignment('left');
-    dash.getRange(row, 2, 1, 2).setHorizontalAlignment('right');
-    dash.getRange(row, 4, 1, 2).setHorizontalAlignment('center');
-
-    // Чередование оттенка для читаемости
-    if (!bg) {
-      var altBg = (i % 2 === 0) ? '#ffffff' : '#f8f9fa';
-      dash.getRange(row, 1, 1, 5).setBackground(altBg);
-    }
-  }
-}
-
-
-// ═══════════════════════════════════════════════════════════════
-// СТАТИЧНЫЕ ЗАГОЛОВКИ (строки 1–3)
-// Пишутся только если ещё не заполнены
-// ═══════════════════════════════════════════════════════════════
-function writeStaticHeaders_(dash) {
-  if (dash.getRange(R_TITLE, 1).getValue() === 'ДАШБОРД — МОНБЛАН') return;
-
-  // Строка 1 — заголовок
-  dash.getRange(R_TITLE, 1, 1, 5).merge()
-    .setValue('ДАШБОРД — МОНБЛАН')
-    .setBackground('#1a3a5c')
-    .setFontColor('#ffffff')
-    .setFontWeight('bold')
-    .setFontSize(13)
-    .setHorizontalAlignment('center')
-    .setVerticalAlignment('middle');
-
-  // Строка 2 — выбор недели
-  dash.getRange(R_SEL, 1).setValue('Выберите неделю 2026 (1–5):')
-    .setFontWeight('bold').setBackground('#f0f0f0');
-  dash.getRange(R_SEL, 2).setValue(1)
-    .setBackground('#f0f0f0').setHorizontalAlignment('center');
-  dash.getRange(R_SEL, 3, 1, 3).setBackground('#f0f0f0');
-
-  // Dropdown 1–5 на B2
-  var rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['1','2','3','4','5'], true)
-    .build();
-  dash.getRange(R_SEL, 2).setDataValidation(rule);
-
-  // Строка 3 — шапка таблицы
-  var hdr = dash.getRange(R_HDR, 1, 1, 5);
-  hdr.setValues([['Показатель', '2025', '2026', 'Δ%', '●']]);
-  hdr.setBackground('#2d6a9f')
-    .setFontColor('#ffffff')
-    .setFontWeight('bold')
-    .setFontSize(9)
-    .setHorizontalAlignment('center')
-    .setVerticalAlignment('middle');
-  dash.getRange(R_HDR, 1).setHorizontalAlignment('left');
-
-  // Заморозить строки 1–3
-  dash.setFrozenRows(3);
-
-  // Ширины колонок
-  dash.setColumnWidth(1, 250);
-  dash.setColumnWidth(2, 120);
-  dash.setColumnWidth(3, 120);
-  dash.setColumnWidth(4, 80);
-  dash.setColumnWidth(5, 50);
-}
-
-
-// ═══════════════════════════════════════════════════════════════
-// БЛОК «СИГНАЛЫ НЕДЕЛИ» — группировка отклонений по цветам
-// Пишется сразу после таблицы отклонений
-// ═══════════════════════════════════════════════════════════════
-function writeSignalsSection_(dash, startRow, deviations) {
-  // Сортируем и берём топ-5 по величине отклонения в каждой зоне
-  var red = deviations
-    .filter(function(d) { return d.delta < T_RED; })
-    .sort(function(a, b) { return a.delta - b.delta; })  // самые красные — первые
-    .slice(0, 5);
-
-  var yellow = deviations
-    .filter(function(d) { return d.delta >= T_RED && d.delta < T_YELLOW; })
-    .sort(function(a, b) { return a.delta - b.delta; })  // самые жёлтые — первые
-    .slice(0, 5);
-
-  var green = deviations
-    .filter(function(d) { return d.delta > T_GREEN; })
-    .sort(function(a, b) { return b.delta - a.delta; })  // самые зелёные — первые
-    .slice(0, 5);
+function writeSignalsSection_(dash, startRow, signals) {
+  var red = signals.filter(function(d){return d.signal==='🔴';})
+    .sort(function(a,b){return a.delta-b.delta;}).slice(0,5);
+  var yellow = signals.filter(function(d){return d.signal==='🟡';})
+    .sort(function(a,b){return a.delta-b.delta;}).slice(0,5);
+  var green = signals.filter(function(d){return d.signal==='🟢';})
+    .sort(function(a,b){return b.delta-a.delta;}).slice(0,5);
 
   var row = startRow;
 
-  // Заголовок «СИГНАЛЫ НЕДЕЛИ»
-  dash.getRange(row, 1, 1, 5).merge()
+  dash.getRange(row,1,1,5).merge()
     .setValue('🚨  СИГНАЛЫ НЕДЕЛИ  (топ-5 по каждой зоне)')
-    .setBackground('#333333').setFontColor('#ffffff')
+    .setBackground('#2c2c2c').setFontColor('#ffffff')
     .setFontWeight('bold').setFontSize(10)
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  row++;
+  dash.setRowHeight(row, 26); row++;
 
-  // 🔴 Проблемные зоны
-  dash.getRange(row, 1, 1, 5).merge()
-    .setValue('🔴  ПРОБЛЕМНЫЕ ЗОНЫ  (падение > 10%)')
-    .setBackground('#b43232').setFontColor('#ffffff')
+  row = writeZone_(dash, row,
+    '🔴  ПРОБЛЕМНЫЕ ЗОНЫ  (> 10% или > 5 п.п. снижения)',
+    '#b43232','#fdd','#c0392b', red);
+  row = writeZone_(dash, row,
+    '🟡  ТРЕБУЮТ ВНИМАНИЯ  (3–10% или 1–5 п.п. снижения)',
+    '#9a6b00','#fff3cd','#856404', yellow);
+  row = writeZone_(dash, row,
+    '🟢  РАБОТАЕТ ХОРОШО  (> 5% или > 3 п.п. роста)',
+    '#1e6641','#d4edda','#155724', green);
+
+  return row;
+}
+
+function writeZone_(dash, row, hdr, hdrBg, itemBg, valFg, items) {
+  dash.getRange(row,1,1,5).merge().setValue(hdr)
+    .setBackground(hdrBg).setFontColor('#ffffff')
     .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
-  row++;
-  if (red.length === 0) {
-    dash.getRange(row, 1, 1, 5).merge().setValue('— нет').setBackground('#ffcccc').setFontSize(9);
-    row++;
+  dash.setRowHeight(row, 22); row++;
+
+  if (!items.length) {
+    dash.getRange(row,1,1,5).merge().setValue('— нет')
+      .setBackground(itemBg).setFontSize(9).setHorizontalAlignment('center');
+    dash.setRowHeight(row, 20); row++;
   } else {
-    red.forEach(function(d) {
-      var pct = Math.round(d.delta * 1000) / 10;
-      dash.getRange(row, 1, 1, 4).merge().setValue(d.label).setBackground('#ffcccc').setFontSize(9).setVerticalAlignment('middle');
-      dash.getRange(row, 5).setValue(pct + '%').setBackground('#ffcccc').setFontSize(9)
-        .setHorizontalAlignment('center').setFontWeight('bold').setFontColor('#b43232');
-      row++;
+    items.forEach(function(d) {
+      dash.getRange(row,1,1,4).merge().setValue(d.label)
+        .setBackground(itemBg).setFontSize(9)
+        .setHorizontalAlignment('left').setVerticalAlignment('middle');
+      dash.getRange(row,5).setValue(fmtDelta_(d.delta, d.isPct))
+        .setBackground(itemBg).setFontSize(9)
+        .setHorizontalAlignment('center').setFontWeight('bold').setFontColor(valFg);
+      dash.setRowHeight(row, 20); row++;
     });
   }
-
-  // 🟡 Требуют внимания
-  dash.getRange(row, 1, 1, 5).merge()
-    .setValue('🟡  ТРЕБУЮТ ВНИМАНИЯ  (−3% … −10%)')
-    .setBackground('#997800').setFontColor('#ffffff')
-    .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
-  row++;
-  if (yellow.length === 0) {
-    dash.getRange(row, 1, 1, 5).merge().setValue('— нет').setBackground('#fff2cc').setFontSize(9);
-    row++;
-  } else {
-    yellow.forEach(function(d) {
-      var pct = Math.round(d.delta * 1000) / 10;
-      dash.getRange(row, 1, 1, 4).merge().setValue(d.label).setBackground('#fff2cc').setFontSize(9).setVerticalAlignment('middle');
-      dash.getRange(row, 5).setValue(pct + '%').setBackground('#fff2cc').setFontSize(9)
-        .setHorizontalAlignment('center').setFontWeight('bold').setFontColor('#997800');
-      row++;
-    });
-  }
-
-  // 🟢 Работает хорошо
-  dash.getRange(row, 1, 1, 5).merge()
-    .setValue('🟢  РАБОТАЕТ ХОРОШО  (рост > 5%)')
-    .setBackground('#19622a').setFontColor('#ffffff')
-    .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
-  row++;
-  if (green.length === 0) {
-    dash.getRange(row, 1, 1, 5).merge().setValue('— нет').setBackground('#d9ead3').setFontSize(9);
-    row++;
-  } else {
-    green.forEach(function(d) {
-      var pct = Math.round(d.delta * 1000) / 10;
-      dash.getRange(row, 1, 1, 4).merge().setValue(d.label).setBackground('#d9ead3').setFontSize(9).setVerticalAlignment('middle');
-      dash.getRange(row, 5).setValue('+' + pct + '%').setBackground('#d9ead3').setFontSize(9)
-        .setHorizontalAlignment('center').setFontWeight('bold').setFontColor('#19622a');
-      row++;
-    });
-  }
-
   return row;
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-// ОЧИСТКА ДИНАМИЧЕСКОЙ ЗОНЫ (строки 4 и ниже, 10 колонок)
-// 10 колонок — чтобы гарантированно стереть остатки старого дашборда
+// AI-ЗАГЛУШКА
 // ═══════════════════════════════════════════════════════════════
-function clearDataRows_(dash) {
-  var lastRow = dash.getLastRow();
-  if (lastRow < R_DATA) return;
-  var numRows = lastRow - R_DATA + 1;
-  var zone = dash.getRange(R_DATA, 1, numRows, 10);
-  zone.clearContent();
-  zone.clearFormat();
-  zone.breakApart();
+function writeAiSkeleton_(dash, startRow, week) {
+  var ph = '← Нажмите «🔶 Монблан» → «Обновить AI-анализ»';
+  function sec(r, hdr) {
+    dash.getRange(r,1,1,5).merge().setValue(hdr)
+      .setBackground('#3d3d3d').setFontColor('#ffffff')
+      .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
+    dash.setRowHeight(r, 22);
+    for (var i=0;i<3;i++) {
+      dash.getRange(r+1+i,1,1,5).merge().setValue(ph)
+        .setBackground('#f5f5f5').setFontColor('#888888')
+        .setFontStyle('italic').setFontSize(9)
+        .setWrap(true).setHorizontalAlignment('center').setVerticalAlignment('middle');
+      dash.setRowHeight(r+1+i, 22);
+    }
+  }
+  sec(startRow,      '🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI — неделя ' + week + ')');
+  sec(startRow + 5,  '💡  РЕКОМЕНДАЦИИ  (AI)');
+  sec(startRow + 10, '📋  УПРАВЛЕНЧЕСКИЕ ВЫВОДЫ  (AI)');
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-// AI-АНАЛИЗ (Groq API — бесплатно)
+// AI-АНАЛИЗ (Groq)
 // ═══════════════════════════════════════════════════════════════
 function runAiAnalysis() {
   var ss   = SpreadsheetApp.getActiveSpreadsheet();
@@ -419,162 +455,72 @@ function runAiAnalysis() {
   if (!dash || !mb) return;
 
   var week = parseInt(dash.getRange(R_SEL, 2).getValue());
-  if (!week || isNaN(week)) {
-    SpreadsheetApp.getUi().alert('Выберите неделю в B2');
-    return;
-  }
+  if (!week || isNaN(week)) { SpreadsheetApp.getUi().alert('Выберите неделю в B2'); return; }
 
-  // Читаем отклонения напрямую из Монблан
-  var col25      = findWeekCol_(mb, 2025, week);
-  var col26      = findWeekCol_(mb, 2026, week);
-  var deviations = getDeviations_(mb, col25, col26);
+  var col25   = findWeekCol_(mb, 2025, week);
+  var col26   = findWeekCol_(mb, 2026, week);
+  var signals = computeSignals_(mb, col25, col26);
 
-  if (!deviations.length) {
-    SpreadsheetApp.getUi().alert('Нет отклонений для анализа.\nСначала нажмите «Обновить дашборд».');
-    return;
-  }
+  if (!signals.length) { SpreadsheetApp.getUi().alert('Нет отклонений для анализа.'); return; }
 
   ss.toast('Запрашиваем AI (Groq)...', '🔶 Монблан', 120);
 
-  var red    = deviations.filter(function(d) { return d.delta < T_RED; });
-  var yellow = deviations.filter(function(d) { return d.delta >= T_RED && d.delta < T_YELLOW; });
-  var green  = deviations.filter(function(d) { return d.delta > T_GREEN; });
+  var red    = signals.filter(function(d){return d.signal==='🔴';});
+  var yellow = signals.filter(function(d){return d.signal==='🟡';});
+  var green  = signals.filter(function(d){return d.signal==='🟢';});
 
   var aiText = callGroq_(buildPrompt_(week, red, yellow, green));
-
   if (!aiText) {
-    SpreadsheetApp.getUi().alert(
-      'Ошибка Groq API.\n\n' +
-      'Проверьте GROQ_API_KEY:\n' +
-      'Настройки проекта → Свойства скрипта → GROQ_API_KEY\n\n' +
-      'Получить бесплатный ключ: console.groq.com'
-    );
+    SpreadsheetApp.getUi().alert('Ошибка Groq API.\n\nПроверьте GROQ_API_KEY:\nНастройки → Свойства скрипта → GROQ_API_KEY\nКлюч: console.groq.com');
     return;
   }
 
-  var aiRow = getAiStartRow_() || (R_DATA + deviations.length + 2);
+  var aiRow = getAiStartRow_() || (R_DATA + 110);
   writeAiBlock_(dash, aiRow, week, aiText);
   ss.toast('✅ AI-анализ готов', '🔶 Монблан', 5);
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-// ЗАГЛУШКА AI-БЛОКА — пишется сразу при обновлении дашборда
-// Показывает структуру, приглашает нажать «Обновить AI-анализ»
-// ═══════════════════════════════════════════════════════════════
-function writeAiSkeleton_(dash, startRow, week) {
-  var placeholder = '← Нажмите «🔶 Монблан» → «Обновить AI-анализ»';
-
-  function writeSkeletonSection(headerRow, headerText) {
-    dash.getRange(headerRow, 1, 1, 5).merge()
-      .setValue(headerText)
-      .setBackground('#3d3d3d')
-      .setFontColor('#ffffff')
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setVerticalAlignment('middle');
-    for (var i = 0; i < 3; i++) {
-      dash.getRange(headerRow + 1 + i, 1, 1, 5).merge()
-        .setValue(placeholder)
-        .setBackground('#f0f0f0')
-        .setFontColor('#888888')
-        .setFontStyle('italic')
-        .setFontSize(9)
-        .setWrap(true)
-        .setVerticalAlignment('middle')
-        .setHorizontalAlignment('center');
-    }
-  }
-
-  writeSkeletonSection(startRow,      '🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI-анализ — неделя ' + week + ')');
-  writeSkeletonSection(startRow + 5,  '💡  РЕКОМЕНДАЦИИ  (AI)');
-  writeSkeletonSection(startRow + 10, '📋  УПРАВЛЕНЧЕСКИЕ ВЫВОДЫ  (AI)');
-}
-
-
-// ═══════════════════════════════════════════════════════════════
-// ЗАПИСЬ AI-БЛОКА (3 секции × 3 строки)
-// ═══════════════════════════════════════════════════════════════
 function writeAiBlock_(dash, startRow, week, aiText) {
   var blocks = parseAiBlocks_(aiText);
+  dash.getRange(startRow, 1, 15, 5).clearContent().clearFormat().breakApart();
 
-  // Сначала очистить зону AI-блока
-  var aiZone = dash.getRange(startRow, 1, 15, 5);
-  aiZone.clearContent().clearFormat().breakApart();
-
-  function writeSection(headerRow, headerText, items) {
-    // Заголовок секции
-    dash.getRange(headerRow, 1, 1, 5).merge()
-      .setValue(headerText)
-      .setBackground('#3d3d3d')
-      .setFontColor('#ffffff')
-      .setFontWeight('bold')
-      .setFontSize(9)
-      .setVerticalAlignment('middle');
-
-    // 3 строки содержимого
-    for (var i = 0; i < 3; i++) {
-      dash.getRange(headerRow + 1 + i, 1, 1, 5).merge()
-        .setValue(items[i] || '—')
-        .setBackground('#f8f9fa')
-        .setFontColor('#212529')
-        .setFontSize(9)
-        .setWrap(true)
-        .setVerticalAlignment('middle');
+  function sec(r, hdr, items) {
+    dash.getRange(r,1,1,5).merge().setValue(hdr)
+      .setBackground('#3d3d3d').setFontColor('#ffffff')
+      .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
+    for (var i=0;i<3;i++) {
+      dash.getRange(r+1+i,1,1,5).merge().setValue(items[i]||'—')
+        .setBackground('#f8f9fa').setFontColor('#212529')
+        .setFontSize(9).setWrap(true).setVerticalAlignment('middle');
     }
   }
-
-  writeSection(startRow,      '🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI-анализ — неделя ' + week + ')', blocks.causes);
-  writeSection(startRow + 5,  '💡  РЕКОМЕНДАЦИИ  (AI)', blocks.recs);
-  writeSection(startRow + 10, '📋  УПРАВЛЕНЧЕСКИЕ ВЫВОДЫ  (AI)', blocks.mgmt);
+  sec(startRow,      '🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI — неделя ' + week + ')', blocks.causes);
+  sec(startRow + 5,  '💡  РЕКОМЕНДАЦИИ  (AI)', blocks.recs);
+  sec(startRow + 10, '📋  УПРАВЛЕНЧЕСКИЕ ВЫВОДЫ  (AI)', blocks.mgmt);
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-// ЗАПРОС К GROQ API
-// ═══════════════════════════════════════════════════════════════
 function callGroq_(prompt) {
   var key = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
   if (!key) return null;
   try {
     var resp = UrlFetchApp.fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'post',
-      muteHttpExceptions: true,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + key,
-      },
-      payload: JSON.stringify({
-        model:      'llama-3.3-70b-versatile',
-        max_tokens: 800,
-        messages:   [{ role: 'user', content: prompt }],
-      }),
+      method: 'post', muteHttpExceptions: true,
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+key},
+      payload: JSON.stringify({model:'llama-3.3-70b-versatile', max_tokens:800,
+        messages:[{role:'user',content:prompt}]}),
     });
-    if (resp.getResponseCode() !== 200) {
-      Logger.log('Groq ' + resp.getResponseCode() + ': ' + resp.getContentText());
-      return null;
-    }
+    if (resp.getResponseCode() !== 200) { Logger.log('Groq '+resp.getResponseCode()); return null; }
     return JSON.parse(resp.getContentText()).choices[0].message.content;
-  } catch (e) {
-    Logger.log('Groq error: ' + e.message);
-    return null;
-  }
+  } catch(e) { Logger.log('Groq: '+e.message); return null; }
 }
 
 function buildPrompt_(week, red, yellow, green) {
-  function fmtList(arr) {
-    if (!arr.length) return '—';
-    return arr.map(function(d) {
-      var sign = d.delta > 0 ? '+' : '';
-      return '• ' + d.label + ': ' + sign + Math.round(d.delta * 100) + '%' +
-             ' (2025: ' + fmtNum_(d.v2025) + ', 2026: ' + fmtNum_(d.v2026) + ')';
-    }).join('\n');
+  function lst(arr) {
+    return arr.length ? arr.map(function(d){return '• '+d.label+': '+fmtDelta_(d.delta,d.isPct);}).join('\n') : '—';
   }
   return 'Ты — аналитик ресторанного бизнеса. Ресторан «Монблан», горнолыжный курорт Губаха.\n\n' +
-    'Неделя ' + week + ' / 2026 vs неделя ' + week + ' / 2025:\n\n' +
-    '🔴 УПАЛИ > 10%:\n' + fmtList(red) + '\n\n' +
-    '🟡 УПАЛИ 3–10%:\n' + fmtList(yellow) + '\n\n' +
-    '🟢 ВЫРОСЛИ > 5%:\n' + fmtList(green) + '\n\n' +
+    'Неделя '+week+' / 2026 vs 2025:\n\n' +
+    '🔴 ПРОБЛЕМЫ:\n'+lst(red)+'\n\n🟡 ВНИМАНИЕ:\n'+lst(yellow)+'\n\n🟢 РАСТУТ:\n'+lst(green)+'\n\n' +
     'Дай СТРОГО 3 блока по 3 пункта. Каждый пункт — одно предложение (макс 15 слов). Без вступлений.\n\n' +
     'БЛОК 1: ВОЗМОЖНЫЕ ПРИЧИНЫ ПРОБЛЕМ\n1. ...\n2. ...\n3. ...\n\n' +
     'БЛОК 2: РЕКОМЕНДАЦИИ\n1. ...\n2. ...\n3. ...\n\n' +
@@ -582,78 +528,79 @@ function buildPrompt_(week, red, yellow, green) {
 }
 
 function parseAiBlocks_(text) {
-  function extractItems(blockText) {
+  function extract(t) {
     var items = [];
-    (blockText || '').split('\n').forEach(function(l) {
+    (t||'').split('\n').forEach(function(l){
       l = l.trim();
       var m = l.match(/^[1-3][\.\)]\s*(.+)/) || l.match(/^[•\-\*]\s*(.+)/);
       if (m) { items.push(m[1]); return; }
       if (l.length > 5 && !/^(БЛОК|BLOCK|ВОЗМОЖНЫЕ|РЕКОМЕНДАЦИИ|УПРАВЛЕНЧЕСКИЕ)/i.test(l)) items.push(l);
     });
-    return items.slice(0, 3);
+    return items.slice(0,3);
   }
   var parts = text.split(/БЛОК\s*[123][\:\.]?\s*/i);
-  if (parts.length >= 4) {
-    return { causes: extractItems(parts[1]), recs: extractItems(parts[2]), mgmt: extractItems(parts[3]) };
-  }
-  var third = Math.floor(text.length / 3);
-  return {
-    causes: extractItems(text.slice(0, third)),
-    recs:   extractItems(text.slice(third, 2 * third)),
-    mgmt:   extractItems(text.slice(2 * third)),
-  };
+  if (parts.length >= 4) return {causes:extract(parts[1]),recs:extract(parts[2]),mgmt:extract(parts[3])};
+  var t = Math.floor(text.length/3);
+  return {causes:extract(text.slice(0,t)),recs:extract(text.slice(t,2*t)),mgmt:extract(text.slice(2*t))};
 }
 
 
 // ═══════════════════════════════════════════════════════════════
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════
-function getSignal_(delta) {
+function getSignal_(delta, isPct) {
+  if (isPct) {
+    if (delta < T_RED_PP)    return '🔴';
+    if (delta < T_YELLOW_PP) return '🟡';
+    if (delta > T_GREEN_PP)  return '🟢';
+    return '⚪';
+  }
   if (delta < T_RED)    return '🔴';
   if (delta < T_YELLOW) return '🟡';
   if (delta > T_GREEN)  return '🟢';
   return '⚪';
 }
 
-function getBgColor_(delta) {
-  if (delta < T_RED)    return '#ffcccc';
-  if (delta < T_YELLOW) return '#fff2cc';
-  if (delta > T_GREEN)  return '#d9ead3';
+function getBgColor_(delta, isPct) {
+  if (isPct) {
+    if (delta < T_RED_PP)    return '#f5c6cb';
+    if (delta < T_YELLOW_PP) return '#ffeaa7';
+    if (delta > T_GREEN_PP)  return '#c3e6cb';
+    return null;
+  }
+  if (delta < T_RED)    return '#f5c6cb';
+  if (delta < T_YELLOW) return '#ffeaa7';
+  if (delta > T_GREEN)  return '#c3e6cb';
   return null;
 }
 
-function formatValue_(v, isPct) {
-  if (isPct) return Math.round(v * 1000) / 10 + '%';
-  if (!v) return '0';
-  // Форматируем число с пробелами (1 234 567)
-  return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+function fmtDelta_(delta, isPct) {
+  var sign = delta > 0 ? '+' : '';
+  if (isPct) return sign + (Math.round(delta * 1000) / 10) + ' п.п.';
+  return sign + (Math.round(delta * 1000) / 10) + '%';
 }
 
-function fmtNum_(v) {
+function fmtCell_(v, isPct) {
+  if (v === null || v === undefined) return '—';
+  if (isPct) return (Math.round(v * 1000) / 10) + '%';
+  if (!v) return '0';
   return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
 function saveAiStartRow_(row) {
   PropertiesService.getScriptProperties().setProperty('AI_START_ROW', String(row));
 }
-
 function getAiStartRow_() {
   var v = PropertiesService.getScriptProperties().getProperty('AI_START_ROW');
   return v ? parseInt(v) : null;
 }
-
 function getDashSheet_(ss) {
   var sheets = ss.getSheets();
-  for (var i = 0; i < sheets.length; i++) {
-    if (sheets[i].getSheetId() === DASH_GID) return sheets[i];
-  }
+  for (var i=0;i<sheets.length;i++) if (sheets[i].getSheetId()===DASH_GID) return sheets[i];
   return ss.getSheetByName(DASH_NAME);
 }
-
 function getMonblanSheet_(ss) {
   var sheets = ss.getSheets();
-  for (var i = 0; i < sheets.length; i++) {
-    if (sheets[i].getSheetId() === MONBLAN_GID) return sheets[i];
-  }
+  for (var i=0;i<sheets.length;i++) if (sheets[i].getSheetId()===MONBLAN_GID) return sheets[i];
   return ss.getSheetByName('Монблан') || ss.getSheetByName('Еженедельно');
 }
