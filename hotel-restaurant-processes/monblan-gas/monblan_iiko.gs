@@ -24,6 +24,30 @@ var IIKO_BAR_KEYWORDS     = ['бар', 'bar', 'напитк', 'drink', 'beverage
 var _iikoTokenCache_ = null;
 
 // ═══════════════════════════════════════════════════════════════
+// УСТАНОВКА ЕЖЕНЕДЕЛЬНОГО ТРИГГЕРА (запустить один раз вручную)
+// Каждый понедельник в 9:00 автоматически загружает данные
+// за прошедшую неделю (Пн–Вс) из iikoWeb.
+// Часовой пояс триггера = часовой пояс проекта Apps Script.
+// Убедитесь что в Настройках проекта стоит Asia/Yekaterinburg (UTC+5).
+// ═══════════════════════════════════════════════════════════════
+function installWeeklyTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'fillMonblanWeekFromIiko') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('fillMonblanWeekFromIiko')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(9)
+    .create();
+  SpreadsheetApp.getUi().alert(
+    '✅ Еженедельный триггер установлен!\n\n' +
+    'Каждый понедельник в 9:00–10:00 данные за прошедшую\n' +
+    'неделю (Пн–Вс) будут загружаться автоматически из iiko.\n\n' +
+    'Часовой пояс: проверьте Настройки проекта → Asia/Yekaterinburg.'
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ОСНОВНАЯ ТОЧКА ВХОДА (запускается триггером каждый понедельник)
 // ═══════════════════════════════════════════════════════════════
 function fillMonblanWeekFromIiko() {

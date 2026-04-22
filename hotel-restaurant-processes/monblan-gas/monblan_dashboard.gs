@@ -69,10 +69,13 @@ function installTrigger() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🔶 Монблан')
-    .addItem('Обновить дашборд',   'refreshDashboard')
-    .addItem('Обновить AI-анализ', 'runAiAnalysis')
+    .addItem('Обновить дашборд',            'refreshDashboard')
+    .addItem('Обновить AI-анализ',          'runAiAnalysis')
     .addSeparator()
-    .addItem('Установить триггер onEdit', 'installTrigger')
+    .addItem('Загрузить данные за прошлую неделю', 'fillMonblanWeekFromIiko')
+    .addSeparator()
+    .addItem('Установить автозагрузку (каждый Пн 9:00)', 'installWeeklyTrigger')
+    .addItem('Установить триггер onEdit',   'installTrigger')
     .addToUi();
 }
 
