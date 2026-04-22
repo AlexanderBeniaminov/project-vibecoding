@@ -161,54 +161,54 @@ function writeStaticRows_(dash, mb, col25, col26, week) {
     .setBackground('#1a3a5c').setFontColor('#ffffff')
     .setFontWeight('bold').setFontSize(14)
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  dash.setRowHeight(R_TITLE, 34);
+  dash.setRowHeight(R_TITLE, 44);
 
   // Строка 2 — выбор недели
   dash.getRange(R_SEL, 1).setValue('Выберите неделю 2026 (1–52):')
     .setBackground('#e8f0fe').setFontColor('#1a3a5c')
-    .setFontWeight('bold').setFontSize(10)
+    .setFontWeight('bold').setFontSize(14)
     .setHorizontalAlignment('left').setVerticalAlignment('middle');
   var b2 = dash.getRange(R_SEL, 2);
   b2.setValue(week || 1);  // восстанавливаем после clearContent
   b2.setBackground('#e8f0fe').setFontColor('#1a3a5c')
-    .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center');
+    .setFontWeight('bold').setFontSize(14).setHorizontalAlignment('center');
   b2.setDataValidation(SpreadsheetApp.newDataValidation()
     .requireNumberBetween(1, 52).build());
   dash.getRange(R_SEL, 3, 1, 3).setBackground('#e8f0fe');
-  dash.setRowHeight(R_SEL, 28);
+  dash.setRowHeight(R_SEL, 36);
 
   // Строка 3 — годы
   dash.getRange(R_HDR, 1, 1, 5).setValues([['Показатель', '2025', '2026', 'Δ', '●']])
     .setBackground('#2d6a9f').setFontColor('#ffffff')
-    .setFontWeight('bold').setFontSize(10)
+    .setFontWeight('bold').setFontSize(14)
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
   dash.getRange(R_HDR, 1).setHorizontalAlignment('left');
-  dash.setRowHeight(R_HDR, 24);
+  dash.setRowHeight(R_HDR, 32);
 
   // Строка 4 — даты
   var date25 = week ? weekDateRange_(mb, 2025, week) : '—';
   var date26 = week ? weekDateRange_(mb, 2026, week) : '—';
   dash.getRange(R_DATE, 1).setValue('Период:')
     .setBackground('#dce8fc').setFontColor('#1a3a5c')
-    .setFontStyle('italic').setFontSize(9).setVerticalAlignment('middle');
+    .setFontStyle('italic').setFontSize(14).setVerticalAlignment('middle');
   dash.getRange(R_DATE, 2).setValue(date25)
     .setBackground('#dce8fc').setFontColor('#1a3a5c')
-    .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle');
+    .setFontSize(14).setHorizontalAlignment('center').setVerticalAlignment('middle');
   dash.getRange(R_DATE, 3).setValue(date26)
     .setBackground('#dce8fc').setFontColor('#1a3a5c')
-    .setFontSize(9).setHorizontalAlignment('center').setVerticalAlignment('middle');
+    .setFontSize(14).setHorizontalAlignment('center').setVerticalAlignment('middle');
   dash.getRange(R_DATE, 4, 1, 2).setBackground('#dce8fc');
-  dash.setRowHeight(R_DATE, 20);
+  dash.setRowHeight(R_DATE, 28);
 
   // Заморозить строки 1–4
   dash.setFrozenRows(4);
 
   // Ширины колонок
-  dash.setColumnWidth(1, 260);
-  dash.setColumnWidth(2, 120);
-  dash.setColumnWidth(3, 120);
-  dash.setColumnWidth(4, 90);
-  dash.setColumnWidth(5, 40);
+  dash.setColumnWidth(1, 340);
+  dash.setColumnWidth(2, 150);
+  dash.setColumnWidth(3, 150);
+  dash.setColumnWidth(4, 120);
+  dash.setColumnWidth(5, 60);
 }
 
 // Дата-диапазон недели (Пн–Вс) по ISO 8601.
@@ -270,9 +270,9 @@ function writeAllMetricRows_(dash, mb, col25, col26) {
       dash.getRange(dashRow, 1, 1, 5).merge()
         .setValue('  ' + label)
         .setBackground('#cfd8e8').setFontColor('#1a2a4a')
-        .setFontWeight('bold').setFontSize(9)
+        .setFontWeight('bold').setFontSize(14)
         .setHorizontalAlignment('left').setVerticalAlignment('middle');
-      dash.setRowHeight(dashRow, 20);
+      dash.setRowHeight(dashRow, 28);
       dashRow++;
       continue;
     }
@@ -303,7 +303,7 @@ function writeAllMetricRows_(dash, mb, col25, col26) {
     dash.getRange(dashRow, 1, 1, 5).setValues([[rowLabel, bStr, cStr, dStr, eStr]]);
 
     var rowRng = dash.getRange(dashRow, 1, 1, 5);
-    rowRng.setFontSize(9).setVerticalAlignment('middle');
+    rowRng.setFontSize(14).setVerticalAlignment('middle');
     rowRng.setBackground(bg || (dashRow % 2 === 0 ? '#f8f9fa' : '#ffffff'));
 
     if (isPct) {
@@ -318,7 +318,7 @@ function writeAllMetricRows_(dash, mb, col25, col26) {
     dash.getRange(dashRow, 4, 1, 2).setHorizontalAlignment('center');
     if (hasDelta && bg) dash.getRange(dashRow, 4).setFontWeight('bold');
 
-    dash.setRowHeight(dashRow, isPct ? 18 : 20);
+    dash.setRowHeight(dashRow, isPct ? 24 : 28);
     dashRow++;
   }
 
@@ -387,9 +387,9 @@ function writeSignalsSection_(dash, startRow, signals) {
   dash.getRange(row,1,1,5).merge()
     .setValue('🚨  СИГНАЛЫ НЕДЕЛИ  (топ-5 по каждой зоне)')
     .setBackground('#2c2c2c').setFontColor('#ffffff')
-    .setFontWeight('bold').setFontSize(10)
+    .setFontWeight('bold').setFontSize(14)
     .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  dash.setRowHeight(row, 26); row++;
+  dash.setRowHeight(row, 34); row++;
 
   row = writeZone_(dash, row,
     '🔴  ПРОБЛЕМНЫЕ ЗОНЫ  (> 10% или > 5 п.п. снижения)',
@@ -407,22 +407,22 @@ function writeSignalsSection_(dash, startRow, signals) {
 function writeZone_(dash, row, hdr, hdrBg, itemBg, valFg, items) {
   dash.getRange(row,1,1,5).merge().setValue(hdr)
     .setBackground(hdrBg).setFontColor('#ffffff')
-    .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
-  dash.setRowHeight(row, 22); row++;
+    .setFontWeight('bold').setFontSize(14).setVerticalAlignment('middle');
+  dash.setRowHeight(row, 30); row++;
 
   if (!items.length) {
     dash.getRange(row,1,1,5).merge().setValue('— нет')
-      .setBackground(itemBg).setFontSize(9).setHorizontalAlignment('center');
-    dash.setRowHeight(row, 20); row++;
+      .setBackground(itemBg).setFontSize(14).setHorizontalAlignment('center');
+    dash.setRowHeight(row, 28); row++;
   } else {
     items.forEach(function(d) {
       dash.getRange(row,1,1,4).merge().setValue(d.label)
-        .setBackground(itemBg).setFontSize(9)
+        .setBackground(itemBg).setFontSize(14)
         .setHorizontalAlignment('left').setVerticalAlignment('middle');
       dash.getRange(row,5).setValue(fmtDelta_(d.delta, d.isPct))
-        .setBackground(itemBg).setFontSize(9)
+        .setBackground(itemBg).setFontSize(14)
         .setHorizontalAlignment('center').setFontWeight('bold').setFontColor(valFg);
-      dash.setRowHeight(row, 20); row++;
+      dash.setRowHeight(row, 28); row++;
     });
   }
   return row;
@@ -437,14 +437,14 @@ function writeAiSkeleton_(dash, startRow, week) {
   function sec(r, hdr) {
     dash.getRange(r,1,1,5).merge().setValue(hdr)
       .setBackground('#3d3d3d').setFontColor('#ffffff')
-      .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
-    dash.setRowHeight(r, 22);
+      .setFontWeight('bold').setFontSize(14).setVerticalAlignment('middle');
+    dash.setRowHeight(r, 30);
     for (var i=0;i<3;i++) {
       dash.getRange(r+1+i,1,1,5).merge().setValue(ph)
         .setBackground('#f5f5f5').setFontColor('#888888')
-        .setFontStyle('italic').setFontSize(9)
+        .setFontStyle('italic').setFontSize(14)
         .setWrap(true).setHorizontalAlignment('center').setVerticalAlignment('middle');
-      dash.setRowHeight(r+1+i, 22);
+      dash.setRowHeight(r+1+i, 30);
     }
   }
   sec(startRow,      '🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI — неделя ' + week + ')');
@@ -495,11 +495,11 @@ function writeAiBlock_(dash, startRow, week, aiText) {
   function sec(r, hdr, items) {
     dash.getRange(r,1,1,5).merge().setValue(hdr)
       .setBackground('#3d3d3d').setFontColor('#ffffff')
-      .setFontWeight('bold').setFontSize(9).setVerticalAlignment('middle');
+      .setFontWeight('bold').setFontSize(14).setVerticalAlignment('middle');
     for (var i=0;i<3;i++) {
       dash.getRange(r+1+i,1,1,5).merge().setValue(items[i]||'—')
         .setBackground('#f8f9fa').setFontColor('#212529')
-        .setFontSize(9).setWrap(true).setVerticalAlignment('middle');
+        .setFontSize(14).setWrap(true).setVerticalAlignment('middle');
     }
   }
   sec(startRow,      '🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI — неделя ' + week + ')', blocks.causes);
