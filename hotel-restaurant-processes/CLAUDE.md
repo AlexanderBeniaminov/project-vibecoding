@@ -1,18 +1,27 @@
 # CLAUDE.md — hotel-restaurant-processes
-> Рабочий контекст для Claude. Читать перед любой работой с этой папкой.
-> Актуальный статус этапов — в [PLAN.md](PLAN.md).
+> Рабочий контекст для Claude Sonnet 4.6. Читать перед любой работой с этой папкой.
+
+---
+
+## Перед началом работы
+
+Прежде чем начать работу, скажи, как ты будешь её проверять.
+Если не можешь придумать способ проверить результат — скажи об этом и попроси уточнить задачу.
 
 ---
 
 ## Суть задачи
 
-Ресторан «Монблан» (курорт Губаха, Пермский край) работает на **iiko**. Администратор тратит 28–41 мин/день + 60–90 мин/нед на ручной перенос данных из iiko в Excel.
+Ресторан «Монблан» (курорт Губаха, Пермский край) работает на **iiko**. Задача — автоматизировать сбор данных и еженедельную аналитику.
 
-**Решение:** Python-скрипт по расписанию забирает данные из iikoWeb OLAP → пишет в Google Sheets → MAX-бот отправляет отчёт собственнику.
-
-**Стек:** Python 3.10+ · GitHub Actions · Google Sheets API v4 · MAX мессенджер · iikoWeb OLAP API
+**Стек:** Python 3.10+ · GitHub Actions · Google Sheets API v4 · iikoWeb OLAP API · Google Apps Script · MAX мессенджер
 **Стоимость:** 0 руб./месяц
-**Важно:** Этот проект — Python. Соседний `otchety/` — Google Apps Script. Не путать.
+
+**Два независимых потока:**
+- **Python (daily):** GitHub Actions → iikoWeb OLAP → лист «Ежедневно»
+- **GAS (weekly):** триггер каждый Пн → iikoWeb OLAP → лист «Монблан» (96 метрик) → Дашборд
+
+**Важно:** В этой папке — Python-скрипты (`scripts/`) и GAS-файлы (`monblan-gas/`). Соседний `otchety/` — отдельный проект курорта, не трогать.
 
 ---
 
@@ -20,29 +29,23 @@
 
 | Триггер | Cron / расписание | Местное время (UTC+5) | Что делает |
 |---|---|---|---|
-| Ежедневный (Python) | `0 23 * * *` UTC | 04:00 UTC+5 следующего дня | Забирает данные за отчётный день из iiko → пишет в строки 1–16 листа «Ежедневно» |
-| Резервный (Python) | `30 1 * * *` UTC | 06:30 UTC+5 | Повтор если основной упал |
-| Еженедельный (GAS) | каждый Пн 9:00 UTC+5 | 09:00 понедельник | `fillMonblanWeekFromIiko()` — запрашивает iiko OLAP за прошлую неделю → пишет в лист «Монблан» (96 метрик) |
-| onEdit (GAS) | при изменении B2 | мгновенно | `onEditDashboard()` → `refreshDashboard()` — перестраивает дашборд |
+| Ежедневный (Python) | `0 23 * * *` UTC | 04:00 следующего дня | iiko OLAP → строки 1–16 листа «Ежедневно» |
+| Резервный (Python) | `30 1 * * *` UTC | 06:30 | Повтор если основной упал |
+| Еженедельный (GAS) | каждый Пн 09:00 UTC+5 | 09:00 понедельник | `fillMonblanWeekFromIiko()` → лист «Монблан» |
+| onEdit (GAS) | при изменении B2 | мгновенно | `onEditDashboard()` → `refreshDashboard()` |
 
-**Workflow:** `main.py collect [YYYY-MM-DD]` — сбор iiko → Sheets.
-**Workflow:** `main.py report [YYYY-MM-DD]` — чтение Sheets → отчёт в MAX.
-**Workflow:** `main.py weekly` — еженедельная агрегация.
+**Точка входа Python:** `main.py collect [YYYY-MM-DD]` — сбор iiko → Sheets; `main.py report [YYYY-MM-DD]` — отчёт в MAX.
 
 ---
 
 ## iiko API — iikoWeb OLAP (ЕДИНСТВЕННЫЙ РАБОЧИЙ СПОСОБ)
 
 > **❌ НЕ ИСПОЛЬЗОВАТЬ** iiko Transport API (`api-ru.iiko.services`):
-> - `POST /api/1/order/by_table` — возвращает только заказы, созданные через API (с `sourceKey`).
->   POS-заказы с кассы iikoFront **никогда не возвращаются** → всегда 0 руб. выручки.
-> - Проверено на реальных данных в апреле 2026 — все даты дают пустые заказы.
+> `POST /api/1/order/by_table` возвращает только заказы с `sourceKey` — POS-заказы с кассы iikoFront **не возвращаются** → всегда 0 руб. Проверено апрель 2026.
 
-### Рабочий метод: iikoWeb OLAP
-
-**Сервер:** `https://kafe-monblan.iikoweb.ru`
-**Логин:** `buh` / `Vjy,kfy2024` (роль ADM, storeId=82455)
-**Токен TTL:** 1200 секунд (20 минут)
+**Система:** iiko Cloud, `kafe-monblan.iikoweb.ru` (iikoWeb 9.6.6), storeId=82455, UTC+5
+**Логин:** `buh` / `Vjy,kfy2024` (роль ADM)
+**Токен TTL:** 1200 сек (20 минут)
 
 #### Авторизация
 ```
@@ -53,7 +56,7 @@ POST /api/auth/login
 
 #### OLAP запрос (3 шага)
 
-**Шаг 1 — Инициализировать запрос:**
+**Шаг 1:**
 ```
 POST /api/olap/init
 {
@@ -62,112 +65,67 @@ POST /api/olap/init
   "groupFields": ["OpenDate.Typed"],
   "dataFields": ["DishDiscountSumInt", "UniqOrderId.OrdersCount", "GuestNum"],
   "filters": [
-    {
-      "field": "OpenDate.Typed",
-      "filterType": "date_range",
-      "dateFrom": "2026-04-05",
-      "dateTo": "2026-04-05",
-      "valueMin": null, "valueMax": null,
-      "valueList": [],
-      "includeLeft": true, "includeRight": true, "inclusiveList": true
-    },
-    {
-      "field": "DeletedWithWriteoff",
-      "filterType": "value_list",
-      "valueList": ["NOT_DELETED"],
-      "includeLeft": true, "includeRight": false, "inclusiveList": true
-    },
-    {
-      "field": "OrderDeleted",
-      "filterType": "value_list",
-      "valueList": ["NOT_DELETED"],
-      "includeLeft": true, "includeRight": false, "inclusiveList": true
-    }
+    {"field": "OpenDate.Typed", "filterType": "date_range",
+     "dateFrom": "2026-04-05", "dateTo": "2026-04-05",
+     "valueMin": null, "valueMax": null, "valueList": [],
+     "includeLeft": true, "includeRight": true, "inclusiveList": true},
+    {"field": "DeletedWithWriteoff", "filterType": "value_list",
+     "valueList": ["NOT_DELETED"], "includeLeft": true, "includeRight": false, "inclusiveList": true},
+    {"field": "OrderDeleted", "filterType": "value_list",
+     "valueList": ["NOT_DELETED"], "includeLeft": true, "includeRight": false, "inclusiveList": true}
   ]
 }
 → {"error": false, "data": "requestId_hash..."}
 ```
 
-**Шаг 2 — Проверить статус:**
-```
-GET /api/olap/fetch-status/{requestId}
-→ {"data": "SUCCESS"}   ← статус SUCCESS (не READY!)
-   или "PROCESSING" (ждать 3 сек и повторить)
-   или "ERROR" (неверные поля или нет лицензии OLAP)
-```
+**Шаг 2:** `GET /api/olap/fetch-status/{requestId}` → ждать `"data": "SUCCESS"` (не READY!), повторять каждые 3 сек
 
-**Шаг 3 — Получить данные:**
-```
-POST /api/olap/fetch/{requestId}/DATA
-{"rowOffset": 0, "rowCount": 10000}
-→ {"result": {"rawData": [...], ...}}
-   Считать всегда из rawData, не из totalRevenueInPeriod!
-```
+**Шаг 3:** `POST /api/olap/fetch/{requestId}/DATA` `{"rowOffset": 0, "rowCount": 10000}` → читать `result.rawData`
 
-#### Ключевые поля OLAP
+#### Ключевые поля
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `DishDiscountSumInt` | деньги | Выручка (со скидкой) |
-| `DishSumInt` | деньги | Выручка без скидки |
-| `UniqOrderId.OrdersCount` | кол-во | Число чеков |
-| `GuestNum` | кол-во | Число гостей |
-| `DishAmountInt` | кол-во | Количество позиций блюда |
-| `DishName` | строка | Название блюда |
-| `DishCategory` | строка | Категория блюда (используется для Кухня/Бар) |
-| `PayTypes.Combo` | строка | Тип оплаты |
-| `OpenDate.Typed` | дата | Дата открытия заказа |
-| `HourClose` | число | Час закрытия заказа (для временных срезов) |
-
-#### OLAP типы (olapType)
-
-| Значение | Что возвращает |
+| Поле | Описание |
 |---|---|
-| `SALES` | Продажи (чеки, блюда, гости, типы оплаты, часовые срезы) |
-| `TRANSACTIONS` | Складские операции (списания) — требует отдельной лицензии |
+| `DishDiscountSumInt` | Выручка со скидкой |
+| `UniqOrderId.OrdersCount` | Число чеков |
+| `GuestNum` | Число гостей |
+| `DishAmountInt` | Количество позиций |
+| `DishCategory` | Категория (для Кухня/Бар) — **не** `DishCategory.Accounting` |
+| `OpenDate.Typed` | Дата открытия заказа (YYYY-MM-DD) |
+| `HourClose` | Час закрытия (для временных срезов) |
 
-#### Важные ограничения OLAP
+`TRANSACTIONS` (olapType) — складские операции, требует отдельной лицензии (нет у роли buh).
 
-- `storeIds` — должен быть массив ровно с **одним** элементом: `[82455]`
-- Статус `SUCCESS` (не `READY`) — иначе ждать бесконечно
-- Данные считать из `result.rawData`, не из `totalRevenueInPeriod`
-- Если `rawData` пуст — за эту дату нет продаж (ресторан не работал)
-- Фильтр по дате: `filterType: "date_range"`, даты в формате `"YYYY-MM-DD"` (без времени)
+#### Ограничения
 
-#### Категории Кухня / Бар (проверено в апреле 2026)
+- `storeIds` — массив ровно с **одним** элементом: `[82455]`
+- Данные — из `result.rawData`, не из `totalRevenueInPeriod`
+- Пустой `rawData` = нет продаж за дату, это нормально
+- Bandwidth quota exceeded — пауза 60 сек между повторными auth-запросами; 15 сек между OLAP-запросами
 
-Поле `DishCategory` (не `DishCategory.Accounting`!) содержит реальные категории Монблан:
+#### Категории Кухня / Бар
 
 **Кухня:** `кухня`, `десерты`, `завтрак`, `шеф меню`
 **Бар:** `бар`, `настойки`, `пиво бутылочное`, `пиво разливное`, `глинтвейн`, `вино`, `напитки`
 
-Позиции без категории (напр. «глин 400 НОВ» — глинтвейн без категории в iiko) → относятся к **Бар** через keyword-матч по названию блюда. Всё нераспознанное → Бар.
+Позиции без категории (напр. «глин 400 НОВ») → матч по названию блюда → Бар. Всё нераспознанное → Бар.
 
-#### Временные срезы (работает через HourClose)
+#### Временные срезы (HourClose)
 
-```python
-groupFields=["HourClose"]
-dataFields=["DishDiscountSumInt", "GuestNum"]
-```
 - Утро: 9 ≤ HourClose < 11
 - День: 11 ≤ HourClose < 17
 - Вечер: 17 ≤ HourClose < 23
 
-#### Проверенные реальные данные
+#### Проверенные данные
 
 ```
-2026-04-05: выручка 34 900 руб., 20 чеков, 25 гостей
-            оплата: Банковские карты 20 320 руб., СБЕР банк 14 580 руб.
-            топ блюд: глин 400 НОВ 6 210 руб. (9 шт.)
-2024-01-01: выручка 213 305 руб., 365 чеков, 445 гостей
-Период 30.03–05.04.2026:
-  30.03 (пн): 35 650 руб. | 31.03 (вт): 33 775 | 01.04 (ср): 27 980
-  02.04 (чт): 21 770 | 03.04 (пт): 36 310 | 04.04 (сб): 129 020 | 05.04 (вс): 34 900
+2026-04-05: 34 900 руб., 20 чеков, 25 гостей
+Нед. 15 (30.03–05.04.2026): пн 35 650 | вт 33 775 | ср 27 980 | чт 21 770 | пт 36 310 | сб 129 020 | вс 34 900
 ```
 
 #### SSL и retry (GitHub Actions)
 
-iikoWeb иногда обрывает SSL-соединение с GitHub Actions (SSLEOFError).
+iikoWeb иногда обрывает SSL с GitHub Actions (SSLEOFError).
 Решение: `requests.Session` + `Retry(total=3, backoff_factor=2)` + `verify=False`.
 
 ---
@@ -177,133 +135,79 @@ iikoWeb иногда обрывает SSL-соединение с GitHub Actions
 **ID таблицы:** `1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI`
 **Сервисный аккаунт:** `montblanc-report@composite-wind-449411-d8.iam.gserviceaccount.com`
 
-**Принцип:** колонка A — названия параметров, строка 1 — даты, данные идут вправо.
+### Лист «Ежедневно» — Python
 
-### Лист «Ежедневно»
-
-- **Строка 1** — даты (`2026-03-30`, `2026-03-31`, ...)
-- **Строки 2–16** — авто-данные из iiko (перезаписываются ночным скриптом)
-- **Строки 17–25** — ручной ввод администратора (скрипт НЕ ТРОГАЕТ)
-- Числовой формат: `# ##0` (пробел как разделитель тысяч)
+Строка 1 = даты (`2026-03-30`, ...), столбец A = названия, данные идут вправо.
 
 | Строка | Параметр | Источник |
 |---|---|---|
-| 1 | Дата | Скрипт (RAW-строка) |
-| 2 | День недели | Скрипт авто |
-| 3 | Выручка итого | iiko OLAP авто |
-| 4 | Кол-во чеков | iiko OLAP авто |
-| 5 | Средний чек | iiko OLAP авто |
-| 6 | Гости | iiko OLAP авто |
-| 7 | Кухня | iiko OLAP авто |
-| 8 | Бар | iiko OLAP авто |
-| 9 | Утро — выручка (09–11) | iiko OLAP авто |
-| 10 | Утро — гости (09-11) | iiko OLAP авто |
-| 11 | День — выручка (11–17) | iiko OLAP авто |
-| 12 | День — гости (11-17) | iiko OLAP авто |
-| 13 | Вечер — выручка (17–23) | iiko OLAP авто |
-| 14 | Вечер — гости (17-23) | iiko OLAP авто |
-| 15 | Отмены (руб) | iiko OLAP авто |
-| 16 | Списания (руб) | iiko OLAP авто |
-| 17 | Инкассация | Администратор вручную |
-| 18 | Расход из кассы | Администратор вручную |
-| 19 | Остаток нал | Администратор вручную |
-| 20 | Повара — кол-во | Администратор вручную |
-| 21 | Официанты — кол-во | Администратор вручную |
-| 22 | Бармены — кол-во | Администратор вручную |
-| 23 | Посудомойщицы — кол-во | Администратор вручную |
-| 24 | Персонал кол-во итого | Администратор вручную |
-| 25 | Завтраки (кол-во гостей по жетонам) | Администратор вручную |
+| 1 | Дата (YYYY-MM-DD) | Скрипт RAW |
+| 2 | День недели | Скрипт |
+| 3 | Выручка итого | iiko OLAP |
+| 4 | Кол-во чеков | iiko OLAP |
+| 5 | Средний чек | iiko OLAP |
+| 6 | Гости | iiko OLAP |
+| 7 | Кухня | iiko OLAP |
+| 8 | Бар | iiko OLAP |
+| 9 | Утро — выручка (09–11) | iiko OLAP |
+| 10 | Утро — гости | iiko OLAP |
+| 11 | День — выручка (11–17) | iiko OLAP |
+| 12 | День — гости | iiko OLAP |
+| 13 | Вечер — выручка (17–23) | iiko OLAP |
+| 14 | Вечер — гости | iiko OLAP |
+| 15 | Отмены (руб) | iiko OLAP |
+| 16 | Списания (руб) | iiko OLAP |
+| 17 | Инкассация | Администратор |
+| 18 | Расход из кассы | Администратор |
+| 19 | Остаток нал | Администратор |
+| 20–23 | Повара / Официанты / Бармены / Посудомойщицы | Администратор |
+| 24 | Персонал итого | Администратор |
+| 25 | Завтраки (гости по жетонам) | Администратор |
 
-**Что можно делать в листе:**
-- Форматирование, заморозка строк/колонок, условное форматирование ✅
-- Вводить данные в строки 17–25 — скрипт их не перезаписывает ✅
-- Добавлять строки ниже строки 25, добавлять формулы туда ✅
-- Перемещать колонки с датами — скрипт ищет дату по значению в строке 1 ✅
+Скрипт пишет **только строки 1–16**. Строки 17–25 не трогает.
+Числовой формат: `# ##0` (пробел как разделитель тысяч).
 
-**Что нельзя:**
-- Редактировать колонку A строки 2–25 — перезапишется при следующем `setup_spreadsheet` ❌
-- Вставлять/удалять строки внутри 2–25 — сдвинет данные, скрипт пишет по номеру строки ❌
+**Нельзя:** редактировать столбец A строк 2–25; вставлять/удалять строки внутри 2–25.
 
-### Лист «Еженедельно»
+### Лист «Монблан» (GID=2051236241) — GAS
 
-- **Строка 1** — номер недели (`Неделя 13`, `Неделя 14`, ...)
-- **Строка 2** — период пн–вс (`23.03.2026 – 29.03.2026`)
-- **Строки 3..N** — значения параметров (порядок = `METRICS_WEEKLY` в `sheets_writer.py`)
+96 строк метрик × 104 недели. Заполняется `fillMonblanWeekFromIiko()` каждый понедельник из iiko OLAP напрямую.
+Строка 1 = год, строка 2 = номер недели, строка 3 = диапазон дат (ISO 8601).
+Числовые форматы: `#,##0` / `0%` — **не менять при записи данных**.
 
-### Лист «Дашборд» (GID=1669207980) — Google Apps Script
+### Лист «Дашборд» (GID=1669207980) — GAS
 
-Сравнение выбранной недели 2026 vs 2025 по всем 96 метрикам. Управляется через `monblan-gas/monblan_dashboard.gs`.
+Сравнение недели 2026 vs 2025 по всем 96 метрикам. Файл: `monblan-gas/monblan_dashboard.gs`.
 
-**Принцип работы:**
-1. Пользователь выбирает неделю 1–52 в B2 → срабатывает `onEditDashboard` → `refreshDashboard()`
-2. `findWeekCol_()` ищет столбцы: год=2025/2026 в строке 1 + неделя=N в строке 2
-3. `writeAllMetricRows_()` выводит ВСЕ 96 строк листа «Монблан» (кроме стр. 87–88)
-4. `writeSignalsSection_()` — топ-5 сигналов по каждой зоне (🔴/🟡/🟢)
-5. AI-блок: меню «🔶 Монблан» → «Обновить AI-анализ» → Groq API → 3 блока по 3 пункта
+**Принцип:** B2 (выбор недели 1–52) → `onEditDashboard` → `refreshDashboard()` → читает лист «Монблан» → выводит все строки с цветовой индикацией → Сигналы недели (топ-5) → AI-блок.
 
-**Цветовая индикация — абсолютные строки:**
-- 🔴 снижение > 10% (T_RED = −0.10)
-- 🟡 снижение 3–10% (T_YELLOW = −0.03)
-- 🟢 рост > 5% (T_GREEN = +0.05)
-- ⚪ норма (−3% … +5%)
+**Цвета — абсолютные строки:** 🔴 >10% падения / 🟡 3–10% / 🟢 >5% роста
+**Цвета — % строки:** 🔴 >5 п.п. / 🟡 1–5 п.п. / 🟢 >3 п.п.
 
-**Цветовая индикация — % строки (процентные пункты):**
-- 🔴 > 5 п.п. снижения / 🟡 1–5 п.п. / 🟢 > 3 п.п. роста
-
-**Структура дашборда (строки):**
-- Строка 1 — заголовок «ДАШБОРД — МОНБЛАН»
-- Строка 2 — B2: выбор недели (выпадающий список 1–52)
-- Строка 3 — шапка (Показатель | 2025 | 2026 | Δ | ●)
-- Строка 4 — период (дата диапазона по ISO 8601)
-- Строки 5..N — все метрики листа «Монблан» (строки 4–96, кроме 87–88)
-- Строки N+2..M — Сигналы недели (топ-5 по зонам: 🔴/🟡/🟢)
-- Строки M+2..M+15 — AI-блок: Причины (3) + Рекомендации (3) + Выводы (3)
-
-**Даты ISO 8601:**
-Неделя 1 = неделя с первым четвергом года (4 янв всегда в нед. 1).
+**ISO-даты:** неделя 1 = неделя с первым четвергом года (4 янв — всегда нед.1).
 - 2025, нед.1: 30 дек 2024 – 5 янв 2025
 - 2026, нед.1: 29 дек 2025 – 4 янв 2026
 
-**AI-анализ — Groq API:**
-- Модель: `llama-3.3-70b-versatile` (бесплатно, без карты)
-- Script Property: `GROQ_API_KEY` (ключ с console.groq.com, хранится в `.env`)
-- Читает отклонения из листа «Монблан», не из дашборда
+**AI-анализ:** Groq API, модель `llama-3.3-70b-versatile`, ключ `GROQ_API_KEY` в Script Properties.
 
-**Меню «🔶 Монблан»:**
-- Обновить дашборд
-- Обновить AI-анализ
-- Загрузить данные за прошлую неделю (`fillMonblanWeekFromIiko`)
-- Установить автозагрузку (каждый Пн 9:00) (`installWeeklyTrigger`)
-- Установить триггер onEdit (`installTrigger`)
-
-**Скрипты папки `monblan-gas/`:**
+**GAS-файлы (`monblan-gas/`):**
 | Файл | Назначение |
 |---|---|
-| `monblan_config.gs` | Конфигурация (START_YEAR, WEEKS=104, iikoWeb LOGIN/PASSWORD) |
-| `monblan_build.gs` | `buildMonblanSheet()` — построение листа «Монблан» (96 строк, 104 недели) |
-| `monblan_iiko.gs` | `fillMonblanWeekFromIiko()` — загрузка из iiko OLAP каждый Пн 9:00 |
-| `monblan_dashboard.gs` | Дашборд (все 96 строк) + сигналы + AI-анализ через Groq |
-| `monblan_protect.gs` | Защита и восстановление столбца A листа «Монблан» |
-| `.env` | GROQ_API_KEY (gitignored, добавлять вручную в Script Properties) |
-| `.env.example` | Шаблон для заполнения `.env` |
+| `monblan_config.gs` | MB_CONFIG: TABLES=90\*, SEATS=90, START_YEAR=2024/48, WEEKS=104, iiko buh/Vjy,kfy2024 |
+| `monblan_build.gs` | `buildMonblanSheet()` — построение листа «Монблан» |
+| `monblan_iiko.gs` | `fillMonblanWeekFromIiko()`, `installWeeklyTrigger()`, `loadWeek16_2026()` |
+| `monblan_dashboard.gs` | Дашборд, сигналы, AI-анализ, `installTrigger()` |
+| `monblan_protect.gs` | `protectColumnA()`, `fixFormatsMonblan()`, `restoreAll()` |
+| `.env` | GROQ_API_KEY (gitignored; добавить вручную в Script Properties) |
 
-**Python-скрипты папки `scripts/`:**
-| Файл | Назначение |
-|---|---|
-| `setup_dashboard.py` | Создание и настройка листа «Дашборд» |
-| `setup_weekly_structure.py` | Запись 96 меток в колонку A листа «Еженедельно» |
-| `fix_formats_and_dates.py` | Восстановление форматов `#,##0` и дат строки 3 |
+\* **Внимание:** `MB_CONFIG.TABLES = 90` используется в формулах оборачиваемости как «посадочных мест», хотя реальных столов 15. Строки 87 («Столов»=90) и 88 («Посадочных мест»=90) в листе «Монблан» — обе заполнены из этого конфига. При расчёте оборачиваемости столов фактически используется 90 (= мест), не 15.
 
 ---
 
 ## MAX мессенджер
 
-**Мессенджер:** MAX (max.ru)
-**Bot API:** `https://botapi.max.ru` (для /me и /updates)
-**Platform API:** `https://platform-api.max.ru` (для отправки сообщений)
+**Bot API:** `https://botapi.max.ru` | **Platform API:** `https://platform-api.max.ru`
 **Авторизация:** заголовок `Authorization: <token>` (без Bearer)
-
-### Формат ежедневного отчёта собственнику
 
 ```
 📊 Монблан — ДД.ММ.ГГГГ
@@ -329,50 +233,18 @@ iikoWeb иногда обрывает SSL-соединение с GitHub Actions
 
 ---
 
-## Переменные окружения (GitHub Actions Secrets)
-
-```
-# iikoWeb OLAP — захардкожены как дефолты в iiko_client.py и config.py
-# (секреты в GitHub не нужны, но могут переопределить)
-IIKO_STORE_ID     = 82455   ← задан в workflow hardcode
-
-# Google Sheets ✅ добавлены в GitHub Secrets
-GOOGLE_SHEETS_ID             = 1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI
-GOOGLE_SERVICE_ACCOUNT_JSON  = {...json...}
-
-# MAX мессенджер ❓ ждём от клиента
-MAX_BOT_TOKEN       = ...
-MAX_OWNER_USER_ID   = ...
-MAX_DEV_USER_ID     = ...
-```
-
----
-
-## Тип iiko-системы
-
-**iiko Cloud** — подтверждено.
-- Клиентский URL: `kafe-monblan.iikoweb.ru` (iikoWeb 9.6.6)
-- Терминалы: iikoFront 9.2.7014.0 (POS-кассы в ресторане)
-- storeId в iikoWeb: `82455`
-- Часовой пояс: UTC+5 (Asia/Yekaterinburg)
-
----
-
 ## Константы
 
-| Параметр | Значение | Статус |
-|---|---|---|
-| Посадочных мест (текущее) | 90 | ✅ |
-| Кол-во столов (текущее) | 15 | ✅ |
-| Посадочных мест (до 15.12.2025) | 58 | ✅ |
-| Кол-во столов (до 15.12.2025) | 14 | ✅ |
-| Дата изменения зала | 15 декабря 2025 | ✅ |
-| Часовой пояс | UTC+5 | ✅ |
-| iikoWeb storeId | 82455 | ✅ |
-| iikoWeb логин | buh / Vjy,kfy2024 | ✅ |
-| Временные срезы | утро 9–11, день 11–17, вечер 17–23 | ✅ |
-| Категории Кухня/Бар | Кухня: кухня/десерты/завтрак/шеф меню. Бар: бар/настойки/пиво/глинтвейн/вино/напитки | ✅ |
-| MAX токены | ❓ ждём от клиента | ❓ |
+| Параметр | Значение |
+|---|---|
+| Посадочных мест | 90 (с 15.12.2025; до этого 58) |
+| Столов | 15 (до 15.12.2025: 14) |
+| MB_CONFIG.TABLES | 90 ⚠️ (используется как мест, не столов — см. примечание в разделе GAS) |
+| Часовой пояс | UTC+5 (Asia/Yekaterinburg) |
+| iikoWeb storeId | 82455 |
+| iikoWeb логин | buh / Vjy,kfy2024 |
+| Временные срезы | утро 9–11, день 11–17, вечер 17–23 |
+| Категории | Кухня: кухня/десерты/завтрак/шеф меню; Бар: бар/настойки/пиво/глинтвейн/вино/напитки |
 
 ---
 
@@ -381,21 +253,21 @@ MAX_DEV_USER_ID     = ...
 ```
 hotel-restaurant-processes/
   scripts/
-    main.py           — точка входа: collect / report / weekly
+    main.py           — collect / report
     iiko_client.py    — iikoWeb OLAP: IikoWebSession + collect_daily_data()
-    sheets_writer.py  — запись в Sheets; METRICS_DAILY; write_daily_row (только строки 1–16)
-    max_bot.py        — MAX мессенджер: отправка + polling
-    config.py         — константы; IIKO_WEB_* + get_capacity() + TIME_SLOTS
+    sheets_writer.py  — METRICS_DAILY; write_daily_row (строки 1–16)
+    max_bot.py        — MAX: отправка + polling
+    config.py         — IIKO_WEB_*, get_capacity(), TIME_SLOTS
     utils.py          — yesterday_utc5(), fmt_money(), parse_admin_reply()
-    test_iiko.py      — тест iikoWeb OLAP
-    test_sheets.py    — тест Google Sheets
-  .github/            ← только папка для справки; реальные workflows — в корне репо
+  monblan-gas/        — GAS-файлы (см. таблицу выше)
   logs/
   requirements.txt
-.github/
-  workflows/
-    daily_report.yml  — cron 30 18 * * * + резервный 30 1 * * * + workflow_dispatch
-    weekly_report.yml — cron 0 2 * * 1 + workflow_dispatch
+  .github/            ← справочная копия; реальные workflows — в корне репо
+
+(корень репо)
+.github/workflows/
+  daily_report.yml   — cron 0 23 * * * + резервный 30 1 * * * + workflow_dispatch
+  weekly_report.yml  — cron 0 2 * * 1 + workflow_dispatch
 ```
 
 ---
@@ -406,7 +278,6 @@ hotel-restaurant-processes/
 |---|---|---|
 | 1 | MAX токены: MAX_BOT_TOKEN, MAX_OWNER_USER_ID, MAX_DEV_USER_ID | ❓ Ждём от клиента |
 | 2 | Мероприятия в iiko: тег или тип заказа? | ❓ Не уточнено |
-| 3 | Ресторан не работал 6–15 апреля 2026 — уточнить причину | ℹ️ Данных нет, 0 выручки |
 
 ---
 
@@ -416,12 +287,12 @@ hotel-restaurant-processes/
 |---|---|
 | Токен iikoWeb истёк (401) | `IikoWebSession._ensure_token()` — автообновление каждые 1100 сек |
 | OLAP статус ERROR | Неверные имена полей или нет лицензии OLAP у пользователя |
-| OLAP пустые данные | За эту дату нет продаж — это нормально, пишем 0 |
+| OLAP пустые данные | Нет продаж за дату — нормально, пишем 0 |
+| Bandwidth quota exceeded | Пауза 60 сек между auth-попытками; 15 сек между OLAP-запросами |
 | SSLEOFError из GitHub Actions | `verify=False` + `Retry(total=3, backoff_factor=2)` в IikoWebSession |
-| storeIds != 1 элемент | Ошибка "Restaurant must be array with length = 1" — всегда `[82455]` |
-| Google Sheets: дата превращается в серийный номер | Строка 1 пишется с `valueInputOption="RAW"`, чтение с `UNFORMATTED_VALUE` |
-| Колонки не в хронологическом порядке | `_find_or_create_date_column` ищет по значению даты в строке 1 |
-| Ручные данные перезаписались | `write_daily_row` пишет ТОЛЬКО строки 1–16; строки 17–25 не трогает |
+| storeIds != 1 элемент | "Restaurant must be array with length = 1" — всегда `[82455]` |
+| Дата превращается в серийный номер | Строка 1 пишется с `valueInputOption="RAW"`, чтение с `UNFORMATTED_VALUE` |
+| Ручные данные перезаписались | `write_daily_row` пишет ТОЛЬКО строки 1–16 |
 | GitHub Actions упал | Уведомление в MAX разработчику через `_alert_dev()` |
 
 ---
@@ -429,18 +300,9 @@ hotel-restaurant-processes/
 ## Правила при написании кода
 
 - Python 3.10+, зависимости в `requirements.txt`
-- Секреты — только через env vars, никогда в коде (iiko-дефолты захардкожены т.к. уже в CLAUDE.md)
-- Все даты UTC+5 при запросах в iikoWeb; UTC в GitHub Actions cron
+- Секреты — только через env vars (iiko-дефолты захардкожены, т.к. уже в CLAUDE.md)
+- Даты: UTC+5 при запросах в iikoWeb; UTC в GitHub Actions cron
 - Retry обязателен для всех внешних запросов
 - При любой ошибке API — продолжать отчёт, поле остаётся 0
 - Комментарии на русском
 - Логировать каждый внешний запрос и его результат
-
----
-
-## Связь с другими папками
-
-| Папка | Отношение |
-|---|---|
-| `otchety/` | Параллельный проект курорта (отель + ресторан), Google Apps Script. Не конфликтуют. |
-| `google-apps-script/` | Скрипты для `otchety/`. Не трогать. |
