@@ -290,8 +290,8 @@ function writeAllMetricRows_(dash, mb, col25, col26) {
       delta    = v26 - v25;
       hasDelta = true;
     } else if (!isNoBase) {
-      var d = (v26 - v25) / Math.abs(v25);
-      if (Math.abs(d) <= 3) { delta = d; hasDelta = true; }
+      delta    = (v26 - v25) / Math.abs(v25);
+      hasDelta = true;
     }
 
     var bg   = isNoBase ? '#c3e6cb' : (hasDelta ? getBgColor_(delta, isPct) : null);
@@ -362,7 +362,6 @@ function computeSignals_(mb, col25, col26) {
     } else {
       if (v25 === 0) continue;
       delta = (v26 - v25) / Math.abs(v25);
-      if (Math.abs(delta) > 3) continue;
     }
 
     var sig = getSignal_(delta, isPct);
