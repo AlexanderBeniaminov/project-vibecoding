@@ -87,12 +87,14 @@ POST /api/olap/init
 | Поле | Описание |
 |---|---|
 | `DishDiscountSumInt` | Выручка со скидкой |
-| `UniqOrderId.OrdersCount` | Число чеков |
+| `UniqOrderId.OrdersCount` | Число чеков (только как dataField, не groupField!) |
 | `GuestNum` | Число гостей |
 | `DishAmountInt` | Количество позиций |
 | `DishCategory` | Категория (для Кухня/Бар) — **не** `DishCategory.Accounting` |
 | `OpenDate.Typed` | Дата открытия заказа (YYYY-MM-DD) |
 | `HourClose` | Час закрытия (для временных срезов) |
+| `OrderNum` | Номер заказа — **рабочий groupField для группировки по чеку** (подтверждено апр 2026: 233 строки = число чеков нед. 17) |
+| `FiscalChequeNumber` | Фискальный номер чека — тоже рабочий groupField (227 строк нед. 17), но меньше чем OrderNum |
 
 `TRANSACTIONS` (olapType) — складские операции, требует отдельной лицензии (нет у роли buh).
 

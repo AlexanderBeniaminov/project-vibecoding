@@ -18,7 +18,7 @@
 // КОНСТАНТЫ IIKO
 // ═══════════════════════════════════════════════════════════════
 var IIKO_KITCHEN_KEYWORDS = ['кухн', 'kitchen', 'еда', 'food', 'блюд', 'горяч', 'десерт', 'завтрак', 'шеф'];
-var IIKO_BAR_KEYWORDS     = ['бар', 'bar', 'напитк', 'drink', 'beverage', 'алкогол'];
+var IIKO_BAR_KEYWORDS     = ['бар', 'bar', 'напитк', 'drink', 'beverage', 'алкогол', 'настойк', 'пиво', 'глинтвейн', 'вино'];
 
 // Кэш токена на время выполнения скрипта
 var _iikoTokenCache_ = null;
@@ -164,14 +164,19 @@ function olapQuery_(token, olapType, groupFields, dataFields, filters) {
     dataFields:  dataFields,
     filters:     filters,
   });
-  var initResp = UrlFetchApp.fetch(cfg.WEB_URL + '/api/olap/init', {
-    method:             'POST',
-    headers:            headers,
-    payload:            initBody,
-    muteHttpExceptions: true,
-  });
-  if (initResp.getResponseCode() !== 200) {
-    Logger.log('olap/init HTTP ' + initResp.getResponseCode());
+  var initResp = null;
+  for (var a = 0; a < 3; a++) {
+    if (a > 0) { Logger.log('olap/init retry ' + (a + 1) + ', пауза 15 сек'); Utilities.sleep(15000); }
+    try {
+      initResp = UrlFetchApp.fetch(cfg.WEB_URL + '/api/olap/init', {
+        method: 'POST', headers: headers, payload: initBody, muteHttpExceptions: true,
+      });
+      if (initResp.getResponseCode() === 200) break;
+      Logger.log('olap/init HTTP ' + initResp.getResponseCode());
+    } catch(e) { Logger.log('olap/init exception: ' + e.message); initResp = null; }
+  }
+  if (!initResp || initResp.getResponseCode() !== 200) {
+    Logger.log('olap/init: не удалось после 3 попыток');
     return null;
   }
   var initData = JSON.parse(initResp.getContentText());
@@ -189,36 +194,43 @@ function olapQuery_(token, olapType, groupFields, dataFields, filters) {
   var status = '';
   for (var i = 0; i < 20; i++) {
     Utilities.sleep(3000);
-    var statusResp = UrlFetchApp.fetch(cfg.WEB_URL + '/api/olap/fetch-status/' + reqId, {
-      method:             'GET',
-      headers:            headers,
-      muteHttpExceptions: true,
-    });
-    if (statusResp.getResponseCode() === 200) {
-      var statusData = JSON.parse(statusResp.getContentText());
-      status = statusData.data || '';
-      Logger.log('OLAP [' + olapType + '] статус: ' + status + ' (попытка ' + (i + 1) + ')');
-      if (status === 'SUCCESS' || status === 'READY') break;
-      if (status === 'ERROR') {
-        Logger.log('OLAP вернул ERROR. groupFields=' + JSON.stringify(groupFields));
-        return null;
+    try {
+      var statusResp = UrlFetchApp.fetch(cfg.WEB_URL + '/api/olap/fetch-status/' + reqId, {
+        method: 'GET', headers: headers, muteHttpExceptions: true,
+      });
+      if (statusResp.getResponseCode() === 200) {
+        var statusData = JSON.parse(statusResp.getContentText());
+        status = statusData.data || '';
+        Logger.log('OLAP [' + olapType + '] статус: ' + status + ' (попытка ' + (i + 1) + ')');
+        if (status === 'SUCCESS' || status === 'READY') break;
+        if (status === 'ERROR') {
+          Logger.log('OLAP вернул ERROR. groupFields=' + JSON.stringify(groupFields));
+          return null;
+        }
       }
-    }
+    } catch(e) { Logger.log('olap/fetch-status exception: ' + e.message); }
   }
   if (status !== 'SUCCESS' && status !== 'READY') {
     Logger.log('OLAP timeout. groupFields=' + JSON.stringify(groupFields));
     return null;
   }
 
-  // 3. Получаем данные
-  var fetchResp = UrlFetchApp.fetch(cfg.WEB_URL + '/api/olap/fetch/' + reqId + '/DATA', {
-    method:             'POST',
-    headers:            headers,
-    payload:            JSON.stringify({rowOffset: 0, rowCount: 10000}),
-    muteHttpExceptions: true,
-  });
-  if (fetchResp.getResponseCode() !== 200) {
-    Logger.log('olap/fetch HTTP ' + fetchResp.getResponseCode());
+  // 3. Получаем данные (с retry при Bandwidth quota exceeded)
+  var fetchResp = null;
+  for (var b = 0; b < 3; b++) {
+    if (b > 0) { Logger.log('olap/fetch/DATA retry ' + (b + 1) + ', пауза 30 сек'); Utilities.sleep(30000); }
+    try {
+      fetchResp = UrlFetchApp.fetch(cfg.WEB_URL + '/api/olap/fetch/' + reqId + '/DATA', {
+        method: 'POST', headers: headers,
+        payload: JSON.stringify({rowOffset: 0, rowCount: 10000}),
+        muteHttpExceptions: true,
+      });
+      if (fetchResp.getResponseCode() === 200) break;
+      Logger.log('olap/fetch HTTP ' + fetchResp.getResponseCode());
+    } catch(e) { Logger.log('olap/fetch/DATA exception: ' + e.message); fetchResp = null; }
+  }
+  if (!fetchResp || fetchResp.getResponseCode() !== 200) {
+    Logger.log('olap/fetch/DATA: не удалось после 3 попыток, groupFields=' + JSON.stringify(groupFields));
     return null;
   }
   var fetchData = JSON.parse(fetchResp.getContentText());
@@ -285,7 +297,6 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
     totalGuests:     0, morningGuests:   0, dayGuests:       0, eveningGuests:  0,
     totalChecks:     0, morningChecks:   0, dayChecks:       0, eveningChecks:  0,
     totalDishes:     0,
-    // Ниже — недоступно через OLAP для роли buh, оставляем 0
     revenue1Guest:      0, revenue2Guests:     0, revenue3PlusGuests: 0,
     checks1Guest:       0, checks2Guests:      0, checks3PlusGuests:  0,
     revenue0to500:      0, revenue500to1000:   0, revenue1to1500:     0,
@@ -333,16 +344,17 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
 
   // ── Запрос 2: выручка по категориям (кухня / бар) ───────────
   Utilities.sleep(15000);
-  var catRows = olapQuery_(token, 'SALES', ['DishCategory.Accounting'],
+  var catRows = olapQuery_(token, 'SALES', ['DishCategory'],
     ['DishDiscountSumInt'], baseFilters);
 
   if (catRows) {
     for (var i = 0; i < catRows.length; i++) {
-      var cat = (catRows[i]['DishCategory.Accounting'] || '').toLowerCase();
+      var cat = (catRows[i]['DishCategory'] || '').toLowerCase();
       var rev = catRows[i]['DishDiscountSumInt'] || 0;
       if (containsKeyword_(cat, IIKO_KITCHEN_KEYWORDS)) {
         data.kitchenRevenue += rev;
-      } else if (containsKeyword_(cat, IIKO_BAR_KEYWORDS)) {
+      } else {
+        // Всё нераспознанное → Бар (пустые категории, глинтвейн и т.д.)
         data.barRevenue += rev;
       }
     }
@@ -373,6 +385,50 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
         data.eveningChecks  += checks;
       }
     }
+  }
+
+  // ── Запрос 4: выручка и чеки по кол-ву гостей в чеке ────────
+  Utilities.sleep(15000);
+  var guestGroupRows = olapQuery_(token, 'SALES', ['GuestNum'],
+    ['DishDiscountSumInt', 'UniqOrderId.OrdersCount'], baseFilters);
+
+  if (guestGroupRows) {
+    for (var i = 0; i < guestGroupRows.length; i++) {
+      var gn  = parseInt(guestGroupRows[i]['GuestNum']) || 0;
+      var rev = guestGroupRows[i]['DishDiscountSumInt'] || 0;
+      var chk = guestGroupRows[i]['UniqOrderId.OrdersCount'] || 0;
+      if (gn === 1) {
+        data.revenue1Guest  += rev;
+        data.checks1Guest   += chk;
+      } else if (gn === 2) {
+        data.revenue2Guests += rev;
+        data.checks2Guests  += chk;
+      } else if (gn >= 3) {
+        data.revenue3PlusGuests += rev;
+        data.checks3PlusGuests  += chk;
+      }
+    }
+  }
+
+  // ── Запрос 5: градация чеков по сумме (на заказ) ─────────────
+  // OrderNum — рабочее поле (подтверждено diagnoseOrderFields: 233 строки = число чеков)
+  Utilities.sleep(60000);
+  var orderRows = olapQuery_(token, 'SALES', ['OrderNum'],
+    ['DishDiscountSumInt'], baseFilters);
+
+  Logger.log('Запрос 5 (OrderNum): ' + (orderRows === null ? 'null (ошибка OLAP)' : orderRows.length + ' строк'));
+  if (orderRows && orderRows.length > 0) {
+    for (var i = 0; i < orderRows.length; i++) {
+      var amt = orderRows[i]['DishDiscountSumInt'] || 0;
+      if      (amt <= 500)  data.revenue0to500     += amt;
+      else if (amt <= 1000) data.revenue500to1000  += amt;
+      else if (amt <= 1500) data.revenue1to1500    += amt;
+      else if (amt <= 3000) data.revenue1500to3000 += amt;
+      else if (amt <= 5000) data.revenue3000to5000 += amt;
+      else                  data.revenue5000plus   += amt;
+    }
+  } else {
+    Logger.log('⚠️ Градация чеков не заполнена. Запустите loadGradationOnly_() отдельно через 5 мин.');
   }
 
   return data;
@@ -496,7 +552,102 @@ function getIsoYear_(date) {
 
 // ═══════════════════════════════════════════════════════════════
 // РАЗОВАЯ ЗАГРУЗКА КОНКРЕТНЫХ НЕДЕЛЬ (запустить вручную)
+// Запускать повторно при ошибке "Bandwidth quota exceeded":
+// подождать 5–10 минут и запустить снова.
 // ═══════════════════════════════════════════════════════════════
+
+// Нед. 16 / 2026: 13–19 апреля (восстановить после ошибки авторизации)
 function loadWeek16_2026() {
   fillMonblanWeek('2026-04-13', '2026-04-19');
 }
+
+// Нед. 17 / 2026: 20–26 апреля
+function loadWeek17_2026() {
+  fillMonblanWeek('2026-04-20', '2026-04-26');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ДИАГНОСТИКА: найти рабочее поле для группировки по заказу
+// Запустить один раз — смотреть Журнал выполнения.
+// Выведет: какие поля дают ненулевые строки → то поле и использовать.
+// ═══════════════════════════════════════════════════════════════
+function diagnoseOrderGroupField_() {
+  var token = getIikoToken_();
+  if (!token) { Logger.log('Auth failed'); return; }
+
+  var filters = [makeDateFilter_('2026-04-20', '2026-04-26')].concat(makeNotDeletedFilters_());
+
+  var candidates = [
+    'UniqOrderId', 'OrderId', 'ExternalId',
+    'FiscalNumber', 'FiscalChequeNumber', 'OrderNumber',
+    'ChequeNumber', 'CheckId', 'OrderNum',
+  ];
+
+  for (var i = 0; i < candidates.length; i++) {
+    Utilities.sleep(15000);
+    var rows = olapQuery_(token, 'SALES', [candidates[i]], ['DishDiscountSumInt'], filters);
+    var info = rows === null
+      ? 'ОШИБКА OLAP (поле не поддерживается)'
+      : rows.length + ' строк';
+    Logger.log('Field [' + candidates[i] + ']: ' + info);
+    if (rows && rows.length > 0) {
+      Logger.log('  ✅ РАБОЧЕЕ ПОЛЕ! Первая строка: ' + JSON.stringify(rows[0]));
+    }
+  }
+  Logger.log('Диагностика завершена. Скопируйте вывод выше разработчику.');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ГРАДАЦИЯ ЧЕКОВ — загрузка в строки 75–85
+// orderGroupField — имя поля из diagnoseOrderGroupField_, которое вернуло строки
+// ═══════════════════════════════════════════════════════════════
+function loadGradationOnly_(dateFrom, dateTo, orderGroupField) {
+  orderGroupField = orderGroupField || 'OrderNum';
+
+  var ss  = SpreadsheetApp.getActiveSpreadsheet();
+  var sh  = getMonblanSheet_(ss);
+  if (!sh) { Logger.log('Лист Монблан не найден'); return; }
+
+  var weekDate = new Date(dateFrom + 'T12:00:00');
+  var col      = findWeekColumn_(sh, getIsoYear_(weekDate), getIsoWeek_(weekDate));
+  if (!col) { Logger.log('Столбец недели не найден: ' + dateFrom); return; }
+
+  var token = getIikoToken_();
+  if (!token) { Logger.log('Ошибка авторизации'); return; }
+
+  var filters = [makeDateFilter_(dateFrom, dateTo)].concat(makeNotDeletedFilters_());
+  var rows    = olapQuery_(token, 'SALES', [orderGroupField], ['DishDiscountSumInt'], filters);
+  Logger.log('loadGradationOnly_ [' + orderGroupField + ']: ' +
+             (rows === null ? 'null (ошибка OLAP)' : rows.length + ' строк'));
+
+  if (!rows || rows.length === 0) {
+    Logger.log('⚠️ Поле [' + orderGroupField + '] вернуло 0 строк. Запустите diagnoseOrderGroupField_().');
+    return;
+  }
+
+  var b = {r0:0, r500:0, r1000:0, r1500:0, r3000:0, r5000:0};
+  for (var i = 0; i < rows.length; i++) {
+    var amt = rows[i]['DishDiscountSumInt'] || 0;
+    if      (amt <= 500)  b.r0    += amt;
+    else if (amt <= 1000) b.r500  += amt;
+    else if (amt <= 1500) b.r1000 += amt;
+    else if (amt <= 3000) b.r1500 += amt;
+    else if (amt <= 5000) b.r3000 += amt;
+    else                  b.r5000 += amt;
+  }
+
+  sh.getRange(75, col).setValue(b.r0);
+  sh.getRange(77, col).setValue(b.r500);
+  sh.getRange(79, col).setValue(b.r1000);
+  sh.getRange(81, col).setValue(b.r1500);
+  sh.getRange(83, col).setValue(b.r3000);
+  sh.getRange(85, col).setValue(b.r5000);
+  Logger.log('✅ Градация чеков записана в столбец ' + col);
+}
+
+// Ярлыки для ручного запуска
+function loadGradationWeek16_2026() { loadGradationOnly_('2026-04-13', '2026-04-19'); }
+function loadGradationWeek17_2026() { loadGradationOnly_('2026-04-20', '2026-04-26'); }
+
+// Публичная обёртка — видна в списке функций Apps Script
+function diagnoseOrderFields() { diagnoseOrderGroupField_(); }
