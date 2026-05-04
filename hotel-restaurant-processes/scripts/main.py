@@ -18,6 +18,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from datetime import date, datetime
 
 # Логирование — в stdout и в файл
@@ -110,17 +111,92 @@ def daily_collect(report_date: date):
         _alert_dev(bot, f"Ошибка сбора данных iiko за {report_date}: {e}")
         sys.exit(1)
 
-    # 2. Записать в Google Sheets
-    logger.info("Шаг 2: запись в Google Sheets...")
+    # 1b. Валидация: revenue=0 без ошибок API — возможный сбой, повтор через 30 сек
+    summary = data.get("orders_summary") or {}
+    revenue = float(summary.get("revenue") or 0)
+    orders  = float(summary.get("orders") or 0)
+    if revenue == 0 and orders == 0 and not data.get("errors"):
+        logger.warning(
+            f"iiko: revenue=0 orders=0 за {report_date} без ошибок API — "
+            f"повторный запрос через 30 сек"
+        )
+        time.sleep(30)
+        try:
+            data2    = collect_daily_data(report_date)
+            summary2 = data2.get("orders_summary") or {}
+            revenue2 = float(summary2.get("revenue") or 0)
+            if revenue2 > 0:
+                logger.info(f"Повторный запрос успешен — revenue={int(revenue2)} руб")
+                data    = data2
+                revenue = revenue2
+            else:
+                logger.warning(f"Повторный запрос тоже revenue=0 за {report_date}")
+                _alert_dev(
+                    bot,
+                    f"⚠️ iiko: нули за {report_date} после 2 попыток. "
+                    f"Ресторан не работал или сбой API — проверьте вручную."
+                )
+        except Exception as e2:
+            logger.error(f"Повторный запрос упал: {e2}", exc_info=True)
+
+    # 2. Подключение к Google Sheets (одна сессия на весь collect)
+    logger.info("Шаг 2: подключение к Google Sheets...")
     try:
         service = _get_sheets_service()
         setup_spreadsheet(service, SHEETS_ID)
+    except Exception as e:
+        logger.error(f"Ошибка подключения к Sheets: {e}", exc_info=True)
+        _alert_dev(bot, f"Ошибка подключения к Sheets за {report_date}: {e}")
+        sys.exit(1)
+
+    # 2b. Защита: не перезаписывать ненулевые данные нулями
+    if revenue == 0:
+        try:
+            existing     = read_daily_row(service, SHEETS_ID, str(report_date))
+            existing_rev = _num(existing, "Выручка итого")
+            if existing_rev > 0:
+                logger.warning(
+                    f"Sheets уже содержит {int(existing_rev)} руб за {report_date}, "
+                    f"iiko вернул 0 — запись отменена"
+                )
+                _alert_dev(
+                    bot,
+                    f"⚠️ {report_date}: iiko=0 руб, Sheets={int(existing_rev)} руб — "
+                    f"запись отменена. Проверьте iiko вручную."
+                )
+                logger.info(f"=== ФИНИШ collect за {report_date} (защита от обнуления) ===")
+                return
+        except Exception as e:
+            logger.warning(f"Проверка существующих данных в Sheets не удалась: {e}")
+
+    # 3. Записать в Google Sheets
+    logger.info("Шаг 3: запись в Google Sheets...")
+    try:
         write_daily_row(service, SHEETS_ID, data)
         logger.info("Данные записаны в Google Sheets")
     except Exception as e:
-        logger.error(f"Ошибка Google Sheets: {e}", exc_info=True)
+        logger.error(f"Ошибка записи в Sheets: {e}", exc_info=True)
         _alert_dev(bot, f"Ошибка записи в Sheets за {report_date}: {e}")
         sys.exit(1)
+
+    # 4. Верификация: перечитать из Sheets и сравнить с тем, что пришло из iiko
+    if revenue > 0:
+        try:
+            written     = read_daily_row(service, SHEETS_ID, str(report_date))
+            written_rev = _num(written, "Выручка итого")
+            if abs(written_rev - revenue) > 1:  # допуск 1 руб на округление
+                logger.error(
+                    f"Верификация: iiko={int(revenue)} руб, Sheets={int(written_rev)} руб"
+                )
+                _alert_dev(
+                    bot,
+                    f"❌ Верификация за {report_date}: iiko={int(revenue)} руб, "
+                    f"Sheets={int(written_rev)} руб — данные не совпадают!"
+                )
+            else:
+                logger.info(f"Верификация OK: {int(written_rev)} руб записано в Sheets")
+        except Exception as e:
+            logger.warning(f"Верификация записи не удалась: {e}")
 
     logger.info(f"=== ФИНИШ collect за {report_date} ===")
 
