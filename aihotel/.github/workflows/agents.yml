@@ -1,0 +1,123 @@
+name: AI Hotel Agents
+
+on:
+  # Ручной запуск из GitHub UI (для тестов и отладки)
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: 'Какой агент запустить'
+        required: true
+        type: choice
+        options:
+          - travelline_collector
+          - agent1_analyst
+          - agent2_strategist
+          - agent3_notify_owner
+          - agent3_send_tasks
+          - agent3_remind
+
+  schedule:
+    # Все времена UTC. Москва = UTC+3, Губаха (Пермь) = UTC+5
+    - cron: '0 20 * * 1'   # Пн 20:00 UTC = Пн 23:00 МСК → TravelLine Collector (ДО Агента 1)
+    - cron: '0 23 * * 1'   # Пн 23:00 UTC = Вт 04:00 UTC+5 → Агент 1 (анализ)
+    - cron: '0 2 * * 2'    # Вт 02:00 UTC = Вт 07:00 UTC+5 → Агент 2 (задачи)
+    - cron: '0 4 * * 2'    # Вт 04:00 UTC = Вт 09:00 UTC+5 → Агент 3 notify_owner
+    - cron: '0 6 * * 2'    # Вт 06:00 UTC = Вт 11:00 UTC+5 → send_tasks (проверка 1)
+    - cron: '0 8 * * 2'    # Вт 08:00 UTC = Вт 13:00 UTC+5 → send_tasks (проверка 2)
+    - cron: '0 10 * * 2'   # Вт 10:00 UTC = Вт 15:00 UTC+5 → send_tasks (проверка 3)
+    - cron: '0 12 * * 2'   # Вт 12:00 UTC = Вт 17:00 UTC+5 → send_tasks (проверка 4)
+    - cron: '0 14 * * 2'   # Вт 14:00 UTC = Вт 19:00 UTC+5 → send_tasks (проверка 5)
+    - cron: '0 9 * * 4'    # Чт 09:00 UTC = Чт 14:00 UTC+5 → remind (напоминание)
+    - cron: '0 12 * * 1'   # Пн 12:00 UTC = Пн 17:00 UTC+5 → remind (перед дедлайном)
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
+  FINANCE_SHEET_ID: ${{ secrets.FINANCE_SHEET_ID }}
+  STRATEGY_SHEET_ID: ${{ secrets.STRATEGY_SHEET_ID }}
+  MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
+  MAX_OWNER_ID: ${{ secrets.MAX_OWNER_ID }}
+  MAX_TEAM_IDS: ${{ secrets.MAX_TEAM_IDS }}
+  TL_CLIENT_ID: ${{ secrets.TL_CLIENT_ID }}
+  TL_CLIENT_SECRET: ${{ secrets.TL_CLIENT_SECRET }}
+  TL_PROPERTY_ID: ${{ secrets.TL_PROPERTY_ID }}
+
+jobs:
+  run-agents:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # === Автоматические запуски по расписанию ===
+
+      - name: TravelLine Collector — сбор данных недели (Пн 20:00 UTC)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 20 * * 1'
+        run: python travelline_collector.py
+
+      - name: Агент 1 — Аналитик (Пн 23:00 UTC)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 23 * * 1'
+        run: python agents/agent1_analyst.py
+
+      - name: Агент 2 — Стратег (Вт 02:00 UTC)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 2 * * 2'
+        run: python agents/agent2_strategist.py
+
+      - name: Агент 3 — Уведомление собственника (Вт 04:00 UTC)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 4 * * 2'
+        run: python agents/agent3_dispatcher.py notify_owner
+
+      - name: Агент 3 — Отправка задач (проверки Вт)
+        if: >
+          github.event_name == 'schedule' && (
+            github.event.schedule == '0 6 * * 2' ||
+            github.event.schedule == '0 8 * * 2' ||
+            github.event.schedule == '0 10 * * 2' ||
+            github.event.schedule == '0 12 * * 2' ||
+            github.event.schedule == '0 14 * * 2'
+          )
+        run: python agents/agent3_dispatcher.py send_tasks
+
+      - name: Агент 3 — Напоминание Чт
+        if: github.event_name == 'schedule' && github.event.schedule == '0 9 * * 4'
+        run: python agents/agent3_dispatcher.py remind
+
+      - name: Агент 3 — Напоминание Пн (перед дедлайном)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 12 * * 1'
+        run: python agents/agent3_dispatcher.py remind
+
+      # === Ручной запуск через workflow_dispatch ===
+
+      - name: Ручной запуск — TravelLine Collector
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'travelline_collector'
+        run: python travelline_collector.py
+
+      - name: Ручной запуск — Агент 1
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent1_analyst'
+        run: python agents/agent1_analyst.py
+
+      - name: Ручной запуск — Агент 2
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent2_strategist'
+        run: python agents/agent2_strategist.py
+
+      - name: Ручной запуск — Агент 3 notify_owner
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent3_notify_owner'
+        run: python agents/agent3_dispatcher.py notify_owner
+
+      - name: Ручной запуск — Агент 3 send_tasks
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent3_send_tasks'
+        run: python agents/agent3_dispatcher.py send_tasks
+
+      - name: Ручной запуск — Агент 3 remind
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent3_remind'
+        run: python agents/agent3_dispatcher.py remind
