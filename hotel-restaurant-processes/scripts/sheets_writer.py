@@ -129,19 +129,26 @@ def setup_spreadsheet(service, spreadsheet_id: str):
 
     meta = sheets_api.get(spreadsheetId=spreadsheet_id).execute()
     existing = {s["properties"]["title"] for s in meta["sheets"]}
+    existing_lower = {t.lower() for t in existing}
     logger.info(f"Существующие листы: {existing}")
 
     requests = []
     for title in ["Ежедневно", "Еженедельно", "Дашборд"]:
-        if title not in existing:
+        if title.lower() not in existing_lower:
             requests.append({"addSheet": {"properties": {"title": title}}})
 
     if requests:
-        sheets_api.batchUpdate(
-            spreadsheetId=spreadsheet_id,
-            body={"requests": requests}
-        ).execute()
-        logger.info(f"Созданы листы: {[r['addSheet']['properties']['title'] for r in requests]}")
+        try:
+            sheets_api.batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": requests}
+            ).execute()
+            logger.info(f"Созданы листы: {[r['addSheet']['properties']['title'] for r in requests]}")
+        except Exception as e:
+            if "already exists" in str(e):
+                logger.warning(f"Листы уже существуют (race condition): {e}")
+            else:
+                raise
 
     # Расширяем лист «Ежедневно» до 500 колонок (хватит на ~2 года данных)
     meta2 = sheets_api.get(spreadsheetId=spreadsheet_id).execute()
