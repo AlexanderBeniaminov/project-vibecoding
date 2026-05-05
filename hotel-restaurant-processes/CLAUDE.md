@@ -29,7 +29,7 @@
 
 | Триггер | Cron / расписание | Местное время (UTC+5) | Что делает |
 |---|---|---|---|
-| Ежедневный (Python) | `0 23 * * *` UTC | 04:00 следующего дня | iiko OLAP → строки 1–16 листа «Ежедневно» |
+| Ежедневный (Python) | `0 23 * * *` UTC | 04:00 следующего дня | iiko OLAP → строки 1–14 листа «Ежедневно» |
 | Резервный (Python) | `30 1 * * *` UTC | 06:30 | Повтор если основной упал |
 | Еженедельный (GAS) | каждый Пн 09:00 UTC+5 | 09:00 понедельник | `fillMonblanWeekFromIiko()` → лист «Монблан» |
 | onEdit (GAS) | при изменении B2 | мгновенно | `onEditDashboard()` → `refreshDashboard()` |
@@ -185,7 +185,7 @@ iikoWeb иногда обрывает SSL с GitHub Actions (SSLEOFError).
 
 **Нельзя:** редактировать столбец A строк 2–27; вставлять/удалять строки внутри 2–27.
 
-> ⚠️ **Несоответствие кода:** `sheets_writer.py::METRICS_DAILY` и `write_daily_row` сейчас заполняют строки 1–16 (включая Отмены/Списания) и не содержат «Нал», «Мойка», «Разнорабочий». Код нужно привести к шаблону — но только по явной команде.
+Скрипт пишет **только строки 1–14**. Строки 15–27 не трогает.
 
 ### Лист «Монблан» (GID=2051236241) — GAS
 
@@ -273,7 +273,7 @@ hotel-restaurant-processes/
   scripts/
     main.py           — collect / report
     iiko_client.py    — iikoWeb OLAP: IikoWebSession + collect_daily_data()
-    sheets_writer.py  — METRICS_DAILY; write_daily_row (строки 1–16)
+    sheets_writer.py  — METRICS_DAILY; write_daily_row (строки 1–14)
     max_bot.py        — MAX: отправка + polling
     config.py         — IIKO_WEB_*, get_capacity(), TIME_SLOTS
     utils.py          — yesterday_utc5(), fmt_money(), parse_admin_reply()
@@ -311,7 +311,7 @@ hotel-restaurant-processes/
 | SSLEOFError из GitHub Actions | `verify=False` + `Retry(total=3, backoff_factor=2)` в IikoWebSession |
 | storeIds != 1 элемент | "Restaurant must be array with length = 1" — всегда `[82455]` |
 | Дата превращается в серийный номер | Строка 1 пишется с `valueInputOption="RAW"`, чтение с `UNFORMATTED_VALUE` |
-| Ручные данные перезаписались | `write_daily_row` пишет ТОЛЬКО строки 1–16 |
+| Ручные данные перезаписались | `write_daily_row` пишет ТОЛЬКО строки 1–14 |
 | GitHub Actions упал | Уведомление в MAX разработчику через `_alert_dev()` |
 | iiko вернул нули (временный сбой) | `daily_collect` повторяет запрос через 30 сек; если снова 0 — алерт |
 | Нули поверх существующих данных | Защита: если в Sheets уже есть ненулевые данные — запись отменяется |

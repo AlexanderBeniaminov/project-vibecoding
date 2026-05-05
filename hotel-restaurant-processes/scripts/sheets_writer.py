@@ -326,8 +326,9 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
     день  = hourly.get("день",  {})
     вечер = hourly.get("вечер", {})
 
-    # Только авто-данные (строки 2–16).
-    # Строки 17+ (ручной ввод) скрипт НЕ пишет — их заполняет администратор.
+    # Авто-данные — ТОЛЬКО строки 2–14.
+    # Строки 15–27 (Отмены, Списания, Нал, Инкассация, персонал и т.д.) —
+    # ручной ввод администратора. Скрипт их НЕ ТРОГАЕТ.
     auto_values = [
         weekday_ru,                          # стр.2  День недели
         _v(revenue),                         # стр.3  Выручка итого
@@ -342,8 +343,7 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         _v(день.get("guests", 0)),           # стр.12 День — гости (11-17)
         _v(вечер.get("revenue", 0)),         # стр.13 Вечер — выручка (17–23)
         _v(вечер.get("guests", 0)),          # стр.14 Вечер — гости (17-23)
-        _v(data.get("cancellations", 0)),    # стр.15 Отмены (руб)
-        _v(data.get("writeoffs", 0)),        # стр.16 Списания (руб)
+        # ← строка 15 и далее — только ручной ввод, скрипт останавливается здесь
     ]
 
     col_num = _find_or_create_date_column(service, spreadsheet_id, "Ежедневно", report_date, search_row=1)
@@ -357,7 +357,7 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         body={"values": [[report_date]]},
     ).execute()
 
-    # Строки 2–16 — только авто-данные
+    # Строки 2–14 — авто-данные. Строки 15–27 скрипт не трогает.
     service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
         range=f"Ежедневно!{col_ltr}2",
@@ -365,7 +365,7 @@ def write_daily_row(service, spreadsheet_id: str, data: dict):
         body={"values": [[v] for v in auto_values]},
     ).execute()
 
-    logger.info(f"Авто-данные за {report_date} записаны в колонку {col_ltr} (строки 1–16)")
+    logger.info(f"Авто-данные за {report_date} записаны в колонку {col_ltr} (строки 1–14)")
 
 
 # ---------------------------------------------------------------------------
