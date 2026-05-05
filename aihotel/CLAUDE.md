@@ -236,6 +236,12 @@ if len(current_tasks) > 1:
     ws_archive.append_rows(week_label)
 ```
 
+## Источник данных — текущий и будущий
+
+**Сейчас:** Виктор вносит данные недели вручную в лист **«2026 старый»** финансовой таблицы до понедельника 23:00 МСК. Агент 1 читает из этого листа.
+
+**В перспективе:** TravelLine → лист **«2026»** (автоматически через `travelline_collector.py`) → Агент 1 читает из «2026». Когда интеграция будет готова — в `agent1_analyst.py` изменить `CURRENT_YEAR_SHEET = '2026 старый'` → `'2026'` и раскомментировать cron TravelLine Collector в workflow.
+
 ## GitHub Actions — расписание
 
 Все времена в UTC. Московское время = UTC+3.
@@ -244,7 +250,8 @@ if len(current_tasks) > 1:
 # .github/workflows/agents.yml
 on:
   schedule:
-    - cron: '0 20 * * 1'   # Пн 20:00 UTC = Пн 23:00 МСК → TravelLine Collector
+    # TravelLine Collector отключён — включить когда TL-интеграция готова
+    # - cron: '0 20 * * 1'   # Пн 20:00 UTC = Пн 23:00 МСК → TravelLine Collector
     - cron: '0 23 * * 1'   # Пн 23:00 UTC = Вт 02:00 МСК → Агент 1 (анализ)
     - cron: '0 2 * * 2'    # Вт 02:00 UTC = Вт 05:00 МСК → Агент 2 (задачи)
 ```
