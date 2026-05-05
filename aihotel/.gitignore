@@ -1,0 +1,6 @@
+.env
+*.docx
+__pycache__/
+*.py[cod]
+.DS_Store
+credentials.json

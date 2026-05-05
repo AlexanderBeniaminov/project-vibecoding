@@ -1,0 +1,5 @@
+groq>=0.9
+gspread>=6.0
+google-auth>=2.0
+requests>=2.31
+python-dotenv>=1.0
