@@ -17,7 +17,11 @@
 // ═══════════════════════════════════════════════════════════════
 // КОНСТАНТЫ IIKO
 // ═══════════════════════════════════════════════════════════════
-var IIKO_KITCHEN_KEYWORDS = ['кухн', 'kitchen', 'еда', 'food', 'блюд', 'горяч', 'десерт', 'завтрак', 'шеф'];
+// Ключевые слова для категоризации Кухня/Бар (поле DishCategory).
+// Также применяются к DishName для позиций без категории.
+var IIKO_KITCHEN_KEYWORDS = ['кухн', 'kitchen', 'еда', 'food', 'блюд', 'горяч', 'десерт', 'завтрак', 'шеф',
+                             'комплекс', 'суп', 'блин', 'наполеон', 'пицц', 'бургер', 'салат',
+                             'стейк', 'шашлык', 'омлет', 'каша', 'чизкейк', 'торт', 'мороженое'];
 var IIKO_BAR_KEYWORDS     = ['бар', 'bar', 'напитк', 'drink', 'beverage', 'алкогол', 'настойк', 'пиво', 'глинтвейн', 'вино'];
 
 // Кэш токена на время выполнения скрипта
@@ -343,18 +347,28 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
   }
 
   // ── Запрос 2: выручка по категориям (кухня / бар) ───────────
+  // Группируем по DishCategory + DishName, чтобы позиции с пустой категорией
+  // определялись по названию блюда, а не уходили все в Бар
   Utilities.sleep(15000);
-  var catRows = olapQuery_(token, 'SALES', ['DishCategory'],
+  var catRows = olapQuery_(token, 'SALES', ['DishCategory', 'DishName'],
     ['DishDiscountSumInt'], baseFilters);
 
   if (catRows) {
     for (var i = 0; i < catRows.length; i++) {
-      var cat = (catRows[i]['DishCategory'] || '').toLowerCase();
-      var rev = catRows[i]['DishDiscountSumInt'] || 0;
+      var cat  = (catRows[i]['DishCategory'] || '').toLowerCase().trim();
+      var name = (catRows[i]['DishName']     || '').toLowerCase().trim();
+      var rev  = catRows[i]['DishDiscountSumInt'] || 0;
       if (containsKeyword_(cat, IIKO_KITCHEN_KEYWORDS)) {
         data.kitchenRevenue += rev;
+      } else if (!cat) {
+        // Пустая категория: определяем по названию блюда
+        if (containsKeyword_(name, IIKO_KITCHEN_KEYWORDS)) {
+          data.kitchenRevenue += rev;
+        } else {
+          data.barRevenue += rev;
+        }
       } else {
-        // Всё нераспознанное → Бар (пустые категории, глинтвейн и т.д.)
+        // Известная барная категория или нераспознанное → Бар
         data.barRevenue += rev;
       }
     }
