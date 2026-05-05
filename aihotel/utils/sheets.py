@@ -76,8 +76,7 @@ def reset_weekly_flags(ws_status: gspread.Worksheet, current_week: str) -> None:
     if saved_week != current_week:
         print(f"Новая неделя {current_week} (была {saved_week}), сбрасываем флаги")
         set_flag(ws_status, 'неделя', current_week)
-        for key in ['данные_внесены', 'анализ_готов', 'дайджест_записан',
-                    'задачи_сформированы', 'задачи_утверждены', 'задачи_отправлены']:
+        for key in ['данные_внесены', 'анализ_готов', 'дайджест_записан', 'задачи_сформированы']:
             set_flag(ws_status, key, 'нет')
     else:
         print(f"Неделя {current_week} — флаги сохранены")

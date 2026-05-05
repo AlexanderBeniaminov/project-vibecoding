@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.sheets import get_client, get_worksheet, get_flag, set_flag
 from utils.prompts import build_agent2_system_prompt
-from utils import max_bot
 
 load_dotenv()
 
@@ -160,9 +159,7 @@ def main():
     try:
         raw_response = call_claude(system_prompt, user_message)
     except RuntimeError as e:
-        msg = f"Агент 2: ошибка Claude API. Нужна ручная постановка задач. Ошибка: {e}"
-        print(f"ОШИБКА: {msg}")
-        max_bot.send_owner(msg)
+        print(f"ОШИБКА: Агент 2: ошибка Groq API. Нужна ручная постановка задач. Ошибка: {e}")
         sys.exit(1)
 
     # Парсинг JSON
@@ -171,9 +168,7 @@ def main():
         tasks = parse_tasks_json(raw_response)
         print(f"  Получено {len(tasks)} задач")
     except (ValueError, json.JSONDecodeError) as e:
-        msg = f"Агент 2: не удалось распарсить JSON от Claude. Нужна ручная постановка задач.\nОшибка: {e}\nОтвет Claude (первые 500 символов): {raw_response[:500]}"
-        print(f"ОШИБКА: {msg}")
-        max_bot.send_owner(msg)
+        print(f"ОШИБКА: Агент 2: не удалось распарсить JSON. Нужна ручная постановка задач.\nОшибка: {e}\nОтвет (первые 500 символов): {raw_response[:500]}")
         sys.exit(1)
 
     # Запись задач в таблицу

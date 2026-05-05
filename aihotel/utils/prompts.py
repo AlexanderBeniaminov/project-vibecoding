@@ -86,35 +86,3 @@ def build_agent2_system_prompt() -> str:
 Поле "цель" — одна строка: какой KPI продвигает задача и почему."""
 
 
-def build_owner_notify_message(tasks_summary: str, strategy_sheet_url: str) -> str:
-    return f"""Привет! Задачи команды на эту неделю готовы 📋
-
-{tasks_summary}
-
-Посмотри и поставь "да" в ячейку "задачи_утверждены" в таблице, когда одобришь.
-Ссылка на таблицу с задачами: {strategy_sheet_url}
-
-Как только поставишь "да" — задачи сразу уйдут каждому в личку."""
-
-
-def build_task_message(name: str, tasks: list, strategy_sheet_url: str, week_label: str) -> str:
-    lines = [f"Привет, {name}! Твои задачи на {week_label} 👇\n"]
-    for i, task in enumerate(tasks, 1):
-        lines.append(f"Задача {i}: {task['задача']}")
-        lines.append(f"  Результат: {task['результат']}")
-        lines.append(f"  Проверка: {task['проверка']}")
-        lines.append(f"  Срок: {task['срок']}")
-        if task.get('цель'):
-            lines.append(f"  Зачем: {task['цель']}")
-        lines.append("")
-    lines.append("Статусы по задачам — в таблице до понедельника 22:00.")
-    lines.append(f"Ссылка: {strategy_sheet_url}")
-    return "\n".join(lines)
-
-
-def build_remind_message(name: str, strategy_sheet_url: str) -> str:
-    return f"""Привет, {name}! Напоминаю — до завтра (пн) 22:00 нужно заполнить статусы по задачам в таблице.
-
-Ссылка: {strategy_sheet_url}
-
-Это важно — статусы идут в анализ следующей недели."""

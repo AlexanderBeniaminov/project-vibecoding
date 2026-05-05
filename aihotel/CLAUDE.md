@@ -7,7 +7,7 @@
 
 ## Что это за проект
 
-AI-система управления коттеджами и хостелами ВК "Губаха" (горнолыжный курорт, Пермский край). Три Python-скрипта-агента автоматизируют еженедельный цикл: анализ финансов → постановка задач → рассылка через MAX. Подробно: [project.md](project.md).
+AI-система управления коттеджами и хостелами ВК "Губаха" (горнолыжный курорт, Пермский край). Два Python-скрипта-агента автоматизируют еженедельный цикл: анализ финансов → постановка задач в Google Таблице. Коммуникация с командой — только через таблицу, без мессенджеров. Подробно: [project.md](project.md).
 
 Разработка ведётся вайбкодингом. Разработчик — Python-новичок. Код должен быть максимально простым и читаемым.
 
@@ -57,12 +57,10 @@ python-dotenv>=1.0
 aihotel/
 ├── agents/
 │   ├── agent1_analyst.py       # Агент 1: читает таблицу → анализ → цвет → дайджест
-│   ├── agent2_strategist.py    # Агент 2: дайджест + база знаний → задачи → таблица
-│   └── agent3_dispatcher.py    # Агент 3: рассылка задач и напоминаний в MAX
+│   └── agent2_strategist.py    # Агент 2: дайджест + база знаний → задачи → таблица
 ├── utils/
 │   ├── sheets.py               # Google Sheets: чтение, запись, цвет ячеек
-│   ├── max_bot.py              # MAX Bot: отправка сообщений
-│   └── prompts.py              # Системные промпты для всех агентов
+│   └── prompts.py              # Системные промпты для агентов
 ├── .github/
 │   └── workflows/
 │       └── agents.yml          # GitHub Actions: cron-расписание запуска
@@ -82,9 +80,9 @@ GROQ_API_KEY=                  # Ключ Groq API (console.groq.com)
 GOOGLE_CREDS_JSON=             # СОДЕРЖИМОЕ credentials.json (весь JSON одной строкой)
 FINANCE_SHEET_ID=              # ID финансовой Google Таблицы (из URL таблицы)
 STRATEGY_SHEET_ID=             # ID стратегической Google Таблицы (из URL таблицы)
-MAX_BOT_TOKEN=                 # Токен MAX бота
-MAX_OWNER_ID=                  # ID собственника в MAX
-MAX_TEAM_IDS=                  # ID исполнителей через запятую (порядок = порядок строк в таблице задач)
+TL_CLIENT_ID=                  # TravelLine API client id
+TL_CLIENT_SECRET=              # TravelLine API client secret
+TL_PROPERTY_ID=                # TravelLine ID объекта
 ```
 
 > **Важно про GOOGLE_CREDS_JSON:** это не путь к файлу, а само содержимое JSON. Скопировать всё содержимое credentials.json и вставить как одну строку. В коде используется `json.loads()`, не `from_service_account_file()`.
@@ -165,23 +163,6 @@ def paint_cell(worksheet: gspread.Worksheet, cell: str, color_name: str) -> None
     worksheet.format(cell, {'backgroundColor': COLORS[color_name]})
 ```
 
-### Отправка сообщения в MAX
-
-```python
-import os
-import requests
-
-def send_max_message(user_id: str, text: str) -> bool:
-    token = os.environ['MAX_BOT_TOKEN']
-    url = f"https://botapi.max.ru/messages?access_token={token}"
-    payload = {"user_id": int(user_id), "text": text}
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        return response.status_code == 200
-    except Exception:
-        return False
-```
-
 ### Работа со статусом системы
 
 Лист «Статус системы» в финансовой таблице — ключи в колонке A, значения в колонке B.
@@ -205,8 +186,7 @@ def reset_weekly_flags(ws_status, current_week: str) -> None:
     saved_week = get_flag(ws_status, 'неделя')
     if saved_week != current_week:
         set_flag(ws_status, 'неделя', current_week)
-        for key in ['данные_внесены', 'анализ_готов', 'дайджест_записан',
-                    'задачи_сформированы', 'задачи_утверждены', 'задачи_отправлены']:
+        for key in ['данные_внесены', 'анализ_готов', 'дайджест_записан', 'задачи_сформированы']:
             set_flag(ws_status, key, 'нет')
 ```
 
@@ -221,8 +201,6 @@ def reset_weekly_flags(ws_status, current_week: str) -> None:
 | анализ_готов | да / нет |
 | дайджест_записан | да / нет |
 | задачи_сформированы | да / нет |
-| задачи_утверждены | да / нет |
-| задачи_отправлены | да / нет |
 
 > Лист «Статус системы» — в финансовой таблице, 5-й лист (помимо Текущий год, Прошлый год, Анализ, База знаний).
 
@@ -266,26 +244,12 @@ if len(current_tasks) > 1:
 # .github/workflows/agents.yml
 on:
   schedule:
-    - cron: '0 20 * * 1'     # Пн 20:00 UTC = Пн 23:00 МСК → Агент 1
-    - cron: '0 23 * * 1'     # Пн 23:00 UTC = Вт 02:00 МСК → Агент 2
-    - cron: '0 6 * * 2'      # Вт 06:00 UTC = Вт 09:00 МСК → Агент 3 notify_owner
-    # Проверка утверждения каждые 2 часа вт–чт (09:00–22:00 МСК = 06:00–19:00 UTC)
-    - cron: '0 6,8,10,12,14,16,18 * * 2'   # Вт
-    - cron: '0 6,8,10,12,14,16,18 * * 3'   # Ср
-    - cron: '0 6,8,10,12,14,16,18 * * 4'   # Чт
-    # После отправки задач — напоминания
-    - cron: '0 14 * * 4'     # Чт 14:00 UTC = Чт 17:00 МСК → Агент 3 remind
-    - cron: '0 17 * * 1'     # Пн 17:00 UTC = Пн 20:00 МСК → Агент 3 remind
-  workflow_dispatch:
-    inputs:
-      agent:
-        description: 'Какой агент запустить'
-        required: true
-        type: choice
-        options: [agent1, agent2, agent3_notify, agent3_send, agent3_remind]
+    - cron: '0 20 * * 1'   # Пн 20:00 UTC = Пн 23:00 МСК → TravelLine Collector
+    - cron: '0 23 * * 1'   # Пн 23:00 UTC = Вт 02:00 МСК → Агент 1 (анализ)
+    - cron: '0 2 * * 2'    # Вт 02:00 UTC = Вт 05:00 МСК → Агент 2 (задачи)
 ```
 
-> **Утверждение: никакой автоматической отправки без одобрения собственника.** Агент 3 в режиме `send_tasks` проверяет флаг. Если `задачи_утверждены=да` — отправляет и ставит `задачи_отправлены=да`. Если `нет` — молча завершается. Следующий запуск (через 2 часа) снова проверит.
+Результат каждого запуска — в Google Таблице. Команда заходит в таблицу сама.
 
 > GitHub Actions cron может опаздывать до 10–15 минут. Для нашего цикла не критично.
 
@@ -383,10 +347,10 @@ on:
 - Не добавлять RAG, ChromaDB, Pinecone — база знаний вставляется целиком в промпт
 - Не читать xlsx/pdf напрямую — один раз конвертировать в текст, положить в таблицу
 - Не строить веб-интерфейс или дашборд
-- Не усложнять обработку ошибок в MVP — простой retry, потом уведомление
+- Не усложнять обработку ошибок в MVP — простой retry, потом print и sys.exit
 - Не переносить секреты в код — только через .env и GitHub Secrets
 - Не использовать `from_service_account_file()` — только `from_service_account_info(json.loads(...))`
-- **Не отправлять задачи без явного утверждения собственника**
+- Не добавлять мессенджеры или push-уведомления — коммуникация только через Google Таблицу
 
 ## Связанные проекты
 
