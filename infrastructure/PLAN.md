@@ -1,143 +1,108 @@
 # План выполнения — Проект "Сервер + VPN"
 
 ## ✅ Выполнено
+
 - [x] VPS создан на Beget (84.54.30.209, Ubuntu 24.04)
-- [x] setup.sh запущен и выполнен успешно
 - [x] WireGuard установлен на сервере (wg-quick@wg0)
 - [x] Профили alex.conf и oleg.conf созданы, QR-коды скачаны
-- [x] WireGuard установлен на Mac, alex_split импортирован и подключён ✅
+- [x] WireGuard установлен на Mac, alex_split импортирован и подключён
 - [x] oleg_split импортирован на Mac (для ноутбука Олега)
-- [x] Порт WireGuard изменён с 51820 → 443/UDP (обход блокировки РКН)
-- [x] UFW FORWARD policy = ACCEPT (пересылка пакетов разрешена)
+- [x] Порт WireGuard изменён с 51820 → 443/UDP (обход РКН)
+- [x] UFW FORWARD policy = ACCEPT
 - [x] AllowedIPs = 10.66.66.0/24 (split-tunnel, только трафик к серверу)
 - [x] Оба VPN работают одновременно: WireGuard + Happ Plus (Германия)
-- [x] SSH-конфиг на Mac: команда `ssh server` → 84.54.30.209
+- [x] SSH-конфиг: `ssh server` → 84.54.30.209, ключ id_ed25519
 - [x] Python venv создан (/home/parser/venv)
-- [x] Все библиотеки установлены
-- [x] Код всех парсеров написан
-- [x] Код ботов написан
-- [x] Cron-задания настроены
-- [x] fail2ban и UFW настроены
-- [x] Файлы трекинга: CLAUDE.md, PROJECT.md, PLAN.md, STATUS.md
+- [x] Библиотеки установлены (requests, gspread, google-auth, loguru, python-telegram-bot)
+- [x] Все парсеры скопированы на сервер
+- [x] account_manager.py — добавлена поддержка VK MAX (notify_vkmax)
+- [x] vk_max_bot.py переписан под VK MAX Bot API (botapi.max.ru)
+- [x] daily_report.py — ежедневный отчёт из Google Sheets → VK MAX
+- [x] settings.py для alex заполнен (VK MAX токен + iiko таблица)
+- [x] service_account.json для alex загружен на сервер
+- [x] Cron: daily_report.py запускается в 06:00 UTC (09:00 МСК)
+- [x] Ежедневный отчёт протестирован — сообщение приходит в VK MAX ✅
 
 ---
 
-## ✅ Шаг 1 — VPN исправлен (ВЫПОЛНЕНО)
+## 🔲 Следующие шаги
 
-**Проблема:** При подключении WireGuard интернет падает полностью.
+### Шаг 1 — Systemd-сервис для VK MAX бота (автозапуск)
 
-**Причина 1:** UFW блокирует пересылку пакетов (DEFAULT_FORWARD_POLICY=DROP).
-
-**Причина 2:** AllowedIPs = 0.0.0.0/0 — весь трафик через VPN, должен быть split-tunnel.
-
-**Действия на сервере:**
+**На сервере** (чтобы бот отвечал на /ping, /status, /report):
 ```bash
-# 1. Разрешить пересылку пакетов в UFW
-sed -i 's/DEFAULT_FORWARD_POLICY="DROP"/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
-ufw reload
+cat > /etc/systemd/system/vkmax-bot.service << 'EOF'
+[Unit]
+Description=VK MAX Bot (alex)
+After=network.target
 
-# 2. Проверить что ip_forward активен
-cat /proc/sys/net/ipv4/ip_forward  # должно быть 1
+[Service]
+User=root
+WorkingDirectory=/home/parser
+ExecStart=/home/parser/venv/bin/python3 /home/parser/bots/vk_max_bot.py alex
+Restart=always
+RestartSec=10
 
-# 3. Перегенерировать конфиги клиентов с split-tunnel AllowedIPs
-# (только зарубежные IP через VPN)
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable vkmax-bot
+systemctl start vkmax-bot
+systemctl status vkmax-bot
 ```
 
-**Действия на Mac:**
-- Обновить alex.conf с правильным AllowedIPs (split-tunnel список)
-- Импортировать oleg.conf
+---
 
-**Результат:** Российские сайты открываются напрямую, claude.ai — через VPN.
+### Шаг 2 — Настройка oleg
+
+Нужны данные:
+- VK MAX токен (если у Олега отдельный бот) или тот же бот с другим user_id
+- Google Sheets таблицы Олега
+- service_account.json (тот же файл, что для alex)
+
+```bash
+# Скопировать service_account.json для oleg
+scp /home/parser/config/alex/service_account.json \
+    /home/parser/config/oleg/service_account.json
+```
 
 ---
 
-## 📱 Шаг 2 — WireGuard на всех устройствах (СЛЕДУЮЩИЙ)
+### Шаг 3 — Telegram боты (опционально)
 
-- [x] Mac: alex_split и oleg_split импортированы
-- [ ] Android Huawei Nova 11: установить WireGuard, отсканировать alex_qr.png и oleg_qr.png
-- [ ] oleg_split перенести на ноутбук Олега
-
----
-
-## 🤖 Шаг 3 — Создать Telegram боты
-
-**Действия:**
-1. Открыть Telegram → найти @BotFather
-2. Написать `/newbot`
-3. Имя: `Alex Parser Bot` (или любое)
-4. Username: `alex_parser_XXXXX_bot` (уникальный)
-5. Скопировать TOKEN
-6. Повторить для oleg
-7. Узнать CHAT_ID: написать боту `/start`, потом открыть:
+1. Открыть Telegram → @BotFather → `/newbot`
+2. Скопировать TOKEN
+3. Написать боту `/start`, узнать CHAT_ID через:
    `https://api.telegram.org/bot<TOKEN>/getUpdates`
-
-**Что нужно получить:**
-- `TELEGRAM_BOT_TOKEN` для alex
-- `TELEGRAM_BOT_TOKEN` для oleg
-- `TELEGRAM_CHAT_ID` для alex
-- `TELEGRAM_CHAT_ID` для oleg
-
----
-
-## ⚙️ Шаг 4 — Заполнить settings.py
-
-**Файл:** `/home/parser/config/alex/settings.py`
-
-Нужно вставить:
-- `TELEGRAM_BOT_TOKEN` — из BotFather
-- `TELEGRAM_CHAT_ID` — ID чата
-- `SPREADSHEET_IDS` — ID Google таблиц (из ссылки на таблицу)
-- `TRAVELLINE_LOGIN` / `TRAVELLINE_PASSWORD`
-- `IIKO_API_KEY` / `IIKO_HOST`
-- Telethon: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE`
-- `VK_ACCESS_TOKEN` (если нужен VK бот)
-
-Повторить для oleg.
+4. Добавить в settings.py:
+   ```python
+   TELEGRAM_BOT_TOKEN = "..."
+   TELEGRAM_CHAT_ID   = "..."
+   ```
 
 ---
 
-## 📤 Шаг 5 — Загрузить service_account.json
+### Шаг 4 — WireGuard на Android (Huawei Nova 11)
 
-**С Mac на сервер:**
-```bash
-scp ~/путь/к/service_account.json root@84.54.30.209:/home/parser/config/alex/service_account.json
-scp ~/путь/к/service_account.json root@84.54.30.209:/home/parser/config/oleg/service_account.json
+1. Установить приложение WireGuard из AppGallery
+2. QR-коды уже готовы: alex_qr.png и oleg_qr.png (скачаны ранее)
+3. Отсканировать QR в приложении
+
+---
+
+### Шаг 5 — VS Code Remote-SSH
+
 ```
-
-Расшарить Google таблицы на email Service Account.
-
----
-
-## 💻 Шаг 6 — VS Code Remote-SSH
-
-**Установить расширение:**
-- VS Code → Extensions → Remote - SSH → Install
-
-**Настроить ~/.ssh/config на Mac:**
-```
-Host server-alex
-    HostName 84.54.30.209
-    User parser
-    IdentityFile ~/.ssh/id_rsa
-
-Host server-oleg
-    HostName 84.54.30.209
-    User parser
-    IdentityFile ~/.ssh/id_rsa
+# ~/.ssh/config уже есть Host server → 84.54.30.209
+# Установить в VS Code: расширение "Remote - SSH"
+# Подключиться: Ctrl+Shift+P → "Remote-SSH: Connect to Host" → server
 ```
 
 ---
 
-## 📂 Шаг 7 — Перенести существующие iiko-скрипты
-
-Скопировать готовые скрипты iiko с Mac на сервер:
-```bash
-scp ~/путь/к/iiko_script.py root@84.54.30.209:/home/parser/parsers/
-```
-
----
-
-## ✅ Шаг 8 — Финальная проверка
+### Шаг 6 — Финальная проверка
 
 ```bash
 # На сервере
@@ -145,12 +110,8 @@ bash /home/parser/check_all.sh
 ```
 
 **Чек-лист:**
-- [ ] claude.ai открывается через VPN (alex)
-- [ ] claude.ai открывается через VPN (oleg)
-- [ ] Российские сайты без VPN (split-tunnel)
-- [ ] Парсер → Google Sheets (alex)
-- [ ] Парсер → Google Sheets (oleg)
-- [ ] Telegram бот alex отвечает на /ping
-- [ ] Telegram бот oleg отвечает на /ping
-- [ ] Watchdog перезапускает VPN при падении
+- [ ] VK MAX бот отвечает на /ping
+- [ ] Ежедневный отчёт приходит в 09:00 МСК
 - [ ] Cron запускает парсеры по расписанию
+- [ ] WireGuard watchdog работает
+- [ ] Логи пишутся в /home/parser/logs/
