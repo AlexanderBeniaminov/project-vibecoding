@@ -17,12 +17,19 @@
 // ═══════════════════════════════════════════════════════════════
 // КОНСТАНТЫ IIKO
 // ═══════════════════════════════════════════════════════════════
-// Ключевые слова для категоризации Кухня/Бар (поле DishCategory).
-// Также применяются к DishName для позиций без категории.
+// Ключевые слова для категоризации ВЫРУЧКИ Кухня/Бар по DishCategory.
+// Также применяются к DishName для позиций без категории (широкий список).
 var IIKO_KITCHEN_KEYWORDS = ['кухн', 'kitchen', 'еда', 'food', 'блюд', 'горяч', 'десерт', 'завтрак', 'шеф',
                              'комплекс', 'суп', 'блин', 'наполеон', 'пицц', 'бургер', 'салат',
                              'стейк', 'шашлык', 'омлет', 'каша', 'чизкейк', 'торт', 'мороженое'];
 var IIKO_BAR_KEYWORDS     = ['бар', 'bar', 'напитк', 'drink', 'beverage', 'алкогол', 'настойк', 'пиво', 'глинтвейн', 'вино'];
+
+// Ключевые слова для подсчёта БЛЮД КУХНИ из позиций с пустой категорией.
+// Намеренно НЕ включает 'комплекс' — комплексы могут быть кофейными (бар),
+// а не только едой. Только однозначно кухонные позиции.
+var IIKO_KITCHEN_DISH_KEYWORDS = ['суп', 'борщ', 'солянк', 'уха', 'похлебк',
+                                   'пицц', 'бургер', 'шашлык', 'стейк', 'чебурек',
+                                   'пельмен', 'вареник', 'блюд', 'горяч', 'кухн'];
 
 // Кэш токена на время выполнения скрипта
 var _iikoTokenCache_ = null;
@@ -359,22 +366,22 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
       var name   = (catRows[i]['DishName']     || '').toLowerCase().trim();
       var rev    = catRows[i]['DishDiscountSumInt'] || 0;
       var dishes = catRows[i]['DishAmountInt']      || 0;
-      var isKitchen = false;
+      var isKitchenRev   = false;  // для выручки — широкие ключевые слова
+      var isKitchenDish  = false;  // для блюд — только однозначно кухонные
+
       if (containsKeyword_(cat, IIKO_KITCHEN_KEYWORDS)) {
-        isKitchen = true;
+        // Явная кухонная категория → и выручка, и блюдо идут в кухню
+        isKitchenRev  = true;
+        isKitchenDish = true;
       } else if (!cat) {
-        // Пустая категория: определяем по названию блюда
-        if (containsKeyword_(name, IIKO_KITCHEN_KEYWORDS)) {
-          isKitchen = true;
-        }
+        // Пустая категория: выручка — широкий список; блюда — только узкий
+        isKitchenRev  = containsKeyword_(name, IIKO_KITCHEN_KEYWORDS);
+        isKitchenDish = containsKeyword_(name, IIKO_KITCHEN_DISH_KEYWORDS);
       }
-      if (isKitchen) {
-        data.kitchenRevenue += rev;
-        data.kitchenDishes  += dishes;
-      } else {
-        // Известная барная категория или нераспознанное → Бар
-        data.barRevenue += rev;
-      }
+
+      if (isKitchenRev)  data.kitchenRevenue += rev;
+      else               data.barRevenue     += rev;
+      if (isKitchenDish) data.kitchenDishes  += dishes;
     }
   }
 
