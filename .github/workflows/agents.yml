@@ -37,7 +37,8 @@ env:
   STRATEGY_SHEET_ID: ${{ secrets.STRATEGY_SHEET_ID }}
   MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
   MAX_OWNER_ID: ${{ secrets.MAX_OWNER_USER_ID }}
-  MAX_TEAM_IDS: ${{ secrets.MAX_TEAM_IDS }}
+  # Тестовый режим: все задачи идут собственнику. Заменить на secrets.MAX_TEAM_IDS когда будут реальные ID команды.
+  MAX_TEAM_IDS: "${{ secrets.MAX_OWNER_USER_ID }},${{ secrets.MAX_OWNER_USER_ID }},${{ secrets.MAX_OWNER_USER_ID }},${{ secrets.MAX_OWNER_USER_ID }},${{ secrets.MAX_OWNER_USER_ID }},${{ secrets.MAX_OWNER_USER_ID }}"
   TL_CLIENT_ID: ${{ secrets.TL_CLIENT_ID }}
   TL_CLIENT_SECRET: ${{ secrets.TL_CLIENT_SECRET }}
   TL_PROPERTY_ID: ${{ secrets.TL_PROPERTY_ID }}
