@@ -31,12 +31,12 @@ on:
     - cron: '0 12 * * 1'   # Пн 12:00 UTC = Пн 17:00 UTC+5 → remind (перед дедлайном)
 
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
   FINANCE_SHEET_ID: ${{ secrets.FINANCE_SHEET_ID }}
   STRATEGY_SHEET_ID: ${{ secrets.STRATEGY_SHEET_ID }}
   MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
-  MAX_OWNER_ID: ${{ secrets.MAX_OWNER_ID }}
+  MAX_OWNER_ID: ${{ secrets.MAX_OWNER_USER_ID }}
   MAX_TEAM_IDS: ${{ secrets.MAX_TEAM_IDS }}
   TL_CLIENT_ID: ${{ secrets.TL_CLIENT_ID }}
   TL_CLIENT_SECRET: ${{ secrets.TL_CLIENT_SECRET }}
