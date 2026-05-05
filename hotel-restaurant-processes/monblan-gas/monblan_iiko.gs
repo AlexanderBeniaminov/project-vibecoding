@@ -300,7 +300,7 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
     thuRevenue:      0, friRevenue:      0, satRevenue:      0, sunRevenue: 0,
     totalGuests:     0, morningGuests:   0, dayGuests:       0, eveningGuests:  0,
     totalChecks:     0, morningChecks:   0, dayChecks:       0, eveningChecks:  0,
-    totalDishes:     0,
+    totalDishes:     0, kitchenDishes:   0,
     revenue1Guest:      0, revenue2Guests:     0, revenue3PlusGuests: 0,
     checks1Guest:       0, checks2Guests:      0, checks3PlusGuests:  0,
     revenue0to500:      0, revenue500to1000:   0, revenue1to1500:     0,
@@ -351,22 +351,26 @@ function fetchIikoWeekData_(token, dateFrom, dateTo) {
   // определялись по названию блюда, а не уходили все в Бар
   Utilities.sleep(15000);
   var catRows = olapQuery_(token, 'SALES', ['DishCategory', 'DishName'],
-    ['DishDiscountSumInt'], baseFilters);
+    ['DishDiscountSumInt', 'DishAmountInt'], baseFilters);
 
   if (catRows) {
     for (var i = 0; i < catRows.length; i++) {
-      var cat  = (catRows[i]['DishCategory'] || '').toLowerCase().trim();
-      var name = (catRows[i]['DishName']     || '').toLowerCase().trim();
-      var rev  = catRows[i]['DishDiscountSumInt'] || 0;
+      var cat    = (catRows[i]['DishCategory'] || '').toLowerCase().trim();
+      var name   = (catRows[i]['DishName']     || '').toLowerCase().trim();
+      var rev    = catRows[i]['DishDiscountSumInt'] || 0;
+      var dishes = catRows[i]['DishAmountInt']      || 0;
+      var isKitchen = false;
       if (containsKeyword_(cat, IIKO_KITCHEN_KEYWORDS)) {
-        data.kitchenRevenue += rev;
+        isKitchen = true;
       } else if (!cat) {
         // Пустая категория: определяем по названию блюда
         if (containsKeyword_(name, IIKO_KITCHEN_KEYWORDS)) {
-          data.kitchenRevenue += rev;
-        } else {
-          data.barRevenue += rev;
+          isKitchen = true;
         }
+      }
+      if (isKitchen) {
+        data.kitchenRevenue += rev;
+        data.kitchenDishes  += dishes;
       } else {
         // Известная барная категория или нераспознанное → Бар
         data.barRevenue += rev;
@@ -474,7 +478,7 @@ function writeWeekData_(sh, col, data) {
     43: 'morningChecks',
     44: 'dayChecks',
     45: 'eveningChecks',
-    46: 'totalDishes',
+    46: 'kitchenDishes',
     61: 'revenue1Guest',
     63: 'revenue2Guests',
     65: 'revenue3PlusGuests',
