@@ -1,18 +1,21 @@
 """
 Тестовый скрипт для итерации промпта Агента 2.
 
-Читает дайджест из таблицы → вызывает Groq → печатает задачи в консоль.
-НЕ пишет в таблицу, НЕ трогает флаги. Безопасно запускать многократно.
+Читает дайджест из таблицы → вызывает Groq → ПИШЕТ задачи в лист «Задачи недели».
+Флаги и архив НЕ трогает. Безопасно запускать многократно — каждый запуск
+перезаписывает лист задач черновиком текущей итерации.
 
 Рабочий цикл:
   1. python agents/agent1_analyst.py <НОМЕР_НЕДЕЛИ>   # генерирует дайджест
-  2. python test_prompt.py                             # смотрим задачи
-  3. Правим utils/prompts.py → снова python test_prompt.py
+  2. python test_prompt.py                             # пишет задачи в таблицу
+  3. Читаем задачи в Google Sheet, даём комментарии
+  4. Правим utils/prompts.py → снова python test_prompt.py
 """
 import os
 import sys
 import json
 import time
+import datetime
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -22,8 +25,11 @@ from utils.prompts import build_agent2_system_prompt
 
 load_dotenv()
 
-COLS = {'исполнитель': 18, 'блок': 6, 'задача': 50, 'результат': 45,
-        'проверка': 45, 'срок': 16, 'цель': 50}
+
+def get_current_week() -> str:
+    today = datetime.date.today()
+    iso = today.isocalendar()
+    return f"{iso[0]}-W{iso[1]:02d}"
 
 
 def call_groq(system_prompt: str, user_message: str) -> str:
@@ -32,7 +38,7 @@ def call_groq(system_prompt: str, user_message: str) -> str:
         try:
             response = client.chat.completions.create(
                 model='llama-3.3-70b-versatile',
-                max_tokens=4096,
+                max_tokens=8192,
                 response_format={'type': 'json_object'},
                 messages=[
                     {'role': 'system', 'content': system_prompt},
@@ -57,40 +63,56 @@ def parse_tasks(raw: str) -> list:
     return json.loads(raw[start:end])
 
 
-def wrap(text: str, width: int) -> list:
-    words = str(text).split()
-    lines, line = [], []
-    length = 0
-    for word in words:
-        if length + len(word) + bool(line) > width:
-            lines.append(' '.join(line))
-            line, length = [word], len(word)
-        else:
-            line.append(word)
-            length += len(word) + bool(line) - 1
-    if line:
-        lines.append(' '.join(line))
-    return lines or ['']
+def write_tasks_to_sheet(ws_tasks, tasks: list, week_label: str) -> None:
+    header = ['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'Стратегическая цель']
+    ws_tasks.clear()
+    ws_tasks.update(values=[header], range_name='A1')
+
+    rows = [[week_label] + [''] * 6]
+
+    # Группируем по исполнителю для читаемости
+    by_person: dict = {}
+    for task in tasks:
+        name = task.get('исполнитель', 'Неизвестный')
+        by_person.setdefault(name, []).append(task)
+
+    for name, person_tasks in by_person.items():
+        for task in person_tasks:
+            rows.append([
+                task.get('исполнитель', ''),
+                task.get('блок', ''),
+                task.get('задача', ''),
+                task.get('результат', ''),
+                task.get('проверка', ''),
+                task.get('срок', ''),
+                task.get('цель', ''),
+            ])
+
+    ws_tasks.append_rows(rows)
+    print(f"  Записано {len(tasks)} задач для {len(by_person)} исполнителей")
 
 
-def print_task(i: int, task: dict) -> None:
-    executor = task.get('исполнитель', '?')
-    block = task.get('блок', '?')
-    fields = [
-        ('Задача',    task.get('задача', ''),    COLS['задача']),
-        ('Результат', task.get('результат', ''), COLS['результат']),
-        ('Проверка',  task.get('проверка', ''),  COLS['проверка']),
-        ('Срок',      task.get('срок', ''),       COLS['срок']),
-        ('KPI',       task.get('цель', ''),       COLS['цель']),
-    ]
-    print(f"\n{'─'*70}")
-    print(f"  #{i}  {executor}  [Блок {block}]")
-    print(f"{'─'*70}")
-    for label, value, width in fields:
-        lines = wrap(value, width)
-        print(f"  {label:<10} {lines[0]}")
-        for extra in lines[1:]:
-            print(f"  {'':<10} {extra}")
+def print_tasks(tasks: list) -> None:
+    by_person: dict = {}
+    for task in tasks:
+        name = task.get('исполнитель', 'Неизвестный')
+        by_person.setdefault(name, []).append(task)
+
+    print(f"\n{'═'*70}")
+    print(f"  ЗАДАЧИ ({len(tasks)} задач для {len(by_person)} исполнителей)")
+    print(f"{'═'*70}")
+
+    for name, person_tasks in by_person.items():
+        print(f"\n  ▶ {name} ({len(person_tasks)} задач)")
+        for i, task in enumerate(person_tasks, 1):
+            print(f"  {'─'*66}")
+            print(f"  #{i} [{task.get('блок', '?')}]  {task.get('задача', '')[:80]}")
+            print(f"     Результат:  {task.get('результат', '')[:70]}")
+            print(f"     Проверка:   {task.get('проверка', '')[:70]}")
+            print(f"     Срок:       {task.get('срок', '')}")
+            print(f"     KPI:        {task.get('цель', '')[:70]}")
+
+    print(f"\n{'═'*70}\n")
 
 
 def main():
@@ -145,24 +167,20 @@ def main():
     print("Парсинг...")
     tasks = parse_tasks(raw)
 
-    print(f"\n{'═'*70}")
-    print(f"  ЗАДАЧИ НА НЕДЕЛЮ  ({len(tasks)} задач)")
-    print(f"{'═'*70}")
+    # Формируем метку недели из дайджеста (берём первую строку)
+    first_line = digest_rows[0][0] if digest_rows and digest_rows[0] else ''
+    week_label = first_line if first_line else f"Черновик {get_current_week()}"
 
-    by_person: dict = {}
-    for task in tasks:
-        name = task.get('исполнитель', 'Неизвестный')
-        by_person.setdefault(name, []).append(task)
+    # Записываем в Google Sheet
+    print("Записываю в лист «Задачи недели»...")
+    ws_tasks = get_worksheet(gs, strategy_sheet_id, 'Задачи недели')
+    write_tasks_to_sheet(ws_tasks, tasks, week_label)
 
-    idx = 1
-    for name, person_tasks in by_person.items():
-        for task in person_tasks:
-            print_task(idx, task)
-            idx += 1
+    # Дублируем в консоль для удобства
+    print_tasks(tasks)
 
-    print(f"\n{'═'*70}")
-    print(f"  Итого: {len(tasks)} задач для {len(by_person)} исполнителей")
-    print(f"{'═'*70}\n")
+    print("✅ Задачи записаны в Google Sheet → лист «Задачи недели»")
+    print(f"   Откройте таблицу и проверьте задачи.")
 
 
 if __name__ == '__main__':
