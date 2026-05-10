@@ -19,6 +19,13 @@ def get_current_week() -> str:
     return f"{iso[0]}-W{iso[1]:02d}"
 
 
+def get_week_dates(week_str: str) -> str:
+    year, week = int(week_str[:4]), int(week_str[6:])
+    monday = datetime.date.fromisocalendar(year, week, 1)
+    sunday = monday + datetime.timedelta(days=6)
+    return f"{monday.strftime('%-d %b')} – {sunday.strftime('%-d %b %Y')}"
+
+
 def call_claude(system_prompt: str, user_message: str) -> str:
     client = Groq(api_key=os.environ['GROQ_API_KEY'])
     for attempt in range(3):
@@ -186,9 +193,12 @@ def main():
         ])
 
     if rows_to_write:
+        week_dates = get_week_dates(current_week)
+        week_label = f"Неделя {current_week}  |  {week_dates}"
         if not header:
             ws_tasks.update(values=[['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'Стратегическая цель']], range_name='A1')
-        ws_tasks.append_rows(rows_to_write)
+        # Строка-разделитель с номером недели перед задачами
+        ws_tasks.append_rows([[week_label] + [''] * 6] + rows_to_write)
 
     set_flag(ws_status, 'задачи_сформированы', 'да')
 
