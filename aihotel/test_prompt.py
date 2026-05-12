@@ -63,6 +63,35 @@ def parse_tasks(raw: str) -> list:
     return json.loads(raw[start:end])
 
 
+def sanitize_tasks(tasks: list) -> list:
+    """Постобработка: исправляем устойчивые ошибки модели."""
+    nadezhda_fixes = [
+        ('скриншот из TravelLine', 'скриншот с сайта'),
+        ('в TravelLine', 'на сайте'),
+        ('из TravelLine', 'с сайта'),
+        ('TravelLine', 'сайте'),
+    ]
+    upravlyayushchy_proверка_fixes = [
+        ('Отчет в Bitrix', 'Фото проблемных мест — Виктору'),
+        ('Отчёт в Bitrix', 'Фото проблемных мест — Виктору'),
+        ('отчет в Bitrix', 'Фото проблемных мест — Виктору'),
+    ]
+    for task in tasks:
+        executor = task.get('исполнитель', '')
+        if executor == 'Надежда':
+            for field in ('задача', 'результат', 'проверка'):
+                val = task.get(field, '')
+                for old, new in nadezhda_fixes:
+                    val = val.replace(old, new)
+                task[field] = val
+        if executor == 'Управляющий':
+            val = task.get('проверка', '')
+            for old, new in upravlyayushchy_proверка_fixes:
+                val = val.replace(old, new)
+            task['проверка'] = val
+    return tasks
+
+
 def write_tasks_to_sheet(ws_tasks, tasks: list, week_label: str) -> None:
     header = ['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'Стратегическая цель']
     ws_tasks.clear()
@@ -165,7 +194,7 @@ def main():
     raw = call_groq(system_prompt, user_message)
 
     print("Парсинг...")
-    tasks = parse_tasks(raw)
+    tasks = sanitize_tasks(parse_tasks(raw))
 
     # Формируем метку недели из дайджеста (берём первую строку)
     first_line = digest_rows[0][0] if digest_rows and digest_rows[0] else ''

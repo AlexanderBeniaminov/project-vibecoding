@@ -83,6 +83,35 @@ def get_recent_archive(ws_archive: object, weeks: int = 4) -> str:
     return "\n".join(lines) if lines else "Нет данных в архиве."
 
 
+def sanitize_tasks(tasks: list) -> list:
+    """Постобработка: исправляем устойчивые ошибки модели."""
+    nadezhda_fixes = [
+        ('скриншот из TravelLine', 'скриншот с сайта'),
+        ('в TravelLine', 'на сайте'),
+        ('из TravelLine', 'с сайта'),
+        ('TravelLine', 'сайте'),
+    ]
+    upravlyayushchy_fixes = [
+        ('Отчет в Bitrix', 'Фото проблемных мест — Виктору'),
+        ('Отчёт в Bitrix', 'Фото проблемных мест — Виктору'),
+        ('отчет в Bitrix', 'Фото проблемных мест — Виктору'),
+    ]
+    for task in tasks:
+        executor = task.get('исполнитель', '')
+        if executor == 'Надежда':
+            for field in ('задача', 'результат', 'проверка'):
+                val = task.get(field, '')
+                for old, new in nadezhda_fixes:
+                    val = val.replace(old, new)
+                task[field] = val
+        if executor == 'Управляющий':
+            val = task.get('проверка', '')
+            for old, new in upravlyayushchy_fixes:
+                val = val.replace(old, new)
+            task['проверка'] = val
+    return tasks
+
+
 def parse_tasks_json(raw: str) -> list:
     # Убираем возможный текст до/после JSON
     raw = raw.strip()
@@ -172,7 +201,7 @@ def main():
     # Парсинг JSON
     print("Парсинг JSON-ответа...")
     try:
-        tasks = parse_tasks_json(raw_response)
+        tasks = sanitize_tasks(parse_tasks_json(raw_response))
         print(f"  Получено {len(tasks)} задач")
     except (ValueError, json.JSONDecodeError) as e:
         print(f"ОШИБКА: Агент 2: не удалось распарсить JSON. Нужна ручная постановка задач.\nОшибка: {e}\nОтвет (первые 500 символов): {raw_response[:500]}")
