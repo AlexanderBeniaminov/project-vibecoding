@@ -38,7 +38,7 @@ def call_groq(system_prompt: str, user_message: str) -> str:
         try:
             response = client.chat.completions.create(
                 model='llama-3.3-70b-versatile',
-                max_tokens=8192,
+                max_tokens=2800,
                 response_format={'type': 'json_object'},
                 messages=[
                     {'role': 'system', 'content': system_prompt},
