@@ -109,6 +109,14 @@ def sanitize_tasks(tasks: list) -> list:
             for old, new in upravlyayushchy_fixes:
                 val = val.replace(old, new)
             task['проверка'] = val
+            if 'Виктору' not in task.get('проверка', ''):
+                task['проверка'] = 'Фото проблемных мест — Виктору'
+        if executor == 'Евгения':
+            zadacha = task.get('задача', '').lower()
+            if 'добавить' in zadacha and ('заявки' in zadacha or 'заявку' in zadacha):
+                task['задача'] = 'Дожать не менее 3 pending-заявок в воронке Bitrix до оплаты'
+                task['результат'] = 'Минимум 3 заявки переведены в статус "оплачено" или подтверждено бронирование'
+                task['проверка'] = 'Скриншот воронки Bitrix с обновлёнными статусами'
     return tasks
 
 

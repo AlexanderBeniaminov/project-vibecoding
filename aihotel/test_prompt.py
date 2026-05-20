@@ -38,7 +38,7 @@ def call_groq(system_prompt: str, user_message: str) -> str:
         try:
             response = client.chat.completions.create(
                 model='llama-3.3-70b-versatile',
-                max_tokens=2800,
+                max_tokens=2100,
                 response_format={'type': 'json_object'},
                 messages=[
                     {'role': 'system', 'content': system_prompt},
@@ -89,6 +89,15 @@ def sanitize_tasks(tasks: list) -> list:
             for old, new in upravlyayushchy_proверка_fixes:
                 val = val.replace(old, new)
             task['проверка'] = val
+            if 'Виктору' not in task.get('проверка', ''):
+                task['проверка'] = 'Фото проблемных мест — Виктору'
+        if executor == 'Евгения':
+            zadacha = task.get('задача', '').lower()
+            # Если задача содержит "добавить" + "заявки" — это нарушение роли Евгении
+            if 'добавить' in zadacha and ('заявки' in zadacha or 'заявку' in zadacha):
+                task['задача'] = 'Дожать не менее 3 pending-заявок в воронке Bitrix до оплаты'
+                task['результат'] = 'Минимум 3 заявки переведены в статус "оплачено" или подтверждено бронирование'
+                task['проверка'] = 'Скриншот воронки Bitrix с обновлёнными статусами'
     return tasks
 
 
