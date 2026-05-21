@@ -36,14 +36,17 @@ def call_claude(system_prompt: str, user_message: str) -> str:
         try:
             response = client.chat.completions.create(
                 model='deepseek/deepseek-v4-pro',
-                max_tokens=4096,
-                response_format={'type': 'json_object'},
+                max_tokens=16000,
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': user_message},
                 ],
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            if not content:
+                finish = response.choices[0].finish_reason
+                raise RuntimeError(f"Пустой ответ от API (finish_reason={finish})")
+            return content
         except Exception as e:
             if attempt < 2:
                 print(f"  Ошибка RouterAI API (попытка {attempt + 1}): {e}. Жду 5 сек...")
@@ -169,8 +172,9 @@ def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -
 
 def main():
     print("=== Агент 2: Стратег ===")
+    force = '--force' in sys.argv
     current_week = get_current_week()
-    print(f"Текущая неделя: {current_week}")
+    print(f"Текущая неделя: {current_week}" + (" [FORCE]" if force else ""))
 
     finance_sheet_id = os.environ['FINANCE_SHEET_ID']
     strategy_sheet_id = os.environ['STRATEGY_SHEET_ID']
@@ -180,12 +184,12 @@ def main():
 
     # Идемпотентность
     ws_status = get_worksheet(client_gs, finance_sheet_id, 'Статус системы')
-    if get_flag(ws_status, 'задачи_сформированы') == 'да':
+    if not force and get_flag(ws_status, 'задачи_сформированы') == 'да':
         print("Задачи уже сформированы на этой неделе. Выхожу.")
         return
 
     # Проверяем что дайджест готов
-    if get_flag(ws_status, 'дайджест_записан') != 'да':
+    if not force and get_flag(ws_status, 'дайджест_записан') != 'да':
         print("ПРЕДУПРЕЖДЕНИЕ: Агент 1 ещё не записал дайджест. Запусти сначала agent1_analyst.py")
         sys.exit(1)
 
