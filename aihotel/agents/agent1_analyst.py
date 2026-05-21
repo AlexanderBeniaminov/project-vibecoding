@@ -184,18 +184,58 @@ def read_column_data(ws, col_idx):
 
 
 def get_failed_tasks(strategy_sheet_id, client_gs):
+    NOT_DONE = {'нет', 'не выполнено', 'не выполнена', ''}
+
     try:
-        ws_statuses = get_worksheet(client_gs, strategy_sheet_id, 'Статусы')
-        statuses    = ws_statuses.get_all_records()
-        ws_archive  = get_worksheet(client_gs, strategy_sheet_id, 'Архив')
-        archive     = ws_archive.get_all_values()
+        ws_archive = get_worksheet(client_gs, strategy_sheet_id, 'Архив')
+        archive    = ws_archive.get_all_values()
     except Exception as e:
-        print(f'  Предупреждение: не удалось прочитать статусы/архив: {e}')
+        print(f'  Предупреждение: не удалось прочитать архив: {e}')
+        archive = []
+
+    statuses = []
+
+    # Приоритет — новый формат: читаем из "Задачи недели" с колонкой Статус
+    try:
+        ws_tasks  = get_worksheet(client_gs, strategy_sheet_id, 'Задачи недели')
+        all_rows  = ws_tasks.get_all_values()
+        if len(all_rows) > 1:
+            header = [h.lower().strip() for h in all_rows[0]]
+            if 'статус' in header:
+                status_col  = header.index('статус')
+                comment_col = header.index('комментарий') if 'комментарий' in header else None
+                for row in all_rows[1:]:
+                    if not any(row):
+                        continue
+                    if row[0].startswith('Неделя'):
+                        continue
+                    statuses.append({
+                        'Исполнитель': row[0] if len(row) > 0 else '',
+                        'Задача':      row[2] if len(row) > 2 else '',
+                        'Статус':      row[status_col] if len(row) > status_col else '',
+                        'Комментарий': (row[comment_col] if comment_col and len(row) > comment_col else '') or '—',
+                    })
+    except Exception as e:
+        print(f'  Предупреждение: не удалось прочитать Задачи недели: {e}')
+
+    # Запасной вариант — старый лист "Статусы"
+    if not statuses:
+        try:
+            ws_statuses = get_worksheet(client_gs, strategy_sheet_id, 'Статусы')
+            for r in ws_statuses.get_all_records():
+                statuses.append({
+                    'Исполнитель': r.get('Исполнитель', ''),
+                    'Задача':      r.get('Задача', ''),
+                    'Статус':      r.get('Статус', ''),
+                    'Комментарий': r.get('Комментарий', '—') or '—',
+                })
+        except Exception as e:
+            print(f'  Предупреждение: не удалось прочитать Статусы: {e}')
+
+    if not statuses:
         return [], [], {}
 
-    NOT_DONE = {'нет', 'не выполнено', 'не выполнена', ''}
     failed, by_person = [], {}
-
     for r in statuses:
         task = r.get('Задача', '')
         if not task:

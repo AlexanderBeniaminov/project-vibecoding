@@ -31,6 +31,8 @@ on:
     - cron: '0 12 * * 1'   # Пн 12:00 UTC = Пн 17:00 UTC+5 → remind (перед дедлайном)
 
 env:
+  ROUTERAI_API_KEY: ${{ secrets.ROUTERAI_API_KEY }}
+  ROUTERAI_BASE_URL: https://routerai.ru/api/v1
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
   GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
   FINANCE_SHEET_ID: ${{ secrets.FINANCE_SHEET_ID }}

@@ -3,12 +3,13 @@ import sys
 import json
 import time
 import datetime
-from groq import Groq
+import openai
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.sheets import get_client, get_worksheet, get_flag, set_flag
 from utils.prompts import build_agent2_system_prompt
+from utils.kpi_tracker import build_kpi_progress_block
 
 load_dotenv()
 
@@ -27,13 +28,16 @@ def get_week_dates(week_str: str) -> str:
 
 
 def call_claude(system_prompt: str, user_message: str) -> str:
-    client = Groq(api_key=os.environ['GROQ_API_KEY'])
+    client = openai.OpenAI(
+        base_url=os.environ.get('ROUTERAI_BASE_URL', 'https://routerai.ru/api/v1'),
+        api_key=os.environ['ROUTERAI_API_KEY'],
+    )
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
-                model='llama-3.3-70b-versatile',
+                model='deepseek/deepseek-v4-pro',
                 max_tokens=4096,
-                response_format={'type': 'json_object'},  # гарантирует валидный JSON
+                response_format={'type': 'json_object'},
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': user_message},
@@ -42,10 +46,10 @@ def call_claude(system_prompt: str, user_message: str) -> str:
             return response.choices[0].message.content
         except Exception as e:
             if attempt < 2:
-                print(f"  Ошибка Groq API (попытка {attempt + 1}): {e}. Жду 5 сек...")
+                print(f"  Ошибка RouterAI API (попытка {attempt + 1}): {e}. Жду 5 сек...")
                 time.sleep(5)
             else:
-                raise RuntimeError(f"Groq API недоступен: {e}")
+                raise RuntimeError(f"RouterAI API недоступен: {e}")
 
 
 def archive_current_tasks(ws_tasks: object, ws_archive: object, current_week: str) -> None:
@@ -55,7 +59,7 @@ def archive_current_tasks(ws_tasks: object, ws_archive: object, current_week: st
         return
 
     week_label = [f"Неделя {current_week}"] + [""] * (len(all_rows[0]) - 1)
-    task_rows = all_rows[1:]  # без заголовка
+    task_rows = all_rows[1:]
     rows_to_add = [week_label] + task_rows
     ws_archive.append_rows(rows_to_add)
     print(f"  Архивировано {len(task_rows)} задач")
@@ -66,13 +70,11 @@ def get_recent_archive(ws_archive: object, weeks: int = 4) -> str:
     if not all_values:
         return "Архив пуст — это первая неделя работы системы."
 
-    # Находим маркеры недель
     week_indices = []
     for i, row in enumerate(all_values):
         if row and row[0].startswith('Неделя '):
             week_indices.append(i)
 
-    # Берём последние N недель
     start_idx = week_indices[-weeks] if len(week_indices) >= weeks else 0
     recent_rows = all_values[start_idx:]
 
@@ -121,13 +123,48 @@ def sanitize_tasks(tasks: list) -> list:
 
 
 def parse_tasks_json(raw: str) -> list:
-    # Убираем возможный текст до/после JSON
     raw = raw.strip()
     start = raw.find('[')
     end = raw.rfind(']') + 1
     if start == -1 or end == 0:
         raise ValueError("JSON-массив не найден в ответе")
     return json.loads(raw[start:end])
+
+
+def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -> None:
+    bot_token = os.environ.get('MAX_BOT_TOKEN', '')
+    owner_id  = os.environ.get('MAX_OWNER_ID', '')
+    if not bot_token or not owner_id:
+        print("  Telegram-уведомление пропущено: нет MAX_BOT_TOKEN или MAX_OWNER_ID")
+        return
+
+    by_person = {}
+    for t in tasks:
+        name = t.get('исполнитель', 'Неизвестный')
+        by_person[name] = by_person.get(name, 0) + 1
+
+    task_lines = "\n".join(f"  {name}: {cnt} задач(и)" for name, cnt in by_person.items())
+    # Берём только первые 3 строки KPI для краткости
+    kpi_summary = "\n".join(kpi_block.split("\n")[:8])
+
+    text = (
+        f"✅ Задачи на неделю {current_week} сформированы\n\n"
+        f"{kpi_summary}\n\n"
+        f"Задач всего: {len(tasks)}\n{task_lines}"
+    )
+
+    try:
+        import urllib.request
+        data = json.dumps({'chat_id': int(owner_id), 'text': text}).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            data=data,
+            headers={'Content-Type': 'application/json'},
+        )
+        urllib.request.urlopen(req, timeout=10)
+        print("  Telegram-уведомление отправлено")
+    except Exception as e:
+        print(f"  Предупреждение: не удалось отправить Telegram-уведомление: {e}")
 
 
 def main():
@@ -152,13 +189,18 @@ def main():
         print("ПРЕДУПРЕЖДЕНИЕ: Агент 1 ещё не записал дайджест. Запусти сначала agent1_analyst.py")
         sys.exit(1)
 
+    # Читаем KPI-прогресс
+    print("Вычисляю прогресс KPI...")
+    kpi_block = build_kpi_progress_block(client_gs)
+    print(f"  KPI-блок готов ({len(kpi_block)} символов)")
+
     # Читаем базу знаний
     print("Читаю базу знаний...")
     ws_knowledge = get_worksheet(client_gs, finance_sheet_id, 'База знаний')
     knowledge_rows = ws_knowledge.get_all_values()
     knowledge_base = "\n".join([" ".join(row) for row in knowledge_rows if any(row)])
 
-    # Читаем дайджест — читаем ВСЕ строки листа (агент 1 пишет форматированную таблицу)
+    # Читаем дайджест
     print("Читаю дайджест от Агента 1...")
     ws_digest = get_worksheet(client_gs, finance_sheet_id, 'Дайджест')
     digest_rows = ws_digest.get_all_values()
@@ -175,7 +217,7 @@ def main():
     ws_archive = get_worksheet(client_gs, strategy_sheet_id, 'Архив')
     archive_text = get_recent_archive(ws_archive)
 
-    # Архивируем текущие задачи перед перезаписью
+    # Архивируем задачи прошлой недели
     print("Архивирую задачи прошлой недели...")
     archive_current_tasks(ws_tasks, ws_archive, current_week)
 
@@ -187,7 +229,10 @@ def main():
 
     # Формируем промпт
     system_prompt = build_agent2_system_prompt()
-    user_message = f"""АРХИВ ЗАДАЧ ПРОШЛЫХ НЕДЕЛЬ:
+    user_message = f"""ПРОГРЕСС СТРАТЕГИЧЕСКИХ KPI:
+{kpi_block}
+
+АРХИВ ЗАДАЧ ПРОШЛЫХ НЕДЕЛЬ:
 {archive_text}
 
 ДАЙДЖЕСТ ТЕКУЩЕЙ НЕДЕЛИ:
@@ -198,12 +243,12 @@ def main():
 
 Сформируй задачи для всех 6 исполнителей на неделю {current_week}."""
 
-    # Вызов Claude
-    print("Формирую задачи через Claude API...")
+    # Вызов LLM (DeepSeek V4 Pro через RouterAI)
+    print("Формирую задачи через DeepSeek V4 Pro (RouterAI)...")
     try:
         raw_response = call_claude(system_prompt, user_message)
     except RuntimeError as e:
-        print(f"ОШИБКА: Агент 2: ошибка Groq API. Нужна ручная постановка задач. Ошибка: {e}")
+        print(f"ОШИБКА: Агент 2: ошибка RouterAI API. Нужна ручная постановка задач. Ошибка: {e}")
         sys.exit(1)
 
     # Парсинг JSON
@@ -227,17 +272,25 @@ def main():
             task.get('проверка', ''),
             task.get('срок', ''),
             task.get('цель', ''),
+            '',   # Статус — заполняет сотрудник
+            '',   # Комментарий — заполняет сотрудник
         ])
 
     if rows_to_write:
         week_dates = get_week_dates(current_week)
         week_label = f"Неделя {current_week}  |  {week_dates}"
         if not header:
-            ws_tasks.update(values=[['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'Стратегическая цель']], range_name='A1')
-        # Строка-разделитель с номером недели перед задачами
-        ws_tasks.append_rows([[week_label] + [''] * 6] + rows_to_write)
+            ws_tasks.update(
+                values=[['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'KPI', 'Статус', 'Комментарий']],
+                range_name='A1',
+            )
+        ws_tasks.append_rows([[week_label] + [''] * 8] + rows_to_write)
 
     set_flag(ws_status, 'задачи_сформированы', 'да')
+
+    # Telegram-уведомление собственнику
+    print("Отправляю Telegram-уведомление...")
+    send_telegram_notification(current_week, tasks, kpi_block)
 
     print("\n✅ Агент 2 завершил работу.")
     print(f"   Сформировано задач: {len(tasks)}")
