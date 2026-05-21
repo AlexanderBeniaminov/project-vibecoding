@@ -27,6 +27,24 @@ def get_week_dates(week_str: str) -> str:
     return f"{monday.strftime('%-d %b')} – {sunday.strftime('%-d %b %Y')}"
 
 
+def extract_data_week(digest_rows: list) -> tuple:
+    """Читает номер недели и дату из заголовка дайджеста Агента 1.
+    Возвращает ('2026-W13', '23.03-29.03') или (None, '') если не найдено.
+    """
+    import re
+    if not digest_rows:
+        return None, ''
+    first_cell = digest_rows[0][0] if digest_rows[0] else ''
+    # Формат: "ДАЙДЖЕСТ  |  Неделя 13  |  23.03-29.03"
+    match = re.search(r'Неделя\s+(\d+)\s*\|?\s*([\d.,\- –]+)', first_cell)
+    if match:
+        week_num = int(match.group(1))
+        date_part = match.group(2).strip(' |–-')
+        year = datetime.date.today().year
+        return f"{year}-W{week_num:02d}", date_part
+    return None, ''
+
+
 def call_claude(system_prompt: str, user_message: str) -> str:
     client = openai.OpenAI(
         base_url=os.environ.get('ROUTERAI_BASE_URL', 'https://routerai.ru/api/v1'),
@@ -215,6 +233,15 @@ def main():
     ) or "Дайджест пуст."
     print(f"  Дайджест: {len(digest_text)} символов")
 
+    # Определяем неделю данных из заголовка дайджеста
+    data_week, data_dates = extract_data_week(digest_rows)
+    if data_week:
+        print(f"  Неделя данных: {data_week} ({data_dates})")
+    else:
+        data_week  = current_week
+        data_dates = get_week_dates(current_week)
+        print(f"  Неделя данных не распознана, использую текущую: {data_week}")
+
     # Читаем архив
     print("Читаю архив задач...")
     ws_tasks = get_worksheet(client_gs, strategy_sheet_id, 'Задачи недели')
@@ -245,7 +272,7 @@ def main():
 ДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ (база знаний объекта):
 {knowledge_base}
 
-Сформируй задачи для всех 6 исполнителей на неделю {current_week}."""
+Сформируй задачи для всех 6 исполнителей на неделю {data_week} ({data_dates})."""
 
     # Вызов LLM (DeepSeek V4 Pro через RouterAI)
     print("Формирую задачи через DeepSeek V4 Pro (RouterAI)...")
@@ -281,8 +308,7 @@ def main():
         ])
 
     if rows_to_write:
-        week_dates = get_week_dates(current_week)
-        week_label = f"Неделя {current_week}  |  {week_dates}"
+        week_label = f"Неделя {data_week}  |  {data_dates}"
         if not header:
             ws_tasks.update(
                 values=[['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'KPI', 'Статус', 'Комментарий']],
@@ -294,7 +320,7 @@ def main():
 
     # Telegram-уведомление собственнику
     print("Отправляю Telegram-уведомление...")
-    send_telegram_notification(current_week, tasks, kpi_block)
+    send_telegram_notification(data_week, tasks, kpi_block)
 
     print("\n✅ Агент 2 завершил работу.")
     print(f"   Сформировано задач: {len(tasks)}")
