@@ -17,12 +17,16 @@ _MSK = ZoneInfo("Europe/Moscow")
 sys.path.insert(0, "/home/parser/bots/assistant")
 
 
+_DSML_BLOCK_RE = re.compile(r'<\|+DSML\|+tool_calls>.*?</\|+DSML\|+tool_calls>', re.DOTALL)
+_DSML_TAG_RE   = re.compile(r'</?[ \t]*\|+[ \t]*DSML[ \t]*\|+[^>]*>', re.DOTALL)
+
+def _strip_dsml(text: str) -> str:
+    text = _DSML_BLOCK_RE.sub('', text)
+    text = _DSML_TAG_RE.sub('', text)
+    return text.strip()
+
 def _clean_response(text: str) -> str:
-    # Вырезаем целые DSML-блоки вместе с содержимым
-    text = re.sub(r'<\|+DSML\|+tool_calls>.*?</\|+DSML\|+tool_calls>', '', text, flags=re.DOTALL)
-    # Вырезаем одиночные DSML-теги, которые могли остаться
-    text = re.sub(r'</?‌\|+DSML\|+[^>]*>', '', text, flags=re.DOTALL)
-    text = re.sub(r'<\|?\s*DSML\s*\|?[^>]*>', '', text, flags=re.DOTALL)
+    text = _strip_dsml(text)
     text = re.sub(r'<function_calls>.*?</function_calls>', '', text, flags=re.DOTALL)
     text = re.sub(r'<invoke\b.*?</invoke>', '', text, flags=re.DOTALL)
     text = re.sub(r'\n{3,}', '\n\n', text)
@@ -31,14 +35,15 @@ def _clean_response(text: str) -> str:
 
 def _parse_dsml_tool_calls(text: str) -> list[tuple[str, dict]]:
     """Парсит DSML-формат тул-коллов из текста ответа модели."""
-    if not re.search(r'<\|+DSML\|+tool_calls>', text):
+    _DSML = r'[ \t]*\|+[ \t]*DSML[ \t]*\|+[ \t]*'
+    if not re.search(rf'<{_DSML}tool_calls>', text):
         return []
     invoke_re = re.compile(
-        r'<\|+DSML\|+invoke\s+name="([^"]+)"[^>]*>(.*?)</\|+DSML\|+invoke>',
+        rf'<{_DSML}invoke\s+name="([^"]+)"[^>]*>(.*?)</{_DSML}invoke>',
         re.DOTALL,
     )
     param_re = re.compile(
-        r'<\|+DSML\|+parameter\s+name="([^"]+)"[^>]*>(.*?)</\|+DSML\|+parameter>',
+        rf'<{_DSML}parameter\s+name="([^"]+)"[^>]*>(.*?)</{_DSML}parameter>',
         re.DOTALL,
     )
     calls = []
@@ -600,7 +605,8 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
                     "content": "Результаты инструментов:\n\n" + "\n\n".join(results_parts) + "\n\nОтветь пользователю.",
                 })
                 continue
-            return content or "(пустой ответ)"
+            # Всегда стрипаем DSML — страховка на случай если парсер не сработал или лимит исчерпан
+            return _strip_dsml(content) or "(пустой ответ)"
 
         messages.append(msg.model_dump(exclude_unset=True))
         total_tool_calls += len(msg.tool_calls)
