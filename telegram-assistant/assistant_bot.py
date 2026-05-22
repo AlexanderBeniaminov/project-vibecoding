@@ -17,8 +17,9 @@ _MSK = ZoneInfo("Europe/Moscow")
 sys.path.insert(0, "/home/parser/bots/assistant")
 
 
-# Один или больше пайпов с опциональными пробелами между ними: |, ||, | |, | | |
-_D = r'(\|\s*)+'
+# Один или больше пайпов с опциональными пробелами — ASCII | (U+007C) и полноширинный ｜ (U+FF5C)
+# Важно: (?:...) non-capturing, иначе group-индексы в parse-функции сдвигаются
+_D = r'(?:[|｜]\s*)+'
 
 _DSML_CLOSED_RE = re.compile(rf'<\s*{_D}DSML\s*{_D}tool_calls\s*>.*?</\s*{_D}DSML\s*{_D}tool_calls\s*>', re.DOTALL)
 _DSML_OPEN_RE   = re.compile(rf'<\s*{_D}DSML\s*{_D}tool_calls\s*>.*', re.DOTALL)
@@ -633,6 +634,29 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             })
             if tc.function.name in _ACTION_TOOLS:
                 await bot.send_message(chat_id, f"✅ {result}")
+
+        # После выполнения API tool_calls — делаем финальный вызов без tools
+        # DeepSeek склонен петлять с повторными поисками; без tools он обязан ответить текстом
+        final_resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=messages,
+            max_tokens=2000,
+        )
+        final_content = final_resp.choices[0].message.content or ""
+        # Если финальный ответ снова DSML — парсим и выполняем, затем возвращаем результаты напрямую
+        dsml_final = _parse_dsml_tool_calls(final_content)
+        if dsml_final:
+            results_parts = []
+            for name, args in dsml_final:
+                r = execute_tool(name, args, user_id)
+                results_parts.append(f"[{name}]: {r}")
+                if name in _ACTION_TOOLS:
+                    await bot.send_message(chat_id, f"✅ {r}")
+            # Последняя попытка — text-only с результатами
+            messages.append({"role": "user", "content": "Результаты:\n" + "\n".join(results_parts) + "\n\nОтветь пользователю текстом."})
+            last_resp = await ai_client.chat.completions.create(model=config.MODEL, messages=messages, max_tokens=2000)
+            return _strip_dsml(last_resp.choices[0].message.content or "") or "(пустой ответ)"
+        return _strip_dsml(final_content) or "(пустой ответ)"
 
     return "Не удалось обработать запрос. Попробуй переформулировать."
 
