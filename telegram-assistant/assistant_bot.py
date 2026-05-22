@@ -56,7 +56,7 @@ import openai
 
 import config
 from tools.db import init_db
-from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, files as files_tool
+from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, files as files_tool, team_tasks
 
 # ── Инициализация ─────────────────────────────────────────────
 bot = Bot(token=config.TELEGRAM_TOKEN)
@@ -450,6 +450,15 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
             return "Перезапуск инициирован. Бот перезапустится через 2-3 секунды."
         elif name == "search_files":
             return files_tool.search_files(args["query"], args.get("file_type"))
+        elif name == "add_team_task":
+            return team_tasks.add_team_task(
+                args["executor"],
+                args["task"],
+                args.get("deadline", ""),
+                args.get("result", ""),
+                args.get("how_to_check", ""),
+                args.get("block", "A"),
+            )
         else:
             return f"Неизвестный инструмент: {name}"
     except Exception as e:
@@ -474,7 +483,13 @@ async def run_llm(history: list[dict], user_id: int) -> str:
             "После получения результата инструмента — сразу финальный ответ. "
             "Когда пользователь спрашивает о планах/делах/расписании на любой день (сегодня, завтра, "
             "конкретная дата, день недели) — всегда вызывай get_schedule с датой в формате YYYY-MM-DD. "
-            "Результат get_schedule выводи как есть, без сокращений."
+            "Результат get_schedule выводи как есть, без сокращений. "
+            "АВТО-СОХРАНЕНИЕ: при любом голосовом или коротком сообщении сразу определяй тип и вызывай инструмент БЕЗ уточнений: "
+            "если есть время/дата → add_reminder; "
+            "если задача/дело/нужно сделать → add_note с tags='задача'; "
+            "если идея/мысль/хочу → add_note с tags='идея'; "
+            "если факт о проекте/команде/решение → remember_fact. "
+            "Не спрашивай 'сохранить?', 'куда записать?' — просто сохраняй и кратко подтверди."
             f"{knowledge_section}"
             f"{memory_section}"
         ),
@@ -623,11 +638,11 @@ async def handle_ack(callback: CallbackQuery):
     reminder_id = int(callback.data.split("_")[1])
     rem_tool.ack_reminder_by_id(reminder_id, callback.from_user.id)
     await callback.message.edit_text(
-        callback.message.text + "\n\n✅ _Принято_",
+        callback.message.text + "\n\n✅ _Выполнено_",
         parse_mode="Markdown",
         reply_markup=None,
     )
-    await callback.answer("Принято!")
+    await callback.answer("Выполнено!")
 
 @dp.callback_query(F.data.startswith("snz_"))
 async def handle_snooze(callback: CallbackQuery):

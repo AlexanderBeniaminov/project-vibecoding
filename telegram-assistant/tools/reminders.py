@@ -36,17 +36,20 @@ def _restore_pending():
 def _main_keyboard(reminder_id: int):
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✅ Принято", callback_data=f"ack_{reminder_id}"),
-        InlineKeyboardButton(text="⏰ Отложить", callback_data=f"snz_{reminder_id}"),
+        InlineKeyboardButton(text="✅ Выполнено", callback_data=f"ack_{reminder_id}"),
+        InlineKeyboardButton(text="⏰ Отложить",  callback_data=f"snz_{reminder_id}"),
     ]])
 
 def _snooze_keyboard(reminder_id: int):
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="30 мин", callback_data=f"snz_{reminder_id}_30"),
+            InlineKeyboardButton(text="15 мин", callback_data=f"snz_{reminder_id}_15"),
             InlineKeyboardButton(text="1 час",  callback_data=f"snz_{reminder_id}_60"),
-            InlineKeyboardButton(text="Завтра", callback_data=f"snz_{reminder_id}_tmr"),
+        ],
+        [
+            InlineKeyboardButton(text="3 часа",  callback_data=f"snz_{reminder_id}_180"),
+            InlineKeyboardButton(text="Завтра",  callback_data=f"snz_{reminder_id}_tmr"),
         ],
         [InlineKeyboardButton(text="◀ Назад", callback_data=f"snz_{reminder_id}_back")],
     ])
@@ -100,10 +103,14 @@ def snooze_reminder(reminder_id: int, user_id: int, minutes: int) -> str:
         label = "завтра в 09:00"
     else:
         new_dt = now_msk + timedelta(minutes=minutes)
-        if minutes == 30:
-            label = "через 30 мин"
-        else:
+        if minutes == 15:
+            label = "через 15 мин"
+        elif minutes == 60:
             label = "через 1 час"
+        elif minutes == 180:
+            label = "через 3 часа"
+        else:
+            label = f"через {minutes} мин"
     conn = get_conn()
     text_row = conn.execute("SELECT text FROM reminders WHERE id=?", (reminder_id,)).fetchone()
     conn.execute("UPDATE reminders SET remind_at=?, done=0 WHERE id=?", (new_dt.isoformat(), reminder_id))
