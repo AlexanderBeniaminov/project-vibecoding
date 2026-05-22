@@ -208,8 +208,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_schedule",
+            "description": (
+                "Показать расписание на конкретный день: события из Google Calendar + напоминания. "
+                "Используй при ЛЮБОМ вопросе о планах, делах или расписании на день — "
+                "сегодня, завтра, в конкретную дату или день недели. "
+                "Сам переведи дату из слов в ISO-формат YYYY-MM-DD."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "Дата в формате ISO: 2026-05-26"}
+                },
+                "required": ["date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_calendar_events",
-            "description": "Получить события из Google Calendar.",
+            "description": "Получить события из Google Calendar на несколько дней вперёд (без напоминаний). Используй только если нужен диапазон дней, а не конкретная дата.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -383,6 +402,24 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
             return rem_tool.list_reminders(user_id)
         elif name == "cancel_reminder":
             return rem_tool.cancel_reminder(args["reminder_id"])
+        elif name == "get_schedule":
+            date_iso = args["date"]
+            events = calendar.get_schedule_for_date(config.GOOGLE_CALENDAR_ID, config.SERVICE_ACCOUNT_JSON, date_iso)
+            reminders = rem_tool.get_reminders_for_date(user_id, date_iso)
+            lines = []
+            if events:
+                lines.append("📅 Календарь:")
+                for ev in events:
+                    start = ev["start"].get("dateTime", ev["start"].get("date", ""))
+                    prefix = datetime.fromisoformat(start).strftime("%H:%M") if "T" in start else "весь день"
+                    lines.append(f"• {prefix} — {ev.get('summary', '(без названия)')}")
+            else:
+                lines.append("📅 Календарь: событий нет")
+            if reminders:
+                lines.append("⏰ Напоминания:")
+                for r in reminders:
+                    lines.append(f"• {r['remind_at'][11:16]} — {r['text']}")
+            return "\n".join(lines) if lines else "На этот день ничего не запланировано."
         elif name == "get_calendar_events":
             return calendar.get_events(config.GOOGLE_CALENDAR_ID, config.SERVICE_ACCOUNT_JSON, args.get("days", 7))
         elif name == "create_calendar_event":
@@ -434,7 +471,10 @@ async def run_llm(history: list[dict], user_id: int) -> str:
             "После вызова инструмента — одно короткое подтверждение. "
             "Если узнал что-то важное о пользователе или проектах — вызови remember_fact. "
             "Для напоминаний конвертируй время в ISO8601. "
-            "После получения результата инструмента — сразу финальный ответ."
+            "После получения результата инструмента — сразу финальный ответ. "
+            "Когда пользователь спрашивает о планах/делах/расписании на любой день (сегодня, завтра, "
+            "конкретная дата, день недели) — всегда вызывай get_schedule с датой в формате YYYY-MM-DD. "
+            "Результат get_schedule выводи как есть, без сокращений."
             f"{knowledge_section}"
             f"{memory_section}"
         ),

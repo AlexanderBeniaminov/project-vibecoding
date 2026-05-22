@@ -11,6 +11,24 @@ def _service(sa_json: str):
     creds = service_account.Credentials.from_service_account_file(sa_json, scopes=SCOPES)
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
+def get_schedule_for_date(calendar_id: str, sa_json: str, date_iso: str) -> list[dict]:
+    """Возвращает события на конкретную дату. date_iso: '2026-05-26'"""
+    from datetime import date as date_type
+    svc = _service(sa_json)
+    d = date_type.fromisoformat(date_iso)
+    day_start = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=_MSK)
+    day_end   = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=_MSK)
+    result = svc.events().list(
+        calendarId=calendar_id,
+        timeMin=day_start.isoformat(),
+        timeMax=day_end.isoformat(),
+        maxResults=20,
+        singleEvents=True,
+        orderBy="startTime",
+    ).execute()
+    return result.get("items", [])
+
+
 def get_today_events(calendar_id: str, sa_json: str) -> list[dict]:
     """Возвращает события календаря на сегодня (МСК)."""
     svc = _service(sa_json)

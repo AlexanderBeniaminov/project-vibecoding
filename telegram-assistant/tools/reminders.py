@@ -158,6 +158,22 @@ def list_reminders(user_id: int) -> str:
     lines = [f"#{r['id']} — {r['remind_at'][:16]} — {r['text']}" for r in rows]
     return "\n".join(lines)
 
+def get_reminders_for_date(user_id: int, date_iso: str) -> list[dict]:
+    """Возвращает напоминания на конкретную дату. date_iso: '2026-05-26'"""
+    from datetime import date as date_type
+    d = date_type.fromisoformat(date_iso)
+    day_start = datetime(d.year, d.month, d.day, 0, 0, 0)
+    day_end   = datetime(d.year, d.month, d.day, 23, 59, 59)
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, text, remind_at FROM reminders "
+        "WHERE user_id=? AND remind_at BETWEEN ? AND ? ORDER BY remind_at",
+        (user_id, day_start.isoformat(), day_end.isoformat()),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_today_reminders(user_id: int) -> list[dict]:
     """Возвращает напоминания на сегодня (МСК), включая уже выполненные."""
     today = datetime.now(_MSK).date()
