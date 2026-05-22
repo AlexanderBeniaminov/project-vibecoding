@@ -83,6 +83,7 @@ scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 ai_client = openai.AsyncOpenAI(
     base_url=config.ROUTERAI_BASE_URL,
     api_key=config.ROUTERAI_API_KEY,
+    timeout=90.0,  # 90 сек максимум; без таймаута бот зависает навсегда
 )
 
 histories: dict[int, list[dict]] = {}
@@ -815,6 +816,8 @@ async def handle_message(message: Message):
     try:
         response = await run_llm(history, user_id, message.chat.id)
         response = _clean_response(response)
+    except openai.APITimeoutError:
+        response = "Сервер думает слишком долго — попробуй повторить запрос."
     except Exception as e:
         response = f"Ошибка: {e}"
     finally:
