@@ -498,7 +498,6 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                 args.get("deadline", ""),
                 args.get("result", ""),
                 args.get("how_to_check", ""),
-                args.get("block", "A"),
             )
         else:
             return f"Неизвестный инструмент: {name}"

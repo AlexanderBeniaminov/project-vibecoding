@@ -30,17 +30,15 @@ def add_team_task(
     deadline: str = "",
     result: str = "",
     how_to_check: str = "",
-    block: str = "A",
 ) -> str:
-    """Добавляет строку в конец листа "Задачи недели"."""
+    """Добавляет строку в конец листа "Задачи недели". Блок всегда "Устно" — задача от Александра лично."""
     sheet_id = getattr(config, "STRATEGY_SHEET_ID", "")
     if not sheet_id:
         return "Ошибка: STRATEGY_SHEET_ID не задан в config."
 
-    # Нормализуем имя исполнителя
     executor_clean = executor.strip()
 
-    row = [executor_clean, block.upper(), task, result, how_to_check, deadline]
+    row = [executor_clean, "Устно", task, result, how_to_check, deadline]
 
     try:
         service = _get_service()
