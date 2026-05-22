@@ -17,13 +17,25 @@ _MSK = ZoneInfo("Europe/Moscow")
 sys.path.insert(0, "/home/parser/bots/assistant")
 
 
-_DSML_BLOCK_RE = re.compile(r'<\|+DSML\|+tool_calls>.*?</\|+DSML\|+tool_calls>', re.DOTALL)
-_DSML_TAG_RE   = re.compile(r'</?[ \t]*\|+[ \t]*DSML[ \t]*\|+[^>]*>', re.DOTALL)
+# Один или больше пайпов с опциональными пробелами между ними: |, ||, | |, | | |
+_D = r'(\|\s*)+'
+
+_DSML_CLOSED_RE = re.compile(rf'<\s*{_D}DSML\s*{_D}tool_calls\s*>.*?</\s*{_D}DSML\s*{_D}tool_calls\s*>', re.DOTALL)
+_DSML_OPEN_RE   = re.compile(rf'<\s*{_D}DSML\s*{_D}tool_calls\s*>.*', re.DOTALL)
+_DSML_TAG_RE    = re.compile(rf'<\s*/?\s*{_D}DSML\s*{_D}[^>]*>', re.DOTALL)
+_DSML_CHECK_RE  = re.compile(r'DSML', re.IGNORECASE)
+
 
 def _strip_dsml(text: str) -> str:
-    text = _DSML_BLOCK_RE.sub('', text)
-    text = _DSML_TAG_RE.sub('', text)
+    text = _DSML_CLOSED_RE.sub('', text)   # убрать закрытые блоки
+    text = _DSML_OPEN_RE.sub('', text)      # убрать незакрытые блоки
+    text = _DSML_TAG_RE.sub('', text)       # убрать одиночные теги-остатки
     return text.strip()
+
+
+def _has_dsml(text: str) -> bool:
+    return bool(_DSML_CHECK_RE.search(text))
+
 
 def _clean_response(text: str) -> str:
     text = _strip_dsml(text)
@@ -35,15 +47,14 @@ def _clean_response(text: str) -> str:
 
 def _parse_dsml_tool_calls(text: str) -> list[tuple[str, dict]]:
     """Парсит DSML-формат тул-коллов из текста ответа модели."""
-    _DSML = r'[ \t]*\|+[ \t]*DSML[ \t]*\|+[ \t]*'
-    if not re.search(rf'<{_DSML}tool_calls>', text):
+    if not _DSML_CHECK_RE.search(text):
         return []
     invoke_re = re.compile(
-        rf'<{_DSML}invoke\s+name="([^"]+)"[^>]*>(.*?)</{_DSML}invoke>',
+        rf'<\s*{_D}DSML\s*{_D}invoke\s+name="([^"]+)"[^>]*>(.*?)</\s*{_D}DSML\s*{_D}invoke\s*>',
         re.DOTALL,
     )
     param_re = re.compile(
-        rf'<{_DSML}parameter\s+name="([^"]+)"[^>]*>(.*?)</{_DSML}parameter>',
+        rf'<\s*{_D}DSML\s*{_D}parameter\s+name="([^"]+)"[^>]*>(.*?)</\s*{_D}DSML\s*{_D}parameter\s*>',
         re.DOTALL,
     )
     calls = []
@@ -588,11 +599,7 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             # DeepSeek иногда возвращает тул-коллы в текстовом DSML-формате вместо API tool_calls
             dsml_calls = _parse_dsml_tool_calls(content)
             if dsml_calls and total_tool_calls < 6:
-                stripped = re.sub(
-                    r'<\|+DSML\|+tool_calls>.*?</\|+DSML\|+tool_calls>', '',
-                    content, flags=re.DOTALL,
-                ).strip()
-                messages.append({"role": "assistant", "content": stripped or ""})
+                messages.append({"role": "assistant", "content": _strip_dsml(content) or ""})
                 results_parts = []
                 for name, args in dsml_calls:
                     result = execute_tool(name, args, user_id)
@@ -788,6 +795,12 @@ async def handle_message(message: Message):
             await typing_task
         except asyncio.CancelledError:
             pass
+
+    # Ядерная страховка: если DSML всё ещё есть — не отправлять мусор
+    if _has_dsml(response):
+        response = _strip_dsml(response)
+    if _has_dsml(response):
+        response = "Ищу информацию... попробуй повторить запрос."
 
     history.append({"role": "assistant", "content": response})
 
