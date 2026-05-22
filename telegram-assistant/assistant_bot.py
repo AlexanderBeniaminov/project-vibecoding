@@ -56,7 +56,7 @@ import openai
 
 import config
 from tools.db import init_db
-from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool
+from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, files as files_tool
 
 # ── Инициализация ─────────────────────────────────────────────
 bot = Bot(token=config.TELEGRAM_TOKEN)
@@ -334,6 +334,32 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_files",
+            "description": (
+                "Поиск файлов на Mac Александра по имени или содержимому. "
+                "Работает по последнему синхронизированному индексу (обновляется каждые 2 часа). "
+                "Умеет искать в презентациях .pptx, документах .docx, PDF, таблицах .xlsx, "
+                "а также по имени любого файла. Всегда показывает дату последнего обновления индекса."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Что искать — слова из имени файла или из содержимого",
+                    },
+                    "file_type": {
+                        "type": "string",
+                        "description": "Необязательно: фильтр по расширению без точки, например pptx, pdf, docx, xlsx",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 # ── Выполнение инструментов ───────────────────────────────────
@@ -385,6 +411,8 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             return "Перезапуск инициирован. Бот перезапустится через 2-3 секунды."
+        elif name == "search_files":
+            return files_tool.search_files(args["query"], args.get("file_type"))
         else:
             return f"Неизвестный инструмент: {name}"
     except Exception as e:
@@ -625,11 +653,67 @@ async def handle_message(message: Message):
     for i in range(0, len(response), 4000):
         await message.answer(response[i:i+4000])
 
+# ── Утренний дайджест ─────────────────────────────────────────
+async def morning_briefing():
+    """Отправляет план на день в 09:00 МСК каждому пользователю."""
+    for user_id in config.ALLOWED_USER_IDS:
+        try:
+            today_str = datetime.now(_MSK).strftime("%d.%m.%Y")
+            lines = [f"☀️ *Доброе утро! План на {today_str}:*\n"]
+
+            # События календаря
+            try:
+                cal_events = calendar.get_today_events(config.GOOGLE_CALENDAR_ID, config.SERVICE_ACCOUNT_JSON)
+            except Exception as e:
+                cal_events = []
+                lines.append(f"📅 *Календарь:* ошибка — {e}")
+
+            if cal_events:
+                lines.append("📅 *Календарь:*")
+                for ev in cal_events:
+                    start = ev["start"].get("dateTime", ev["start"].get("date", ""))
+                    if "T" in start:
+                        dt = datetime.fromisoformat(start)
+                        prefix = dt.strftime("%H:%M")
+                    else:
+                        prefix = "весь день"
+                    title = ev.get("summary", "(без названия)")
+                    lines.append(f"• {prefix} — {title}")
+            else:
+                lines.append("📅 *Календарь:* событий нет")
+
+            # Напоминания на сегодня
+            today_rems = rem_tool.get_today_reminders(user_id)
+            if today_rems:
+                lines.append("\n⏰ *Напоминания:*")
+                for r in today_rems:
+                    time_str = r["remind_at"][11:16]
+                    lines.append(f"• {time_str} — {r['text']}")
+
+            if len(lines) == 2 and not cal_events and not today_rems:
+                lines.append("На сегодня ничего не запланировано 🎉")
+
+            await bot.send_message(
+                user_id,
+                "\n".join(lines),
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            print(f"[morning_briefing] ошибка для {user_id}: {e}")
+
+
 # ── Запуск ────────────────────────────────────────────────────
 async def main():
     init_db()
     mem_tool._init_memory_table()
     rem_tool.init_scheduler(bot, scheduler)
+    scheduler.add_job(
+        morning_briefing, "cron",
+        hour=9, minute=0,
+        timezone="Europe/Moscow",
+        id="morning_briefing",
+        replace_existing=True,
+    )
     scheduler.start()
     print(f"[{datetime.now(_MSK).strftime('%H:%M:%S')} МСК] Бот запущен.")
     await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
