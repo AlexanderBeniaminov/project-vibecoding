@@ -585,13 +585,12 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
 
     for _ in range(10):
         force_text = total_tool_calls >= 3
-        resp = await ai_client.chat.completions.create(
-            model=config.MODEL,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="none" if force_text else "auto",
-            max_tokens=2000,
-        )
+        # Не передаём tools когда нужен текстовый ответ — DeepSeek игнорирует tool_choice="none"
+        create_kwargs: dict = {"model": config.MODEL, "messages": messages, "max_tokens": 2000}
+        if not force_text:
+            create_kwargs["tools"] = TOOLS
+            create_kwargs["tool_choice"] = "auto"
+        resp = await ai_client.chat.completions.create(**create_kwargs)
         msg = resp.choices[0].message
 
         if not msg.tool_calls:
@@ -609,9 +608,15 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
                         await bot.send_message(chat_id, f"✅ {result}")
                 messages.append({
                     "role": "user",
-                    "content": "Результаты инструментов:\n\n" + "\n\n".join(results_parts) + "\n\nОтветь пользователю.",
+                    "content": "Результаты инструментов:\n\n" + "\n\n".join(results_parts) + "\n\nОтветь пользователю текстом.",
                 })
-                continue
+                # Финальный вызов без tools — DeepSeek обязан ответить текстом, не DSML
+                final_resp = await ai_client.chat.completions.create(
+                    model=config.MODEL,
+                    messages=messages,
+                    max_tokens=2000,
+                )
+                return _strip_dsml(final_resp.choices[0].message.content or "") or "(пустой ответ)"
             # Всегда стрипаем DSML — страховка на случай если парсер не сработал или лимит исчерпан
             return _strip_dsml(content) or "(пустой ответ)"
 
