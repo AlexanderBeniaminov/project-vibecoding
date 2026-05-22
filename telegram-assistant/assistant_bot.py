@@ -693,53 +693,57 @@ async def handle_message(message: Message):
     for i in range(0, len(response), 4000):
         await message.answer(response[i:i+4000])
 
+# ── Форматирование расписания ─────────────────────────────────
+def _format_schedule(date_iso: str, cal_events: list, reminders: list, header: str = "") -> str:
+    date_label = datetime.strptime(date_iso, "%Y-%m-%d").strftime("%d.%m.%Y")
+    lines = [header or f"📆 *План на {date_label}:*\n"]
+    if cal_events:
+        lines.append("📅 *Календарь:*")
+        for ev in cal_events:
+            start = ev["start"].get("dateTime", ev["start"].get("date", ""))
+            prefix = datetime.fromisoformat(start).strftime("%H:%M") if "T" in start else "весь день"
+            lines.append(f"• {prefix} — {ev.get('summary', '(без названия)')}")
+    else:
+        lines.append("📅 *Календарь:* событий нет")
+    if reminders:
+        lines.append("\n⏰ *Напоминания:*")
+        for r in reminders:
+            lines.append(f"• {r['remind_at'][11:16]} — {r['text']}")
+    if not cal_events and not reminders:
+        lines.append("Ничего не запланировано 🎉")
+    return "\n".join(lines)
+
+
 # ── Утренний дайджест ─────────────────────────────────────────
 async def morning_briefing():
     """Отправляет план на день в 09:00 МСК каждому пользователю."""
     for user_id in config.ALLOWED_USER_IDS:
         try:
-            today_str = datetime.now(_MSK).strftime("%d.%m.%Y")
-            lines = [f"☀️ *Доброе утро! План на {today_str}:*\n"]
-
-            # События календаря
+            today_iso = datetime.now(_MSK).strftime("%Y-%m-%d")
+            today_label = datetime.now(_MSK).strftime("%d.%m.%Y")
             try:
-                cal_events = calendar.get_today_events(config.GOOGLE_CALENDAR_ID, config.SERVICE_ACCOUNT_JSON)
+                cal_events = calendar.get_schedule_for_date(config.GOOGLE_CALENDAR_ID, config.SERVICE_ACCOUNT_JSON, today_iso)
             except Exception as e:
                 cal_events = []
-                lines.append(f"📅 *Календарь:* ошибка — {e}")
-
-            if cal_events:
-                lines.append("📅 *Календарь:*")
-                for ev in cal_events:
-                    start = ev["start"].get("dateTime", ev["start"].get("date", ""))
-                    if "T" in start:
-                        dt = datetime.fromisoformat(start)
-                        prefix = dt.strftime("%H:%M")
-                    else:
-                        prefix = "весь день"
-                    title = ev.get("summary", "(без названия)")
-                    lines.append(f"• {prefix} — {title}")
-            else:
-                lines.append("📅 *Календарь:* событий нет")
-
-            # Напоминания на сегодня
-            today_rems = rem_tool.get_today_reminders(user_id)
-            if today_rems:
-                lines.append("\n⏰ *Напоминания:*")
-                for r in today_rems:
-                    time_str = r["remind_at"][11:16]
-                    lines.append(f"• {time_str} — {r['text']}")
-
-            if len(lines) == 2 and not cal_events and not today_rems:
-                lines.append("На сегодня ничего не запланировано 🎉")
-
-            await bot.send_message(
-                user_id,
-                "\n".join(lines),
-                parse_mode="Markdown",
-            )
+            reminders = rem_tool.get_reminders_for_date(user_id, today_iso)
+            text = _format_schedule(today_iso, cal_events, reminders, header=f"☀️ *Доброе утро! План на {today_label}:*\n")
+            await bot.send_message(user_id, text, parse_mode="Markdown")
         except Exception as e:
             print(f"[morning_briefing] ошибка для {user_id}: {e}")
+
+
+# ── Команда /schedule ─────────────────────────────────────────
+@dp.message(Command("schedule"))
+async def cmd_schedule(message: Message):
+    if not is_allowed(message.from_user.id):
+        return
+    today_iso = datetime.now(_MSK).strftime("%Y-%m-%d")
+    try:
+        cal_events = calendar.get_schedule_for_date(config.GOOGLE_CALENDAR_ID, config.SERVICE_ACCOUNT_JSON, today_iso)
+    except Exception:
+        cal_events = []
+    reminders = rem_tool.get_reminders_for_date(message.from_user.id, today_iso)
+    await message.answer(_format_schedule(today_iso, cal_events, reminders), parse_mode="Markdown")
 
 
 # ── Запуск ────────────────────────────────────────────────────
