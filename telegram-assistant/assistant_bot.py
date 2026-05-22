@@ -505,8 +505,27 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
     except Exception as e:
         return f"Ошибка инструмента {name}: {e}"
 
+# ── Персистентный typing-индикатор ───────────────────────────
+async def _keep_typing(chat_id: int, stop: asyncio.Event):
+    while not stop.is_set():
+        try:
+            await bot.send_chat_action(chat_id, "typing")
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(asyncio.shield(stop.wait()), timeout=4)
+        except asyncio.TimeoutError:
+            pass
+
+# Инструменты, требующие мгновенного подтверждения пользователю
+_ACTION_TOOLS = {
+    "create_calendar_event", "add_reminder", "add_note",
+    "delete_note", "cancel_reminder", "remember_fact",
+    "forget_fact", "update_knowledge",
+}
+
 # ── LLM-цикл ─────────────────────────────────────────────────
-async def run_llm(history: list[dict], user_id: int) -> str:
+async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
     recent_memory = mem_tool.get_recent_summary(5)
     memory_section = f"\n\n## Из памяти (последние факты):\n{recent_memory}" if recent_memory else ""
 
@@ -530,7 +549,10 @@ async def run_llm(history: list[dict], user_id: int) -> str:
             "если задача/дело/нужно сделать → add_note с tags='задача'; "
             "если идея/мысль/хочу → add_note с tags='идея'; "
             "если факт о проекте/команде/решение → remember_fact. "
-            "Не спрашивай 'сохранить?', 'куда записать?' — просто сохраняй и кратко подтверди."
+            "Не спрашивай 'сохранить?', 'куда записать?' — просто сохраняй и кратко подтверди. "
+            "ПОДТВЕРЖДЕНИЯ: для инструментов create_calendar_event, add_reminder, add_note, remember_fact "
+            "пользователь уже видит мгновенное ✅-подтверждение. Не повторяй его содержимое. "
+            "Добавляй только если есть что-то существенное (контекст, уточнение) — иначе промолчи."
             f"{knowledge_section}"
             f"{memory_section}"
         ),
@@ -564,6 +586,8 @@ async def run_llm(history: list[dict], user_id: int) -> str:
                     result = execute_tool(name, args, user_id)
                     results_parts.append(f"[{name}]: {result}")
                     total_tool_calls += 1
+                    if name in _ACTION_TOOLS:
+                        await bot.send_message(chat_id, f"✅ {result}")
                 messages.append({
                     "role": "user",
                     "content": "Результаты инструментов:\n\n" + "\n\n".join(results_parts) + "\n\nОтветь пользователю.",
@@ -582,6 +606,8 @@ async def run_llm(history: list[dict], user_id: int) -> str:
                 "tool_call_id": tc.id,
                 "content": str(result),
             })
+            if tc.function.name in _ACTION_TOOLS:
+                await bot.send_message(chat_id, f"✅ {result}")
 
     return "Не удалось обработать запрос. Попробуй переформулировать."
 
@@ -719,8 +745,6 @@ async def handle_message(message: Message):
     if not is_allowed(user_id):
         return
 
-    await bot.send_chat_action(message.chat.id, "typing")
-
     if message.voice:
         text = await transcribe_voice(message)
         if text.startswith("[Не удалось"):
@@ -737,17 +761,26 @@ async def handle_message(message: Message):
         histories[user_id] = history[-20:]
         history = histories[user_id]
 
+    stop_typing = asyncio.Event()
+    typing_task = asyncio.create_task(_keep_typing(message.chat.id, stop_typing))
     try:
-        await bot.send_chat_action(message.chat.id, "typing")
-        response = await run_llm(history, user_id)
+        response = await run_llm(history, user_id, message.chat.id)
         response = _clean_response(response)
     except Exception as e:
         response = f"Ошибка: {e}"
+    finally:
+        stop_typing.set()
+        typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
 
     history.append({"role": "assistant", "content": response})
 
-    for i in range(0, len(response), 4000):
-        await message.answer(response[i:i+4000])
+    if response and response != "(пустой ответ)":
+        for i in range(0, len(response), 4000):
+            await message.answer(response[i:i+4000])
 
 # ── Форматирование расписания ─────────────────────────────────
 def _format_schedule(date_iso: str, cal_events: list, reminders: list, header: str = "") -> str:
