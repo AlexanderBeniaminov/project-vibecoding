@@ -162,6 +162,17 @@ def scan_dir(base: Path) -> list[dict]:
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Запускаемся максимум раз в сутки — при повторном открытии Mac пропускаем
+    today = datetime.now().strftime("%Y-%m-%d")
+    if OUTPUT_FILE.exists():
+        try:
+            last = json.loads(OUTPUT_FILE.read_text(encoding="utf-8")).get("indexed_at", "")
+            if last.startswith(today):
+                print(f"[{today}] Индекс уже обновлён сегодня, пропускаем.")
+                return
+        except Exception:
+            pass
+
     log = open(LOG_FILE, "a", encoding="utf-8")
 
     def _log(msg: str):

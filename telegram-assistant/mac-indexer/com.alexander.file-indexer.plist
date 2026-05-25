@@ -16,10 +16,6 @@
     <key>RunAtLoad</key>
     <true/>
 
-    <!-- Повтор каждые 2 часа (7200 секунд) -->
-    <key>StartInterval</key>
-    <integer>7200</integer>
-
     <key>StandardOutPath</key>
     <string>/Users/user/file-indexer/indexer.log</string>
 
