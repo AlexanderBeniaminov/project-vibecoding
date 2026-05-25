@@ -666,6 +666,63 @@ function setFormulas_(sh, col, prevSheetName) {
 
 
 // ═══════════════════════════════════════════════════════════════
+// БЭКФИЛЛ: ЗАПОЛНЕНИЕ ПРОШЕДШИХ НЕДЕЛЬ
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Заполняет данные для недель 17–21 (2026).
+ * Запускать один раз вручную из GAS-редактора.
+ * Строка 36 (забронировано) НЕ перезаписывается — там могут быть ручные данные.
+ */
+function backfillFromWeek17() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sh    = getSheetByGid_(ss, HOTEL_SHEET_GID);
+  var prevSheetName = findPrevYearSheetName_(ss);
+  var token = getTLToken_();
+  var year  = 2026;
+  var START_WEEK = 17;
+  var END_WEEK   = 21;
+
+  Logger.log('▶ Бэкфилл недель ' + START_WEEK + '–' + END_WEEK + ' (' + year + ')');
+
+  for (var weekNum = START_WEEK; weekNum <= END_WEEK; weekNum++) {
+    Logger.log('  ──── Неделя ' + weekNum + ' ────');
+    var dates = getWeekDates_(weekNum, year);
+    var dateLabel = Utilities.formatDate(dates.start, 'UTC', 'dd.MM') + '-' +
+                    Utilities.formatDate(dates.end,   'UTC', 'dd.MM');
+
+    var week = {num: weekNum, year: year,
+                start: dates.start, end: dates.end, dateLabel: dateLabel};
+
+    var col = findOrCreateWeekCol_(sh, week);
+    Logger.log('  Столбец: ' + columnToLetter_(col));
+
+    // TravelLine
+    var collected = collectBookings_(token, week.start, week.end);
+    Logger.log('  TL: активных=' + collected.active.length +
+               ', отменённых=' + collected.cancelled.length);
+    var bookings = fetchBookingDetails_(token, collected.active);
+    var tl = calcMetrics_(bookings, collected.cancelled.length, week.start, week.end);
+    Logger.log('  НФ выручка=' + tl.rev_nf + ', гостей=' + tl.guests);
+
+    // Монблан
+    var mb = readMonblan_(weekNum, year);
+    Logger.log('  Монблан: выручка=' + mb.revenue);
+
+    // Записываем (nextMonthRev=0 — не трогаем ручные данные в строке 36)
+    writeData_(sh, col, tl, mb, 0);
+    setFormulas_(sh, col, prevSheetName);
+
+    Logger.log('  ✅ Неделя ' + weekNum + ' записана → ' + columnToLetter_(col));
+    Utilities.sleep(1500); // пауза между неделями
+  }
+
+  SpreadsheetApp.flush();
+  Logger.log('✅ Бэкфилл завершён: недели ' + START_WEEK + '–' + END_WEEK);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
 // УТИЛИТЫ — ДАТЫ И НЕДЕЛИ
 // ═══════════════════════════════════════════════════════════════
 
@@ -695,7 +752,7 @@ function getPrevWeek_() {
   var isoYear = getISOYear_(weekStart);
 
   var dateLabel = Utilities.formatDate(weekStart, 'UTC', 'dd.MM') + '-' +
-                  Utilities.formatDate(weekEnd,   'UTC', 'dd.MM.yyyy');
+                  Utilities.formatDate(weekEnd,   'UTC', 'dd.MM');
 
   return {
     num:       weekNum,
@@ -722,6 +779,26 @@ function getISOYear_(date) {
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   return d.getUTCFullYear();
 }
+
+/**
+ * Возвращает {start, end} для ISO-недели weekNum в году year.
+ * start = понедельник, end = воскресенье.
+ */
+function getWeekDates_(weekNum, year) {
+  // 4 января всегда в первой ISO-неделе
+  var jan4    = new Date(Date.UTC(year, 0, 4));
+  var jan4Day = jan4.getUTCDay() || 7; // пн=1 ... вс=7
+  var monday  = new Date(jan4.getTime());
+  monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1 + (weekNum - 1) * 7);
+  monday.setHours(0, 0, 0, 0);
+
+  var sunday = new Date(monday.getTime());
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 0);
+
+  return {start: monday, end: sunday};
+}
+
 
 /**
  * Создаёт forged continueToken для TravelLine API.
