@@ -666,6 +666,96 @@ function setFormulas_(sh, col, prevSheetName) {
 
 
 // ═══════════════════════════════════════════════════════════════
+// ПЕРЕНОС ДАННЫХ ИЗ «2026 СТАРЫЙ» → «2026» (строки 40+)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Копирует данные строк 40 и ниже из листа «2026 старый» в лист «2026».
+ * Логика: если в «2026» ячейка пуста — берём значение из «2026 старый».
+ * Непустые ячейки в «2026» не трогаем.
+ * Совпадение столбцов — по номеру недели в строке 1.
+ * Запускать один раз вручную из GAS-редактора.
+ */
+function copyRowsFromOldSheet() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var newSh = getSheetByGid_(ss, HOTEL_SHEET_GID);
+
+  // Ищем лист «2026 старый»
+  var oldSh = null;
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getName() === '2026 старый') { oldSh = sheets[i]; break; }
+  }
+  if (!oldSh) {
+    Logger.log('❌ Лист «2026 старый» не найден');
+    return;
+  }
+  Logger.log('▶ Перенос из «2026 старый», строки 40+');
+
+  var START_ROW = 40;
+  var END_ROW   = Math.max(oldSh.getLastRow(), newSh.getLastRow());
+  var NUM_ROWS  = END_ROW - START_ROW + 1;
+  if (NUM_ROWS <= 0) { Logger.log('Нет строк от 40'); return; }
+  Logger.log('  Строк для переноса: ' + NUM_ROWS + ' (строки ' + START_ROW + '–' + END_ROW + ')');
+
+  // Карта номер недели → столбец в «2026 старый»
+  var oldRow1 = oldSh.getRange(1, 1, 1, 300).getValues()[0];
+  var oldColByWeek = {};
+  for (var j = 0; j < oldRow1.length; j++) {
+    var wn = Number(oldRow1[j]);
+    if (wn) oldColByWeek[wn] = j + 1; // 1-based
+  }
+
+  // Проходим по столбцам нового листа (недели с col C = index 2)
+  var newRow1 = newSh.getRange(1, 1, 1, 300).getValues()[0];
+  var totalCopied = 0;
+
+  for (var c = 2; c < newRow1.length; c++) {
+    var weekNum = Number(newRow1[c]);
+    if (!weekNum) continue;
+
+    var oldCol = oldColByWeek[weekNum];
+    if (!oldCol) {
+      Logger.log('  ⚠️ Нед.' + weekNum + ' не найдена в «2026 старый»');
+      continue;
+    }
+    var newCol = c + 1; // 1-based
+
+    var oldVals = oldSh.getRange(START_ROW, oldCol, NUM_ROWS, 1).getValues();
+    var newVals = newSh.getRange(START_ROW, newCol, NUM_ROWS, 1).getValues();
+
+    // Мерж: в пустые ячейки «2026» кладём значение из «2026 старый»
+    var merged = [];
+    var rowsCopied = 0;
+    for (var r = 0; r < NUM_ROWS; r++) {
+      var ov = oldVals[r][0];
+      var nv = newVals[r][0];
+      var newEmpty = (nv === '' || nv === null || nv === undefined);
+      var oldHasValue = (ov !== '' && ov !== null && ov !== undefined);
+      if (newEmpty && oldHasValue) {
+        merged.push([ov]);
+        rowsCopied++;
+      } else {
+        merged.push([nv]); // оставляем как есть
+      }
+    }
+
+    if (rowsCopied > 0) {
+      newSh.getRange(START_ROW, newCol, NUM_ROWS, 1).setValues(merged);
+      Logger.log('  Нед.' + weekNum + ' (кол.' + columnToLetter_(newCol) + '): ' +
+                 rowsCopied + ' ячеек скопировано');
+      totalCopied += rowsCopied;
+    } else {
+      Logger.log('  Нед.' + weekNum + ': всё уже заполнено, пропуск');
+    }
+  }
+
+  SpreadsheetApp.flush();
+  Logger.log('✅ Перенос завершён. Всего скопировано ячеек: ' + totalCopied);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
 // БЭКФИЛЛ: ЗАПОЛНЕНИЕ ПРОШЕДШИХ НЕДЕЛЬ
 // ═══════════════════════════════════════════════════════════════
 
