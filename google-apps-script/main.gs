@@ -794,79 +794,76 @@ function copyRowsFromOldSheet() {
     'ФОТ F&B персонал (руб.)':         103
   };
 
-  var START_ROW  = 40;
-  var READ_COLS  = 200;
-  var newLastRow = newSh.getLastRow();
-  var oldLastRow = oldSh.getLastRow();
+  var READ_COLS = 200;
 
-  Logger.log('▶ Перенос по хардкодной карте строк из «2026 старый»');
+  // ВАЖНО: не используем getLastRow() — он возвращает последнюю ЗАПОЛНЕННУЮ строку
+  // (~38 из авто-данных), поэтому строки 40+ не читались. Читаем минимум 150 строк.
+  var newReadRows = Math.max(newSh.getLastRow(), 150);
+  var oldReadRows = Math.max(oldSh.getLastRow(), 110);
 
-  // Читаем оба листа целиком одним запросом
-  var newAll = newSh.getRange(1, 1, newLastRow, READ_COLS).getValues();
-  var oldAll = oldSh.getRange(1, 1, oldLastRow, READ_COLS).getValues();
+  Logger.log('▶ Перенос из «2026 старый». Читаем «2026»: ' + newReadRows +
+             ' строк, «2026 старый»: ' + oldReadRows + ' строк');
+
+  var newAll = newSh.getRange(1, 1, newReadRows, READ_COLS).getValues();
+  var oldAll = oldSh.getRange(1, 1, oldReadRows, READ_COLS).getValues();
 
   var newRow1 = newAll[0]; // строка 1 нового листа (номера недель)
   var oldRow1 = oldAll[0]; // строка 1 старого листа
 
-  // Карта: номер недели → индекс колонки (0-based) в старом листе
+  // Строим карту: label в col B «2026» (строки 40+) → 0-based индекс строки
+  var newLabelToIdx = {};
+  for (var r = 39; r < newAll.length; r++) { // r=39 → строка 40 (1-based)
+    var lbl = String(newAll[r][1]).trim();
+    if (lbl) newLabelToIdx[lbl] = r;
+  }
+  Logger.log('  Меток найдено в «2026» строках 40+: ' + Object.keys(newLabelToIdx).length);
+
+  // Карта: номер недели → 0-based индекс колонки в старом листе
   var oldColByWeek = {};
   for (var j = 0; j < oldRow1.length; j++) {
     var wn = Number(oldRow1[j]);
     if (wn) oldColByWeek[wn] = j;
   }
+  Logger.log('  Недели в «2026 старый»: ' + Object.keys(oldColByWeek).join(', '));
 
   var totalCopied = 0;
-  var notFound = [];
+  var notInNew = []; // метки из карты, не найденные в «2026»
 
-  // Для каждого столбца (неделя) нового листа
-  for (var c = 2; c < newRow1.length; c++) {
-    var weekNum = Number(newRow1[c]);
-    if (!weekNum) continue;
+  // Итерируем по карте: для каждой метрики ищем строку в «2026» и копируем данные
+  var mapLabels = Object.keys(OLD_ROW_BY_LABEL);
+  for (var li = 0; li < mapLabels.length; li++) {
+    var label    = mapLabels[li];
+    var newIdx   = newLabelToIdx[label]; // 0-based индекс в «2026»
+    if (newIdx === undefined) { notInNew.push(label); continue; }
 
-    var oldC = oldColByWeek[weekNum];
-    if (oldC === undefined) {
-      Logger.log('  ⚠️ Нед.' + weekNum + ' нет в «2026 старый»');
-      continue;
-    }
+    var oldRowNum = OLD_ROW_BY_LABEL[label]; // 1-based строка в «2026 старый»
+    var oldR      = oldRowNum - 1;           // 0-based
+    if (oldR >= oldAll.length) continue;
 
-    var weekCopied = 0;
+    // Для каждой недели нового листа
+    for (var c = 2; c < newRow1.length; c++) {
+      var weekNum = Number(newRow1[c]);
+      if (!weekNum) continue;
 
-    // Строки 40+ нового листа
-    for (var nr = START_ROW - 1; nr < newAll.length; nr++) { // 0-based → строка nr+1
-      var label = String(newAll[nr][1]).trim(); // колонка B
-      if (!label) continue;
+      var oldC = oldColByWeek[weekNum];
+      if (oldC === undefined) continue; // этой недели нет в «2026 старый»
 
-      // Ищем строку в старом листе через хардкодную карту
-      var oldRowNum = OLD_ROW_BY_LABEL[label]; // 1-based номер строки в «2026 старый»
-      if (oldRowNum === undefined) {
-        if (notFound.indexOf(label) === -1) notFound.push(label);
-        continue;
-      }
-
-      var oldR = oldRowNum - 1; // перевод в 0-based для массива
-      if (oldR >= oldAll.length) continue; // строка за пределами листа
-
-      var nv = newAll[nr][c];
+      var nv = newAll[newIdx][c];
       var ov = oldAll[oldR][oldC];
       var newEmpty  = (nv === '' || nv === null || nv === undefined);
       var oldHasVal = (ov !== '' && ov !== null && ov !== undefined);
 
       if (newEmpty && oldHasVal) {
-        newSh.getRange(nr + 1, c + 1).setValue(ov); // nr+1: 1-based строка, c+1: 1-based кол.
-        weekCopied++;
+        newSh.getRange(newIdx + 1, c + 1).setValue(ov);
         totalCopied++;
       }
     }
-
-    if (weekCopied > 0) {
-      Logger.log('  Нед.' + weekNum + ' (кол.' + columnToLetter_(c + 1) + '): ' +
-                 weekCopied + ' ячеек скопировано');
-    }
   }
 
-  if (notFound.length > 0) {
-    Logger.log('  ℹ️ Метрики из «2026» не найдены в карте (' + notFound.length + '):');
-    notFound.forEach(function(l) { Logger.log('    · ' + l); });
+  // Диагностика: что не нашли в «2026»
+  if (notInNew.length > 0) {
+    Logger.log('  ℹ️ Не найдены в «2026» col B строки 40+ (' + notInNew.length + '):');
+    notInNew.forEach(function(l) { Logger.log('    · ' + l); });
   }
 
   SpreadsheetApp.flush();
