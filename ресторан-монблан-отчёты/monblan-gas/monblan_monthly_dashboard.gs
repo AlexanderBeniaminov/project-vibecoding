@@ -566,7 +566,7 @@ function callMdGroq_(prompt) {
       method: 'post', muteHttpExceptions: true,
       headers: {'Content-Type':'application/json','Authorization':'Bearer ' + key},
       payload: JSON.stringify({
-        model: 'deepseek/deepseek-v4-pro', max_tokens: 800,
+        model: 'deepseek/deepseek-v4-pro', max_tokens: 1500,
         messages: [{role: 'user', content: prompt}]
       }),
     });
@@ -576,7 +576,7 @@ function callMdGroq_(prompt) {
       Logger.log('RouterAI HTTP ' + code + ': ' + raw);
       SpreadsheetApp.getUi().alert(
         'RouterAI API вернул ошибку ' + code + '.\n' +
-        (code === 429 ? 'Превышен лимит запросов — подождите 1–2 минуты и попробуйте снова.' :
+        (code === 429 ? 'Превышен лимит запросов — подождите 1–2 минуты.' :
          code === 401 ? 'Неверный ROUTERAI_API_KEY — проверьте Script Properties.' :
          'Подробности в Logs (Apps Script → Выполнение).')
       );
