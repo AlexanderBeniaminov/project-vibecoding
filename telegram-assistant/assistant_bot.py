@@ -73,7 +73,7 @@ import openai
 
 import config
 from tools.db import init_db
-from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, files as files_tool, team_tasks
+from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, team_tasks
 
 # ── Инициализация ─────────────────────────────────────────────
 bot = Bot(token=config.TELEGRAM_TOKEN)
@@ -371,32 +371,7 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_files",
-            "description": (
-                "Поиск файлов на Mac Александра по имени или содержимому. "
-                "Работает по последнему синхронизированному индексу (обновляется каждые 2 часа). "
-                "Умеет искать в презентациях .pptx, документах .docx, PDF, таблицах .xlsx, "
-                "а также по имени любого файла. Всегда показывает дату последнего обновления индекса."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Что искать — слова из имени файла или из содержимого",
-                    },
-                    "file_type": {
-                        "type": "string",
-                        "description": "Необязательно: фильтр по расширению без точки, например pptx, pdf, docx, xlsx",
-                    },
-                },
-                "required": ["query"],
-            },
-        },
-    },
+    # search_files удалён — поиск файлов теперь через OpenClaw на Mac
     {
         "type": "function",
         "function": {
@@ -507,8 +482,6 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             return "Перезапуск инициирован. Бот перезапустится через 2-3 секунды."
-        elif name == "search_files":
-            return files_tool.search_files(args["query"], args.get("file_type"))
         elif name == "add_team_task":
             return team_tasks.add_team_task(
                 args["executor"],
@@ -551,8 +524,11 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
     system_msg = {
         "role": "system",
         "content": (
-            f"Ты персональный ассистент Александра Бениаминова. "
+            f"Ты мобильный ассистент Александра Бениаминова — работаешь 24/7 с телефона. "
             f"Сейчас {datetime.now(_MSK).strftime('%d.%m.%Y %H:%M')} МСК.\n"
+            "Твоя зона: напоминалки, заметки, Google Calendar, командные задачи, веб-поиск. "
+            "Файлы на Mac, браузер, работа с документами — это зона OpenClaw-бота на Mac Александра: "
+            "если просят найти файл или поработать с документами — скажи обратиться к @OClaw-боту. "
             "Правила: отвечай максимум 2-3 предложения, только по последнему вопросу, без списков. "
             "После вызова инструмента — одно короткое подтверждение. "
             "Если узнал что-то важное о пользователе или проектах — вызови remember_fact. "
