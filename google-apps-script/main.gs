@@ -125,10 +125,9 @@ function collectWeeklyHotelReport() {
   var mb = readMonblan_(week.num, week.year);
   Logger.log('  Монблан: выручка=' + mb.revenue + ', чеков=' + mb.checks);
 
-  // Прошлый год: читаем выручку за ту же неделю из листа "2025"
-  Logger.log('  Прошлый год: неделя ' + week.num + '...');
-  var prevRevenue = readPrevYearRevenue_(ss, week.num);
-  Logger.log('  Прошлый год: выручка=' + prevRevenue);
+  // Находим название листа "2025" для формулы строки 7
+  var prevSheetName = findPrevYearSheetName_(ss);
+  Logger.log('  Лист ПГ: ' + (prevSheetName || 'не найден'));
 
   // Забронировано на следующий календарный месяц (из TravelLine)
   Logger.log('  Броней на следующий месяц...');
@@ -136,11 +135,11 @@ function collectWeeklyHotelReport() {
   Logger.log('  Забронировано след. месяц: ' + nextMonthRev);
 
   // Записываем данные
-  writeData_(sh, col, tl, mb, prevRevenue, nextMonthRev);
+  writeData_(sh, col, tl, mb, nextMonthRev);
   Logger.log('  Данные записаны');
 
-  // Устанавливаем формулы
-  setFormulas_(sh, col);
+  // Устанавливаем формулы (включая строки 6 и 7)
+  setFormulas_(sh, col, prevSheetName);
   Logger.log('  Формулы установлены');
 
   SpreadsheetApp.flush();
@@ -466,53 +465,21 @@ function readMonblan_(weekNum, year) {
 
 
 // ═══════════════════════════════════════════════════════════════
-// ПРОШЛЫЙ ГОД: ВЫРУЧКА ЗА ТУ ЖЕ НЕДЕЛЮ
+// ПРОШЛЫЙ ГОД: ПОИСК ЛИСТА «2025»
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Ищет в текущей таблице лист с "2025" в названии,
- * находит столбец с нужным номером недели (строка 1),
- * возвращает значение строки 5 (Доход общий).
+ * Возвращает название листа с «2025» в имени (или null если не найден).
+ * Результат используется в setFormulas_ для построения INDEX/MATCH формулы.
  */
-function readPrevYearRevenue_(ss, weekNum) {
-  try {
-    // Ищем лист с "2025" в названии (например "2025" или "2025 старый")
-    var sheets = ss.getSheets();
-    var prevSheet = null;
-    for (var i = 0; i < sheets.length; i++) {
-      var name = sheets[i].getName();
-      if (name.indexOf('2025') !== -1) {
-        prevSheet = sheets[i];
-        break;
-      }
+function findPrevYearSheetName_(ss) {
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getName().indexOf('2025') !== -1) {
+      return sheets[i].getName();
     }
-
-    if (!prevSheet) {
-      Logger.log('  ⚠️ Лист «2025» не найден — строка 7 не заполняется');
-      return 0;
-    }
-
-    Logger.log('  Лист ПГ: «' + prevSheet.getName() + '»');
-
-    // Строка 1 = номера недель, данные с col C (index 2)
-    var row1 = prevSheet.getRange(1, 1, 1, 300).getValues()[0];
-    for (var j = 2; j < row1.length; j++) {
-      if (Number(row1[j]) === weekNum) {
-        var col = j + 1; // 1-based
-        var revenue = prevSheet.getRange(5, col).getValue() || 0;
-        Logger.log('  ПГ нед.' + weekNum + ' → столбец ' + columnToLetter_(col) +
-                   ', выручка=' + revenue);
-        return revenue;
-      }
-    }
-
-    Logger.log('  ⚠️ Неделя ' + weekNum + ' не найдена в листе «2025»');
-    return 0;
-
-  } catch(e) {
-    Logger.log('  ❌ Ошибка readPrevYearRevenue_: ' + e.message);
-    return 0;
   }
+  return null;
 }
 
 
@@ -580,7 +547,10 @@ function findOrCreateWeekCol_(sh, week) {
   // Ищем существующий столбец (данные начинаются с col C = index 2)
   for (var i = 2; i < row1.length; i++) {
     if (Number(row1[i]) === week.num) {
-      return i + 1; // 1-based
+      var existingCol = i + 1; // 1-based
+      // Всегда обновляем диапазон дат в строке 2
+      sh.getRange(ROWS.DATES, existingCol).setValue(week.dateLabel);
+      return existingCol;
     }
   }
 
@@ -607,14 +577,10 @@ function findOrCreateWeekCol_(sh, week) {
 // ТАБЛИЦА: ЗАПИСЬ ДАННЫХ
 // ═══════════════════════════════════════════════════════════════
 
-function writeData_(sh, col, tl, mb, prevRevenue, nextMonthRev) {
+function writeData_(sh, col, tl, mb, nextMonthRev) {
   // Строка 5: Доход общий (НФ + Монблан)
   sh.getRange(ROWS.TOTAL_REVENUE, col).setValue(tl.rev_nf + mb.revenue);
-
-  // Строка 7: Выручка прошлого года за ту же неделю (из листа «2025»)
-  if (prevRevenue > 0) {
-    sh.getRange(ROWS.PREV_YEAR_REV, col).setValue(prevRevenue);
-  }
+  // Строка 7 — формула на лист «2025», ставится в setFormulas_
 
   // Монблан
   sh.getRange(ROWS.MB_REVENUE, col).setValue(mb.revenue);
@@ -662,8 +628,19 @@ function writeData_(sh, col, tl, mb, prevRevenue, nextMonthRev) {
  *   Row 9  (% ПГ):   C8/C7   = 22738580/21135971 = 108% ✓
  *   Row 38 (% плана): C36/C35
  */
-function setFormulas_(sh, col) {
+function setFormulas_(sh, col, prevSheetName) {
   var X = columnToLetter_(col);
+
+  // Строка 6: доля нарастающего к недельной выручке
+  sh.getRange(6, col).setFormula('=' + X + '8/' + X + '5');
+
+  // Строка 7: выручка прошлого года (INDEX/MATCH по номеру недели из строки 1)
+  if (prevSheetName) {
+    var esc = "'" + prevSheetName.replace(/'/g, "''") + "'";
+    sh.getRange(ROWS.PREV_YEAR_REV, col).setFormula(
+      '=IFERROR(INDEX(' + esc + '!5:5,MATCH(' + X + '1,' + esc + '!1:1,0)),0)'
+    );
+  }
 
   // F&B % от оборота
   sh.getRange(ROWS.FB_PCT, col).setFormula('=' + X + '11/' + X + '5');
@@ -674,8 +651,7 @@ function setFormulas_(sh, col) {
   // RevPAC = Доход общий / Гостей всего
   sh.getRange(ROWS.REVPAC, col).setFormula('=' + X + '5/'  + X + '21');
 
-  // % к факту прошлого года = Примерная выручка месяца / Выручка ПГ месяца
-  // (строки 8 и 7 заполняются вручную менеджером)
+  // % к факту прошлого года = Нарастающий итог / Выручка ПГ
   sh.getRange(ROWS.PCT_PLAN_MO, col).setFormula('=' + X + '8/' + X + '7');
 
   // % выполнения плана след. месяца = Забронировано / План
