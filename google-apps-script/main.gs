@@ -670,6 +670,41 @@ function setFormulas_(sh, col, prevSheetName) {
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Диагностика: выводит col B «2026» (строки 1…lastRow) и col B «2026 старый».
+ * Запускать из GAS-редактора, смотреть в Журнале выполнения.
+ */
+function debugLabels() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var newSh = getSheetByGid_(ss, HOTEL_SHEET_GID);
+  var oldSh = null;
+  ss.getSheets().forEach(function(s) {
+    if (s.getName() === '2026 старый') oldSh = s;
+  });
+
+  Logger.log('=== «2026» col B (строки 1–' + newSh.getLastRow() + ') ===');
+  var newB = newSh.getRange(1, 2, newSh.getLastRow(), 1).getValues();
+  newB.forEach(function(row, i) {
+    var lbl = String(row[0]).trim();
+    if (lbl) Logger.log('  R' + (i + 1) + ': «' + lbl + '»');
+  });
+
+  if (!oldSh) { Logger.log('❌ «2026 старый» не найден'); return; }
+
+  Logger.log('=== «2026 старый» col B (строки 1–' + oldSh.getLastRow() + ') ===');
+  var oldB = oldSh.getRange(1, 2, oldSh.getLastRow(), 1).getValues();
+  oldB.forEach(function(row, i) {
+    var lbl = String(row[0]).trim();
+    if (lbl) Logger.log('  R' + (i + 1) + ': «' + lbl + '»');
+  });
+
+  Logger.log('=== Строка 1 «2026 старый» (недели) ===');
+  var oldR1 = oldSh.getRange(1, 1, 1, 50).getValues()[0];
+  oldR1.forEach(function(v, i) {
+    if (v !== '' && v !== null) Logger.log('  col ' + (i+1) + ': ' + v);
+  });
+}
+
+/**
  * Переносит данные из «2026 старый» в «2026» для строк 40 и ниже.
  *
  * Сопоставление строк — по названию метрики из кол. B листа «2026»:
