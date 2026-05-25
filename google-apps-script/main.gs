@@ -796,61 +796,94 @@ function copyRowsFromOldSheet() {
 
   var READ_COLS = 200;
 
-  // ВАЖНО: не используем getLastRow() — он возвращает последнюю ЗАПОЛНЕННУЮ строку
-  // (~38 из авто-данных), поэтому строки 40+ не читались. Читаем минимум 150 строк.
+  // Читаем всегда минимум 150 строк — getLastRow() возвращал ~38 и цикл не доходил до 40+
   var newReadRows = Math.max(newSh.getLastRow(), 150);
-  var oldReadRows = Math.max(oldSh.getLastRow(), 110);
+  var oldReadRows = Math.max(oldSh.getLastRow(), 150);
 
-  Logger.log('▶ Перенос из «2026 старый». Читаем «2026»: ' + newReadRows +
-             ' строк, «2026 старый»: ' + oldReadRows + ' строк');
+  Logger.log('▶ Читаем «2026»: ' + newReadRows + ' строк / «2026 старый»: ' + oldReadRows + ' строк');
 
   var newAll = newSh.getRange(1, 1, newReadRows, READ_COLS).getValues();
   var oldAll = oldSh.getRange(1, 1, oldReadRows, READ_COLS).getValues();
 
-  var newRow1 = newAll[0]; // строка 1 нового листа (номера недель)
-  var oldRow1 = oldAll[0]; // строка 1 старого листа
+  var newRow1 = newAll[0];
+  var oldRow1 = oldAll[0];
 
-  // Строим карту: label в col B «2026» (строки 40+) → 0-based индекс строки
+  // ── Карта: label col B «2026» строки 40+ → 0-based индекс строки ──
   var newLabelToIdx = {};
-  for (var r = 39; r < newAll.length; r++) { // r=39 → строка 40 (1-based)
+  for (var r = 39; r < newAll.length; r++) {
     var lbl = String(newAll[r][1]).trim();
     if (lbl) newLabelToIdx[lbl] = r;
   }
-  Logger.log('  Меток найдено в «2026» строках 40+: ' + Object.keys(newLabelToIdx).length);
+  Logger.log('  «2026» строки 40+: меток=' + Object.keys(newLabelToIdx).length +
+             ' — ' + Object.keys(newLabelToIdx).join(', '));
 
-  // Карта: номер недели → 0-based индекс колонки в старом листе
+  // ── Карта: label col B «2026 старый» ALL строки → 0-based индекс строки ──
+  // PRIMARY механизм: динамический поиск (точнее hardcoded, т.к. не зависит от
+  // правильности номеров строк в agent1.py, которые могут быть устаревшими)
+  var oldDynLabelToRow = {};
+  for (var r2 = 0; r2 < oldAll.length; r2++) {
+    var lbl2 = String(oldAll[r2][1]).trim();
+    if (lbl2) oldDynLabelToRow[lbl2] = r2;
+  }
+  Logger.log('  «2026 старый»: всего меток=' + Object.keys(oldDynLabelToRow).length);
+
+  // ── Карта: номер недели → 0-based индекс колонки в «2026 старый» ──
+  // Фильтруем: только реальные номера недель 1–53 (иначе захватим "2026" из A1)
   var oldColByWeek = {};
   for (var j = 0; j < oldRow1.length; j++) {
     var wn = Number(oldRow1[j]);
-    if (wn) oldColByWeek[wn] = j;
+    if (wn >= 1 && wn <= 53) oldColByWeek[wn] = j;
   }
-  Logger.log('  Недели в «2026 старый»: ' + Object.keys(oldColByWeek).join(', '));
+  var weekNums = Object.keys(oldColByWeek).map(Number).sort(function(a,b){return a-b;});
+  Logger.log('  Недели в «2026 старый» row1: ' + weekNums.join(', '));
+
+  // ── Если недель нет — попробуем row2 (иногда неделя в строке 2) ──
+  if (weekNums.length === 0) {
+    Logger.log('  ⚠️ Row 1 не содержит номеров недель — пробуем row 2');
+    var oldRow2 = oldAll[1] || [];
+    for (var j2 = 0; j2 < oldRow2.length; j2++) {
+      var wn2 = Number(oldRow2[j2]);
+      if (wn2 >= 1 && wn2 <= 53) oldColByWeek[wn2] = j2;
+    }
+    weekNums = Object.keys(oldColByWeek).map(Number).sort(function(a,b){return a-b;});
+    Logger.log('  Недели в «2026 старый» row2: ' + weekNums.join(', '));
+  }
 
   var totalCopied = 0;
-  var notInNew = []; // метки из карты, не найденные в «2026»
+  var notFoundInOld = [];
 
-  // Итерируем по карте: для каждой метрики ищем строку в «2026» и копируем данные
-  var mapLabels = Object.keys(OLD_ROW_BY_LABEL);
-  for (var li = 0; li < mapLabels.length; li++) {
-    var label    = mapLabels[li];
-    var newIdx   = newLabelToIdx[label]; // 0-based индекс в «2026»
-    if (newIdx === undefined) { notInNew.push(label); continue; }
+  // ── Итерируем по всем меткам из «2026» строк 40+ ──
+  var newLabels = Object.keys(newLabelToIdx);
+  for (var li = 0; li < newLabels.length; li++) {
+    var label  = newLabels[li];
+    var newIdx = newLabelToIdx[label]; // 0-based row в «2026»
 
-    var oldRowNum = OLD_ROW_BY_LABEL[label]; // 1-based строка в «2026 старый»
-    var oldR      = oldRowNum - 1;           // 0-based
-    if (oldR >= oldAll.length) continue;
+    // Ищем строку в «2026 старый»: сначала динамически по col B
+    var oldR = oldDynLabelToRow[label]; // 0-based, dynamic
+    // Fallback: hardcoded карта (на случай если подписи отличаются)
+    if (oldR === undefined) {
+      var hardRow = OLD_ROW_BY_LABEL[label];
+      if (hardRow !== undefined) oldR = hardRow - 1;
+    }
+    if (oldR === undefined || oldR >= oldAll.length) {
+      notFoundInOld.push(label);
+      continue;
+    }
 
-    // Для каждой недели нового листа
+    // Для каждой недели «2026»
     for (var c = 2; c < newRow1.length; c++) {
       var weekNum = Number(newRow1[c]);
-      if (!weekNum) continue;
+      if (weekNum < 1 || weekNum > 53) continue;
 
       var oldC = oldColByWeek[weekNum];
-      if (oldC === undefined) continue; // этой недели нет в «2026 старый»
+      if (oldC === undefined) continue; // недели нет в «2026 старый»
 
       var nv = newAll[newIdx][c];
       var ov = oldAll[oldR][oldC];
-      var newEmpty  = (nv === '' || nv === null || nv === undefined);
+
+      // Считаем ячейку «2026» пустой если '' / null / undefined / 0
+      // (0 значит «данные не вводились», а не «было ноль событий»)
+      var newEmpty  = (nv === '' || nv === null || nv === undefined || nv === 0);
       var oldHasVal = (ov !== '' && ov !== null && ov !== undefined);
 
       if (newEmpty && oldHasVal) {
@@ -860,10 +893,9 @@ function copyRowsFromOldSheet() {
     }
   }
 
-  // Диагностика: что не нашли в «2026»
-  if (notInNew.length > 0) {
-    Logger.log('  ℹ️ Не найдены в «2026» col B строки 40+ (' + notInNew.length + '):');
-    notInNew.forEach(function(l) { Logger.log('    · ' + l); });
+  if (notFoundInOld.length > 0) {
+    Logger.log('  ℹ️ Не найдены в «2026 старый» (' + notFoundInOld.length + '): ' +
+               notFoundInOld.join(', '));
   }
 
   SpreadsheetApp.flush();
