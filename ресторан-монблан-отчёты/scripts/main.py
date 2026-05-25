@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 # Логирование — в stdout и в файл
 os.makedirs("logs", exist_ok=True)
@@ -51,7 +51,7 @@ from max_bot import MaxBot, send_or_log
 from sheets_writer import (
     get_service, setup_spreadsheet,
     write_daily_row, write_weekly_row, read_daily_row,
-    delete_columns_before_date,
+    delete_columns_before_date, write_monthly_col,
 )
 from utils import yesterday_utc5, fmt_date, week_bounds, fmt_date_ru, fmt_money, fmt_int
 
@@ -501,6 +501,52 @@ def _build_weekly_digest(data: dict, monday: date, sunday: date, week_num: int) 
 # CLI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# monthly — ежемесячный сбор iiko → лист «ЕжеМесячный»
+# ---------------------------------------------------------------------------
+
+def monthly(for_date: date = None):
+    """
+    Собрать данные за календарный месяц из iiko OLAP и записать
+    в лист «ЕжеМесячный». По умолчанию — прошлый месяц.
+    Аргумент for_date может быть любой датой внутри нужного месяца.
+    """
+    from monthly_collect import collect_monthly_data
+
+    if for_date is None:
+        today = date.today()
+        # «прошлый месяц»: первый день текущего месяца минус 1 день
+        first_this = today.replace(day=1)
+        last_prev  = first_this - timedelta(days=1)
+        year, month = last_prev.year, last_prev.month
+    else:
+        year, month = for_date.year, for_date.month
+
+    logger.info(f"=== СТАРТ monthly {year}-{month:02d} ===")
+    bot = _make_bot()
+
+    logger.info("Шаг 1: сбор данных из iiko OLAP...")
+    try:
+        data = collect_monthly_data(year, month)
+        logger.info(f"Данные iiko собраны: выручка={data.get('revenue_total')}")
+    except Exception as e:
+        logger.error(f"Ошибка сбора monthly iiko: {e}", exc_info=True)
+        _alert_dev(bot, f"Ошибка сбора monthly {year}-{month:02d}: {e}")
+        sys.exit(1)
+
+    logger.info("Шаг 2: запись в лист «ЕжеМесячный»...")
+    try:
+        service = _get_sheets_service()
+        write_monthly_col(service, SHEETS_ID, data)
+        logger.info("Данные записаны в «ЕжеМесячный»")
+    except Exception as e:
+        logger.error(f"Ошибка записи monthly в Sheets: {e}", exc_info=True)
+        _alert_dev(bot, f"Ошибка записи monthly в Sheets {year}-{month:02d}: {e}")
+        sys.exit(1)
+
+    logger.info(f"=== ФИНИШ monthly {year}-{month:02d} ===")
+
+
 def trim_sheet(cutoff_date_str: str):
     """
     Удалить из листа «Ежедневно» столбцы с датами раньше cutoff_date_str.
@@ -522,12 +568,13 @@ def main():
     parser = argparse.ArgumentParser(description="Монблан — автоматический отчёт")
     parser.add_argument(
         "mode",
-        choices=["collect", "report", "weekly", "trim"],
+        choices=["collect", "report", "weekly", "monthly", "trim"],
         help=(
-            "collect — сбор iiko → Sheets (23:30); "
-            "report  — чтение Sheets → отчёт в MAX (10:00); "
-            "weekly  — агрегация за прошлую неделю; "
-            "trim    — удалить столбцы до указанной даты"
+            "collect  — сбор iiko → Sheets (23:30); "
+            "report   — чтение Sheets → отчёт в MAX (10:00); "
+            "weekly   — агрегация за прошлую неделю; "
+            "monthly  — сбор iiko → «ЕжеМесячный» (1-е число месяца); "
+            "trim     — удалить столбцы до указанной даты"
         ),
     )
     parser.add_argument(
@@ -556,6 +603,8 @@ def main():
             daily_collect(target_date)
         elif args.mode == "report":
             daily_report(target_date)
+        elif args.mode == "monthly":
+            monthly(target_date)
         else:
             weekly(target_date)
     except Exception as e:

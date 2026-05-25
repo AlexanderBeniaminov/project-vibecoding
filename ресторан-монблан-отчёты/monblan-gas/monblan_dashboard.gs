@@ -40,6 +40,9 @@ var SKIP_ROWS_MB = {87:1, 88:1};
 // ── Явные заголовки секций (никогда не имеют собственных данных) ──
 var HEADER_ROWS_MB = {60:1, 74:1, 90:1};
 
+// ── Строки-родители секций (имеют данные, дают контекст дочерним) ─
+var SECTION_ROWS_MB = {4:1, 9:1, 16:1, 31:1, 38:1, 42:1, 46:1, 52:1, 56:1};
+
 // ── Строки с одним знаком после запятой (Оборачиваемость) ────
 var DECIMAL_ROWS_MB = {52:1, 53:1, 54:1, 55:1, 56:1, 57:1, 58:1, 59:1};
 
@@ -69,13 +72,19 @@ function installTrigger() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🔶 Монблан')
-    .addItem('Обновить дашборд',            'refreshDashboard')
-    .addItem('Обновить AI-анализ',          'runAiAnalysis')
-    .addSeparator()
-    .addItem('Загрузить данные за прошлую неделю', 'fillMonblanWeekFromIiko')
-    .addSeparator()
-    .addItem('Установить автозагрузку (каждый Пн 9:00)', 'installWeeklyTrigger')
-    .addItem('Установить триггер onEdit',   'installTrigger')
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('📅 Еженедельный')
+      .addItem('Обновить дашборд',                       'refreshDashboard')
+      .addItem('Обновить AI-анализ',                     'runAiAnalysis')
+      .addSeparator()
+      .addItem('Загрузить данные за прошлую неделю',     'fillMonblanWeekFromIiko')
+      .addSeparator()
+      .addItem('Установить автозагрузку (каждый Пн 9:00)', 'installWeeklyTrigger')
+      .addItem('Установить триггер onEdit',              'installTrigger'))
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('📆 Ежемесячный')
+      .addItem('Обновить месячный дашборд',              'refreshMonthlyDashboard')
+      .addItem('Обновить AI-анализ (месяц)',             'runMonthlyAiAnalysis')
+      .addSeparator()
+      .addItem('Установить триггер onEdit (месяц)',      'installMonthlyTrigger'))
     .addToUi();
 }
 
@@ -338,8 +347,9 @@ function computeSignals_(mb, col25, col26) {
   var v25arr = col25 ? mb.getRange(1, col25, N, 1).getValues() : null;
   var v26arr = col26 ? mb.getRange(1, col26, N, 1).getValues() : null;
 
-  var result    = [];
-  var lastLabel = '';
+  var result       = [];
+  var lastLabel    = '';
+  var sectionLabel = '';
 
   for (var i = 3; i < N; i++) {
     var rowNum = i + 1;
@@ -348,9 +358,17 @@ function computeSignals_(mb, col25, col26) {
     var label = String(labels[i][0] || '').trim();
     var isPct = !!PCT_ROWS_MB[rowNum];
     if (label) lastLabel = label;
+    if ((SECTION_ROWS_MB[rowNum] || HEADER_ROWS_MB[rowNum]) && label) sectionLabel = label;
 
-    var dispLabel = isPct ? ('% ' + lastLabel) : label;
-    if (!dispLabel) continue;
+    var rawLabel = isPct ? ('% ' + lastLabel) : label;
+    if (!rawLabel) continue;
+
+    // Добавляем префикс секции, если текущая строка — не сама секция
+    var isSection         = !!(SECTION_ROWS_MB[rowNum] || HEADER_ROWS_MB[rowNum]);
+    var isDirectSectionPct = isPct && sectionLabel === lastLabel;
+    var dispLabel = (sectionLabel && !isSection && !isDirectSectionPct)
+      ? (sectionLabel + ': ' + rawLabel)
+      : rawLabel;
 
     var v25 = v25arr ? (parseFloat(v25arr[i][0]) || 0) : 0;
     var v26 = v26arr ? (parseFloat(v26arr[i][0]) || 0) : 0;
@@ -480,10 +498,7 @@ function runAiAnalysis() {
   var green  = signals.filter(function(d){return d.signal==='🟢';});
 
   var aiText = callGroq_(buildPrompt_(week, red, yellow, green));
-  if (!aiText) {
-    SpreadsheetApp.getUi().alert('Ошибка Groq API.\n\nПроверьте GROQ_API_KEY:\nНастройки → Свойства скрипта → GROQ_API_KEY\nКлюч: console.groq.com');
-    return;
-  }
+  if (!aiText) return;
 
   var aiRow = getAiStartRow_() || (R_DATA + 110);
   writeAiBlock_(dash, aiRow, week, aiText);
@@ -510,18 +525,36 @@ function writeAiBlock_(dash, startRow, week, aiText) {
 }
 
 function callGroq_(prompt) {
-  var key = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
-  if (!key) return null;
+  var key = PropertiesService.getScriptProperties().getProperty('ROUTERAI_API_KEY');
+  if (!key) {
+    SpreadsheetApp.getUi().alert('ROUTERAI_API_KEY не задан в Script Properties.');
+    return null;
+  }
   try {
-    var resp = UrlFetchApp.fetch('https://api.groq.com/openai/v1/chat/completions', {
+    var resp = UrlFetchApp.fetch('https://routerai.ru/api/v1/chat/completions', {
       method: 'post', muteHttpExceptions: true,
       headers: {'Content-Type':'application/json','Authorization':'Bearer '+key},
-      payload: JSON.stringify({model:'llama-3.3-70b-versatile', max_tokens:800,
+      payload: JSON.stringify({model:'deepseek/deepseek-v4-pro', max_tokens:800,
         messages:[{role:'user',content:prompt}]}),
     });
-    if (resp.getResponseCode() !== 200) { Logger.log('Groq '+resp.getResponseCode()); return null; }
+    var code = resp.getResponseCode();
+    if (code !== 200) {
+      var raw = resp.getContentText();
+      Logger.log('RouterAI HTTP ' + code + ': ' + raw);
+      SpreadsheetApp.getUi().alert(
+        'RouterAI API вернул ошибку ' + code + '.\n' +
+        (code === 429 ? 'Превышен лимит запросов — подождите 1–2 минуты и попробуйте снова.' :
+         code === 401 ? 'Неверный ROUTERAI_API_KEY — проверьте Script Properties.' :
+         'Подробности в Logs (Apps Script → Выполнение).')
+      );
+      return null;
+    }
     return JSON.parse(resp.getContentText()).choices[0].message.content;
-  } catch(e) { Logger.log('Groq: '+e.message); return null; }
+  } catch(e) {
+    Logger.log('RouterAI: ' + e.message);
+    SpreadsheetApp.getUi().alert('RouterAI: ошибка сети — ' + e.message);
+    return null;
+  }
 }
 
 function buildPrompt_(week, red, yellow, green) {

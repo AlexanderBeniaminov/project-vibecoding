@@ -26,7 +26,7 @@ IIKO_ORG_ID    = os.environ.get("IIKO_ORG_ID", "")
 # Google Sheets
 # ---------------------------------------------------------------------------
 
-SHEETS_ID = os.environ.get("GOOGLE_SHEETS_ID", "")
+SHEETS_ID = os.environ.get("GOOGLE_SHEETS_ID") or "1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI"
 # JSON-содержимое сервисного аккаунта одной строкой
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 

@@ -569,3 +569,402 @@ def _find_category(cats: dict, keywords: list) -> float:
         if any(kw in (key or "").lower() for kw in keywords):
             return val
     return 0.0
+
+
+# ---------------------------------------------------------------------------
+# Запись ежемесячных данных (лист «ЕжеМесячный»)
+# ---------------------------------------------------------------------------
+
+# Карта: ключ словаря данных → номер строки листа (1-based)
+_MONTHLY_ROW_MAP = {
+    # строка 2 — дата (обрабатывается отдельно)
+    "revenue_total":              3,
+    "revenue_kitchen":            4,
+    "revenue_kitchen_pct":        5,
+    "revenue_bar":                6,
+    "revenue_bar_pct":            7,
+    # строка 8 — заголовок секции
+    "revenue_morning":            9,
+    "revenue_morning_pct":       10,
+    "revenue_day":               11,
+    "revenue_day_pct":           12,
+    "revenue_evening":           13,
+    "revenue_evening_pct":       14,
+    # строка 15 — заголовок секции
+    "weekday_mon":               16,
+    "weekday_mon_pct":           17,
+    "weekday_tue":               18,
+    "weekday_tue_pct":           19,
+    "weekday_wed":               20,
+    "weekday_wed_pct":           21,
+    "weekday_thu":               22,
+    "weekday_thu_pct":           23,
+    "weekday_fri":               24,
+    "weekday_fri_pct":           25,
+    "weekday_sat":               26,
+    "weekday_sat_pct":           27,
+    "weekday_sun":               28,
+    "weekday_sun_pct":           29,
+    "margin_total":              30,
+    "margin_pct":                31,
+    "margin_kitchen":            32,
+    "margin_kitchen_pct":        33,
+    "margin_bar":                34,
+    "margin_bar_pct":            35,
+    "markup_total":              36,
+    "markup_kitchen":            37,
+    "markup_bar":                38,
+    "foodcost_total":            39,
+    "foodcost_kitchen":          40,
+    "foodcost_bar":              41,
+    "guests_total":              42,
+    "guests_morning":            43,
+    "guests_morning_pct":        44,
+    "guests_day":                45,
+    "guests_day_pct":            46,
+    "guests_evening":            47,
+    "guests_evening_pct":        48,
+    "avg_check_per_guest":       49,
+    "avg_check_per_guest_morning": 50,
+    "avg_check_per_guest_day":   51,
+    "avg_check_per_guest_evening": 52,
+    "checks_total":              53,
+    "checks_morning":            54,
+    "checks_day":                55,
+    "checks_evening":            56,
+    "dishes_kitchen":            57,
+    "avg_check":                 58,
+    "avg_check_per_dish":        59,
+    "avg_per_guest_kitchen":     60,
+    "avg_per_guest_bar":         61,
+    "avg_dishes_per_guest":      62,
+    "turnover_table":            63,
+    "turnover_table_morning":    64,
+    "turnover_table_day":        65,
+    "turnover_table_evening":    66,
+    "turnover_seat":             67,
+    "turnover_seat_morning":     68,
+    "turnover_seat_day":         69,
+    "turnover_seat_evening":     70,
+    # строка 71 — заголовок секции
+    "revenue_1guest":            72,
+    "revenue_1guest_pct":        73,
+    "revenue_2guests":           74,
+    "revenue_2guests_pct":       75,
+    "revenue_3plus":             76,
+    "revenue_3plus_pct":         77,
+    "group_loyalty":             78,
+    "checks_1guest":             79,
+    "checks_1guest_pct":         80,
+    "checks_2guests":            81,
+    "checks_2guests_pct":        82,
+    "checks_3plus":              83,
+    "checks_3plus_pct":          84,
+    # строка 85 — заголовок секции
+    "bracket_0_500":             86,
+    "bracket_0_500_pct":         87,
+    "bracket_500_1000":          88,
+    "bracket_500_1000_pct":      89,
+    "bracket_1000_1500":         90,
+    "bracket_1000_1500_pct":     91,
+    "bracket_1500_3000":         92,
+    "bracket_1500_3000_pct":     93,
+    "bracket_3000_5000":         94,
+    "bracket_3000_5000_pct":     95,
+    "bracket_5000_plus":         96,
+    "bracket_5000_plus_pct":     97,
+    "tables":                    98,
+    "seats":                     99,
+    "days_in_month":            100,
+}
+
+MONTHLY_SHEET = "ЕжеМесячный"
+
+# Строки с денежным форматом (# ##0 — пробел как разделитель тысяч)
+_MONTHLY_MONEY_ROWS = {
+    3, 4, 6, 9, 11, 13,
+    16, 18, 20, 22, 24, 26, 28,
+    30, 32, 34,
+    42, 43, 45, 47,
+    49, 50, 51, 52,
+    53, 54, 55, 56,
+    57, 58, 59, 60, 61,
+    72, 74, 76,
+    79, 81, 83,
+    86, 88, 90, 92, 94, 96,
+    98, 99, 100,
+}
+# Строки с процентным форматом (0%)
+_MONTHLY_PCT_ROWS = {
+    5, 7, 10, 12, 14,
+    17, 19, 21, 23, 25, 27, 29,
+    31, 33, 35,
+    36, 37, 38,  # наценка (markup) — процентный формат
+    39, 40, 41,
+    44, 46, 48,
+    73, 75, 77,
+    80, 82, 84,
+    87, 89, 91, 93, 95, 97,
+}
+# Строки с дробным форматом (0.00 — оборачиваемость, коэф. лояльности)
+_MONTHLY_DECIMAL_ROWS = {
+    62, 63, 64, 65, 66, 67, 68, 69, 70,
+    78,
+}
+
+
+def setup_monthly_formats(service, spreadsheet_id: str):
+    """
+    Применить числовые форматы к листу «ЕжеМесячный» по строкам:
+    — деньги (# ##0): суммы в рублях
+    — проценты (0%):  доли и процентные строки
+    — дробные (0.00): коэффициенты, оборачиваемость, наценки
+    Применяется к столбцам B и далее (не затрагивает колонку A с метками).
+    """
+    meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_id = None
+    for s in meta["sheets"]:
+        if s["properties"]["title"] == MONTHLY_SHEET:
+            sheet_id = s["properties"]["sheetId"]
+            break
+    if sheet_id is None:
+        logger.warning(f"Лист «{MONTHLY_SHEET}» не найден — форматы не применены")
+        return
+
+    # #,##0 — Google Sheets сам заменяет запятую на пробел по российской локали.
+    # Это единственный способ получить рекурсивный разделитель тысяч (1 234 567, не 1234 567).
+    fmt_money   = {"type": "NUMBER",     "pattern": "#,##0"}
+    fmt_pct     = {"type": "PERCENT",    "pattern": "0%"}
+    fmt_decimal = {"type": "NUMBER",     "pattern": "0.0"}   # один знак: оборачиваемость
+
+    requests = []
+
+    def _row_request(row_num: int, fmt: dict):
+        return {
+            "repeatCell": {
+                "range": {
+                    "sheetId":          sheet_id,
+                    "startRowIndex":    row_num - 1,  # 0-based
+                    "endRowIndex":      row_num,
+                    "startColumnIndex": 1,            # с колонки B (A — метки)
+                },
+                "cell": {
+                    "userEnteredFormat": {"numberFormat": fmt}
+                },
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        }
+
+    for row in _MONTHLY_MONEY_ROWS:
+        requests.append(_row_request(row, fmt_money))
+    for row in _MONTHLY_PCT_ROWS:
+        requests.append(_row_request(row, fmt_pct))
+    for row in _MONTHLY_DECIMAL_ROWS:
+        requests.append(_row_request(row, fmt_decimal))
+
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": requests},
+    ).execute()
+    logger.info(
+        f"Форматы листа «{MONTHLY_SHEET}» применены: "
+        f"{len(_MONTHLY_MONEY_ROWS)} денежных, {len(_MONTHLY_PCT_ROWS)} %, "
+        f"{len(_MONTHLY_DECIMAL_ROWS)} дробных строк"
+    )
+
+
+def setup_monthly_visual_format(service, spreadsheet_id: str):
+    """
+    Применить визуальное цветовое оформление листа «ЕжеМесячный»:
+    жёлто-оранжевая гамма для визуального отличия от синей гаммы листа «Монблан».
+
+    Аналог buildColumnA_() из monblan_build.gs, но через Sheets API v4.
+    Закрепляет строки 1–2 и столбец A. Ширина столбца A — 260px, данных — 90px.
+    """
+    meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_id = None
+    for s in meta["sheets"]:
+        if s["properties"]["title"] == MONTHLY_SHEET:
+            sheet_id = s["properties"]["sheetId"]
+            break
+    if sheet_id is None:
+        logger.warning(f"Лист «{MONTHLY_SHEET}» не найден — цветовое оформление не применено")
+        return
+
+    def _rgb(h):
+        h = h.lstrip("#")
+        return {"red": int(h[0:2], 16) / 255, "green": int(h[2:4], 16) / 255, "blue": int(h[4:6], 16) / 255}
+
+    # Жёлто-оранжевая палитра (аналог синей гаммы листа «Монблан»)
+    HDR_BG    = _rgb("#7c3e0d")  # тёмно-коричневый ← #1a3a5c тёмно-синий
+    HDR_TEXT  = _rgb("#ffffff")
+    DATE_BG   = _rgb("#fde8c8")  # светло-персиковый ← #d0e4f7 светло-голубой
+    DATE_TEXT = _rgb("#1a1a1a")
+    SEC_BG    = _rgb("#92400e")  # тёмно-янтарный ← #3d3d3d тёмно-серый
+    SEC_TEXT  = _rgb("#ffffff")
+    PCT_BG    = _rgb("#fef3e2")  # очень светло-янтарный ← #eef3fa светло-голубой
+    PCT_TEXT  = _rgb("#92400e")
+    CALC_BG   = _rgb("#fff8dc")  # светло-кремовый ← #f0f4f0 светло-зелёный
+    CALC_TEXT = _rgb("#78350f")
+    DATA_BG   = _rgb("#ffffff")
+    DATA_ALT  = _rgb("#fffbf5")  # очень светло-жёлтый ← #f8f9fa
+    DATA_TEXT = _rgb("#1a1a1a")
+    STAT_BG   = _rgb("#faf8f0")  # тёплый белый ← #f5f5f0
+    STAT_TEXT = _rgb("#555555")
+    COL_A_BG  = _rgb("#fef9f0")  # кремовый ← #f0f0f0
+
+    # Строки-заголовки блоков — тёмно-янтарный фон.
+    # Включает как чистые разделители (без данных), так и ключевые метрики каждого блока.
+    _SECTION_ROWS    = {8, 15, 30, 36, 39, 42, 49, 53, 57, 63, 67, 71, 78, 85}
+    # Расчётные строки — светло-кремовый фон (средние, коэффициенты, оборачиваемость).
+    # Не включает строки из _SECTION_ROWS.
+    _CALC_COLOR_ROWS = _MONTHLY_DECIMAL_ROWS | {32, 34, 50, 51, 52, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 70}
+    _STATIC_ROWS     = {98, 99, 100}
+
+    def _req(r_from, r_to, bg, text=None, bold=None, c_from=0, c_to=None):
+        fmt = {"backgroundColor": bg}
+        tf = {}
+        if text is not None:
+            tf["foregroundColor"] = text
+        if bold is not None:
+            tf["bold"] = bold
+        if tf:
+            fmt["textFormat"] = tf
+        rng = {
+            "sheetId": sheet_id,
+            "startRowIndex": r_from - 1,
+            "endRowIndex": r_to,          # r_to — 0-based exclusive (= 1-based r_to)
+            "startColumnIndex": c_from,
+        }
+        if c_to is not None:
+            rng["endColumnIndex"] = c_to
+        fields = "userEnteredFormat.backgroundColor"
+        if tf:
+            fields += ",userEnteredFormat.textFormat"
+        return {"repeatCell": {"range": rng, "cell": {"userEnteredFormat": fmt}, "fields": fields}}
+
+    reqs = []
+
+    # 1. Столбец A (строки 1-100): кремовый фон, не жирный
+    reqs.append(_req(1, 100, COL_A_BG, text=DATA_TEXT, bold=False, c_from=0, c_to=1))
+
+    # 2. Строка 1 (шапка) — полная строка: тёмно-коричневый, белый жирный
+    reqs.append(_req(1, 1, HDR_BG, HDR_TEXT, bold=True, c_from=0))
+
+    # 3. Строка 2 (даты месяцев) — полная строка: светло-персиковый, жирный
+    reqs.append(_req(2, 2, DATE_BG, DATE_TEXT, bold=True, c_from=0))
+
+    # 4. Строки 3–100 (колонки B+) — по типу строки
+    for row in range(3, 101):
+        if row in _SECTION_ROWS:
+            continue  # раздел — обрабатывается ниже
+        elif row in _MONTHLY_PCT_ROWS:
+            reqs.append(_req(row, row, PCT_BG, PCT_TEXT, bold=False, c_from=1))
+        elif row in _CALC_COLOR_ROWS:
+            reqs.append(_req(row, row, CALC_BG, CALC_TEXT, bold=False, c_from=1))
+        elif row in _STATIC_ROWS:
+            reqs.append(_req(row, row, STAT_BG, STAT_TEXT, bold=False, c_from=1))
+        else:
+            bg = DATA_ALT if row % 2 == 0 else DATA_BG
+            reqs.append(_req(row, row, bg, DATA_TEXT, bold=False, c_from=1))
+
+    # 5. Строки-заголовки разделов — полная строка: тёмно-янтарный, белый жирный
+    for row in sorted(_SECTION_ROWS):
+        reqs.append(_req(row, row, SEC_BG, SEC_TEXT, bold=True, c_from=0))
+
+    # 6. Шрифт 11px для всех строк 1-100 (специфичный field-path, не сбрасывает bold/color)
+    reqs.append({
+        "repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 100},
+            "cell": {"userEnteredFormat": {"textFormat": {"fontSize": 11}}},
+            "fields": "userEnteredFormat.textFormat.fontSize",
+        }
+    })
+    # 6б. Строка 3 (Выручка итого) — жирная (специфичный path, не трогает size/color)
+    reqs.append({
+        "repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 2, "endRowIndex": 3},
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+            "fields": "userEnteredFormat.textFormat.bold",
+        }
+    })
+
+    # 7. Ширина столбца A — 260px, данных — 90px
+    reqs.append({
+        "updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 1},
+            "properties": {"pixelSize": 260},
+            "fields": "pixelSize",
+        }
+    })
+    reqs.append({
+        "updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 1, "endIndex": 50},
+            "properties": {"pixelSize": 90},
+            "fields": "pixelSize",
+        }
+    })
+
+    # 8. Закрепить строки 1–2 и столбец A
+    reqs.append({
+        "updateSheetProperties": {
+            "properties": {
+                "sheetId": sheet_id,
+                "gridProperties": {"frozenRowCount": 2, "frozenColumnCount": 1},
+            },
+            "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
+        }
+    })
+
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": reqs},
+    ).execute()
+    logger.info(
+        f"Визуальное оформление листа «{MONTHLY_SHEET}» применено: "
+        f"жёлто-оранжевая гамма, {len(reqs)} запросов, заморозка строк 1-2 + столбца A"
+    )
+
+
+def write_monthly_col(service, spreadsheet_id: str, data: dict):
+    """
+    Записать данные за месяц в лист «ЕжеМесячный».
+    data["date"] — строка "YYYY-MM-01".
+    Строка 2 листа — даты; находим колонку по дате или создаём новую.
+    Пишем строки 2–100 одним запросом.
+    """
+    month_date = data.get("date", "")   # "YYYY-MM-01"
+    if not month_date:
+        logger.error("write_monthly_col: нет поля 'date' в данных")
+        return
+
+    col_num = _find_or_create_date_column(
+        service, spreadsheet_id, MONTHLY_SHEET, month_date, search_row=2
+    )
+    col_ltr = _col_letter(col_num)
+
+    # Строим колонку значений строк 2–100 (индексы 0–98)
+    col_values: list = [""] * 100   # 100 позиций → строки 1–100
+
+    # Строка 2 (индекс 1): дата
+    col_values[1] = month_date
+
+    # Заполняем по карте
+    for key, row_num in _MONTHLY_ROW_MAP.items():
+        val = data.get(key, "")
+        col_values[row_num - 1] = _v(val)
+
+    # Пишем строки 2–100 (99 строк, начиная со строки 2)
+    body_values = [[v] for v in col_values[1:100]]   # индексы 1–99 → строки 2–100
+
+    service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id,
+        range=f"{MONTHLY_SHEET}!{col_ltr}2",
+        valueInputOption="RAW",
+        body={"values": body_values},
+    ).execute()
+
+    logger.info(
+        f"Ежемесячные данные за {month_date} записаны в колонку {col_ltr} "
+        f"листа «{MONTHLY_SHEET}» (строки 2–100)"
+    )

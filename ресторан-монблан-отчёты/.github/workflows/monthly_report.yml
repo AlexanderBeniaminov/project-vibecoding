@@ -1,0 +1,48 @@
+name: Monthly Report
+
+on:
+  # 12-го числа каждого месяца в 10:00 UTC+5 = 05:00 UTC (отчёт за предыдущий месяц)
+  schedule:
+    - cron: "0 5 12 * *"
+  # Ручной запуск с возможностью указать месяц
+  workflow_dispatch:
+    inputs:
+      month_date:
+        description: "Дата внутри нужного месяца (YYYY-MM-DD). По умолчанию — прошлый месяц."
+        required: false
+        default: ""
+
+jobs:
+  monthly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r hotel-restaurant-processes/requirements.txt
+
+      - name: Run monthly collect
+        working-directory: hotel-restaurant-processes
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          IIKO_WEB_URL:      "https://kafe-monblan.iikoweb.ru"
+          IIKO_WEB_LOGIN:    "buh"
+          IIKO_WEB_PASSWORD: ${{ secrets.IIKO_WEB_PASSWORD }}
+          IIKO_STORE_ID:     "82455"
+          MAX_BOT_TOKEN:     ${{ secrets.MAX_BOT_TOKEN }}
+          MAX_DEV_USER_ID:   ${{ secrets.MAX_DEV_USER_ID }}
+        run: |
+          DATE_ARG="${{ github.event.inputs.month_date }}"
+          if [ -n "$DATE_ARG" ]; then
+            python3 scripts/main.py monthly "$DATE_ARG"
+          else
+            python3 scripts/main.py monthly
+          fi

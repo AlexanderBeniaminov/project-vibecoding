@@ -17,9 +17,10 @@
 **Стек:** Python 3.10+ · GitHub Actions · Google Sheets API v4 · iikoWeb OLAP API · Google Apps Script · MAX мессенджер
 **Стоимость:** 0 руб./месяц
 
-**Два независимых потока:**
+**Три независимых потока:**
 - **Python (daily):** GitHub Actions → iikoWeb OLAP → лист «Ежедневно»
 - **GAS (weekly):** триггер каждый Пн → iikoWeb OLAP → лист «Монблан» (96 метрик) → Дашборд
+- **Python (monthly):** GitHub Actions 12-го числа → iikoWeb OLAP → лист «ЕжеМесячный» → Дашборд ЕМ
 
 **Важно:** В этой папке — Python-скрипты (`scripts/`) и GAS-файлы (`monblan-gas/`). Соседний `otchety/` — отдельный проект курорта, не трогать.
 
@@ -32,7 +33,9 @@
 | Ежедневный (Python) | `0 23 * * *` UTC | 04:00 следующего дня | iiko OLAP → строки 1–14 листа «Ежедневно» |
 | Резервный (Python) | `30 1 * * *` UTC | 06:30 | Повтор если основной упал |
 | Еженедельный (GAS) | каждый Пн 09:00 UTC+5 | 09:00 понедельник | `fillMonblanWeekFromIiko()` → лист «Монблан» |
-| onEdit (GAS) | при изменении B2 | мгновенно | `onEditDashboard()` → `refreshDashboard()` |
+| Ежемесячный (Python) | `0 5 12 * *` UTC | 10:00 12-го числа | iiko OLAP → лист «ЕжеМесячный» (данные за прошлый месяц) |
+| onEdit (GAS) — нед. | при изменении B2 дашборда | мгновенно | `onEditDashboard()` → `refreshDashboard()` |
+| onEdit (GAS) — мес. | при изменении B2 Дашборда ЕМ | мгновенно | `onEditMonthlyDashboard()` → `refreshMonthlyDashboard()` |
 
 **Точка входа Python:** `main.py collect [YYYY-MM-DD]` — сбор iiko → Sheets; `main.py report [YYYY-MM-DD]` — отчёт в MAX.
 
@@ -206,7 +209,51 @@ iikoWeb иногда обрывает SSL с GitHub Actions (SSLEOFError).
 - 2025, нед.1: 30 дек 2024 – 5 янв 2025
 - 2026, нед.1: 29 дек 2025 – 4 янв 2026
 
-**AI-анализ:** Groq API, модель `llama-3.3-70b-versatile`, ключ `GROQ_API_KEY` в Script Properties.
+**AI-анализ:** RouterAI API (DeepSeek V4 Pro), модель `deepseek/deepseek-v4-pro`, ключ `ROUTERAI_API_KEY` в Script Properties.
+
+### Лист «ЕжеМесячный» (GID=?) — Python + GAS
+
+Заполняется `scripts/monthly_collect.py` через `main.py monthly [YYYY-MM-DD]`.
+Строка 1 = название листа/заголовок, строка 2 = YYYY-MM (ключ для поиска колонки), строки 3–100 = 96 метрик.
+
+**Структура строк `_MONTHLY_ROW_MAP` (key → строка):**
+- 3: revenue_total, 4: revenue_kitchen, 5: revenue_kitchen_pct, 6: revenue_bar, 7: revenue_bar_pct
+- 8: **РАЗДЕЛИТЕЛЬ** (нет данных)
+- 9–14: временные срезы (утро/день/вечер — выручка + %)
+- 15: **РАЗДЕЛИТЕЛЬ**
+- 16–29: выручка по дням недели (пн–вс) + %
+- 30–35: маржинальная прибыль (итого + кухня + бар + %)
+- 36–38: наценка (итого + кухня + бар) — **процентные значения**
+- 39–41: фудкост (итого + кухня + бар) — **процентные значения, ИНВЕРСИЯ: снижение = хорошо**
+- 42–48: кол-во гостей (итого + утро/день/вечер + %)
+- 49–52: средний чек на гостя (итого + срезы)
+- 53–56: кол-во чеков (итого + срезы)
+- 57–61: блюда (итого + авг.чек + авг.на блюдо + авг.кухня/бар)
+- 62–70: обороты (блюд на гостя + стол + мест по срезам) — десятичные
+- 71: **РАЗДЕЛИТЕЛЬ**
+- 72–84: группы гостей (1/2/3+) — выручка + чеки + %
+- 85: **РАЗДЕЛИТЕЛЬ**
+- 86–97: диапазоны суммы чека (0–500 / 500–1000 / ... / 5000+) + %
+- 98: tables (константа), 99: seats (константа), 100: days_in_month
+
+**Секционные строки с коричневым фоном (имеют данные):** 30, 36, 39, 42, 49, 53, 57, 63, 67, 78
+**Чистые разделители (нет данных):** 8, 15, 71, 85
+**Инвертированные строки (снижение = хорошо):** 39, 40, 41 (фудкост)
+
+**⚠️ Диапазоны чеков — границы включительно (`<=`, не `<`):**
+- 0–500: rev ≤ 500; 500–1000: 500 < rev ≤ 1000; и т.д.
+
+### Лист «Дашборд ЕМ» (GID=783715130) — GAS
+
+Сравнение месяца 2026 vs того же месяца 2025. Файл: `monblan-gas/monblan_monthly_dashboard.gs`.
+
+**Принцип:** B2 (выбор месяца — выпадающий список или 1–12) → `onEditMonthlyDashboard` → `refreshMonthlyDashboard()` → читает лист «ЕжеМесячный» → ищет колонку по "YYYY-MM" в строке 2 → выводит все метрики → Сигналы месяца (топ-5) → AI-блок.
+
+**Цвета — те же пороги, что в еженедельном дашборде.**
+
+**Инверсия фудкоста:** строки 39/40/41 — снижение = 🟢, рост = 🔴 (т.к. фудкост = затраты/выручка, чем ниже — тем лучше). В AI-промпте явно указано.
+
+**Деплой:** скопировать `monblan_monthly_dashboard.gs` в Apps Script (новый файл), один раз запустить `installMonthlyTrigger`.
 
 **GAS-файлы (`monblan-gas/`):**
 | Файл | Назначение |
@@ -214,9 +261,10 @@ iikoWeb иногда обрывает SSL с GitHub Actions (SSLEOFError).
 | `monblan_config.gs` | MB_CONFIG: TABLES=90\*, SEATS=90, START_YEAR=2024/48, WEEKS=104, iiko buh/Vjy,kfy2024 |
 | `monblan_build.gs` | `buildMonblanSheet()` — построение листа «Монблан» |
 | `monblan_iiko.gs` | `fillMonblanWeekFromIiko()`, `installWeeklyTrigger()`, `loadWeek16_2026()` |
-| `monblan_dashboard.gs` | Дашборд, сигналы, AI-анализ, `installTrigger()` |
+| `monblan_dashboard.gs` | Еженедельный дашборд, сигналы, AI-анализ, `installTrigger()`, `onOpen()` с двумя подменю |
+| `monblan_monthly_dashboard.gs` | Месячный дашборд, сигналы, AI-анализ, `installMonthlyTrigger()` |
 | `monblan_protect.gs` | `protectColumnA()`, `fixFormatsMonblan()`, `restoreAll()` |
-| `.env` | GROQ_API_KEY (gitignored; добавить вручную в Script Properties) |
+| `.env` | ROUTERAI_API_KEY (gitignored; добавить вручную в Script Properties) |
 
 \* **Внимание:** `MB_CONFIG.TABLES = 90` используется в формулах оборачиваемости как «посадочных мест», хотя реальных столов 15. Строки 87 («Столов»=90) и 88 («Посадочных мест»=90) в листе «Монблан» — обе заполнены из этого конфига. При расчёте оборачиваемости столов фактически используется 90 (= мест), не 15.
 
@@ -269,7 +317,7 @@ iikoWeb иногда обрывает SSL с GitHub Actions (SSLEOFError).
 ## Структура кода
 
 ```
-hotel-restaurant-processes/
+ресторан-монблан-отчёты/
   scripts/
     main.py           — collect / report
     iiko_client.py    — iikoWeb OLAP: IikoWebSession + collect_daily_data()
@@ -286,6 +334,7 @@ hotel-restaurant-processes/
 .github/workflows/
   daily_report.yml   — cron 0 23 * * * + резервный 30 1 * * * + workflow_dispatch
   weekly_report.yml  — cron 0 2 * * 1 + workflow_dispatch
+  monthly_report.yml — cron 0 5 12 * * (12-е число, 10:00 UTC+5) → main.py monthly [прошлый месяц]
   backfill.yml       — ручной пересбор за период (date_from / date_to / trim_before)
 ```
 
@@ -293,10 +342,10 @@ hotel-restaurant-processes/
 
 ## Открытые вопросы
 
-| # | Вопрос | Статус |
-|---|---|---|
-| 1 | MAX токены: MAX_BOT_TOKEN, MAX_OWNER_USER_ID, MAX_DEV_USER_ID | ❓ Ждём от клиента |
-| 2 | Мероприятия в iiko: тег или тип заказа? | ❓ Не уточнено |
+Закрытые вопросы (май 2026):
+- MAX токены настроены в GitHub Secrets, бот работает — ежедневный отчёт приходит в 09:00 UTC+5
+- Мероприятия в iiko: отдельных мероприятий нет, вопрос закрыт
+- Строки 30–41 (маржа / наценка / фудкост): заполняются вручную менеджером — cost-данные через OLAP для роли buh недоступны
 
 ---
 
