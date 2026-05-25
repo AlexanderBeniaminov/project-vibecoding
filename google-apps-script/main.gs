@@ -666,14 +666,16 @@ function setFormulas_(sh, col, prevSheetName) {
 
 
 // ═══════════════════════════════════════════════════════════════
-// ПЕРЕНОС ДАННЫХ ИЗ «2026 СТАРЫЙ» → «2026» (строки 40+)
+// ПЕРЕНОС ДАННЫХ ИЗ «2026 СТАРЫЙ» → «2026» (строки 40+, по названию метрики)
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Копирует данные строк 40 и ниже из листа «2026 старый» в лист «2026».
- * Логика: если в «2026» ячейка пуста — берём значение из «2026 старый».
- * Непустые ячейки в «2026» не трогаем.
- * Совпадение столбцов — по номеру недели в строке 1.
+ * Переносит данные из «2026 старый» в «2026» для строк 40 и ниже.
+ * Сопоставление строк — по названию метрики в колонке B (не по номеру строки!).
+ * Пример: «День рождения» может быть в строке 54 старого и строке 40 нового —
+ *         функция найдёт её по названию и положит в правильную строку.
+ * Сопоставление столбцов — по номеру недели в строке 1.
+ * Пустые ячейки в «2026» заполняются; непустые — не трогаются.
  * Запускать один раз вручную из GAS-редактора.
  */
 function copyRowsFromOldSheet() {
@@ -686,72 +688,88 @@ function copyRowsFromOldSheet() {
   for (var i = 0; i < sheets.length; i++) {
     if (sheets[i].getName() === '2026 старый') { oldSh = sheets[i]; break; }
   }
-  if (!oldSh) {
-    Logger.log('❌ Лист «2026 старый» не найден');
-    return;
-  }
-  Logger.log('▶ Перенос из «2026 старый», строки 40+');
+  if (!oldSh) { Logger.log('❌ Лист «2026 старый» не найден'); return; }
 
-  var START_ROW = 40;
-  var END_ROW   = Math.max(oldSh.getLastRow(), newSh.getLastRow());
-  var NUM_ROWS  = END_ROW - START_ROW + 1;
-  if (NUM_ROWS <= 0) { Logger.log('Нет строк от 40'); return; }
-  Logger.log('  Строк для переноса: ' + NUM_ROWS + ' (строки ' + START_ROW + '–' + END_ROW + ')');
+  var START_ROW  = 40;
+  var READ_COLS  = 200;
+  var newLastRow = newSh.getLastRow();
+  var oldLastRow = oldSh.getLastRow();
 
-  // Карта номер недели → столбец в «2026 старый»
-  var oldRow1 = oldSh.getRange(1, 1, 1, 300).getValues()[0];
+  Logger.log('▶ Перенос по названию метрики из «2026 старый»');
+
+  // Читаем оба листа целиком одним запросом
+  var newAll = newSh.getRange(1, 1, newLastRow, READ_COLS).getValues();
+  var oldAll = oldSh.getRange(1, 1, oldLastRow, READ_COLS).getValues();
+
+  var newRow1 = newAll[0]; // строка 1 нового листа (номера недель)
+  var oldRow1 = oldAll[0]; // строка 1 старого листа
+
+  // Карта: номер недели → индекс колонки (0-based) в старом листе
   var oldColByWeek = {};
   for (var j = 0; j < oldRow1.length; j++) {
     var wn = Number(oldRow1[j]);
-    if (wn) oldColByWeek[wn] = j + 1; // 1-based
+    if (wn) oldColByWeek[wn] = j;
   }
 
-  // Проходим по столбцам нового листа (недели с col C = index 2)
-  var newRow1 = newSh.getRange(1, 1, 1, 300).getValues()[0];
-  var totalCopied = 0;
+  // Карта: название метрики (кол. B) → индекс строки (0-based) в старом листе
+  var oldRowByLabel = {};
+  for (var r = 0; r < oldAll.length; r++) {
+    var lbl = String(oldAll[r][1]).trim();
+    if (lbl) oldRowByLabel[lbl] = r;
+  }
 
+  var totalCopied = 0;
+  var notFound = [];
+
+  // Для каждого столбца (неделя) нового листа
   for (var c = 2; c < newRow1.length; c++) {
     var weekNum = Number(newRow1[c]);
     if (!weekNum) continue;
 
-    var oldCol = oldColByWeek[weekNum];
-    if (!oldCol) {
-      Logger.log('  ⚠️ Нед.' + weekNum + ' не найдена в «2026 старый»');
+    var oldC = oldColByWeek[weekNum];
+    if (oldC === undefined) {
+      Logger.log('  ⚠️ Нед.' + weekNum + ' нет в «2026 старый»');
       continue;
     }
-    var newCol = c + 1; // 1-based
 
-    var oldVals = oldSh.getRange(START_ROW, oldCol, NUM_ROWS, 1).getValues();
-    var newVals = newSh.getRange(START_ROW, newCol, NUM_ROWS, 1).getValues();
+    var weekCopied = 0;
 
-    // Мерж: в пустые ячейки «2026» кладём значение из «2026 старый»
-    var merged = [];
-    var rowsCopied = 0;
-    for (var r = 0; r < NUM_ROWS; r++) {
-      var ov = oldVals[r][0];
-      var nv = newVals[r][0];
-      var newEmpty = (nv === '' || nv === null || nv === undefined);
-      var oldHasValue = (ov !== '' && ov !== null && ov !== undefined);
-      if (newEmpty && oldHasValue) {
-        merged.push([ov]);
-        rowsCopied++;
-      } else {
-        merged.push([nv]); // оставляем как есть
+    // Строки 40+ нового листа
+    for (var nr = START_ROW - 1; nr < newAll.length; nr++) { // 0-based
+      var label = String(newAll[nr][1]).trim(); // колонка B
+      if (!label) continue;
+
+      var oldR = oldRowByLabel[label];
+      if (oldR === undefined) {
+        if (notFound.indexOf(label) === -1) notFound.push(label);
+        continue;
+      }
+
+      var nv = newAll[nr][c];
+      var ov = oldAll[oldR][oldC];
+      var newEmpty  = (nv === '' || nv === null || nv === undefined);
+      var oldHasVal = (ov !== '' && ov !== null && ov !== undefined);
+
+      if (newEmpty && oldHasVal) {
+        newSh.getRange(nr + 1, c + 1).setValue(ov); // +1: 1-based
+        weekCopied++;
+        totalCopied++;
       }
     }
 
-    if (rowsCopied > 0) {
-      newSh.getRange(START_ROW, newCol, NUM_ROWS, 1).setValues(merged);
-      Logger.log('  Нед.' + weekNum + ' (кол.' + columnToLetter_(newCol) + '): ' +
-                 rowsCopied + ' ячеек скопировано');
-      totalCopied += rowsCopied;
-    } else {
-      Logger.log('  Нед.' + weekNum + ': всё уже заполнено, пропуск');
+    if (weekCopied > 0) {
+      Logger.log('  Нед.' + weekNum + ' (кол.' + columnToLetter_(c + 1) + '): ' +
+                 weekCopied + ' ячеек');
     }
   }
 
+  if (notFound.length > 0) {
+    Logger.log('  ℹ️ Не найдены в «2026 старый» (' + notFound.length + ' меток):');
+    notFound.forEach(function(l) { Logger.log('    · ' + l); });
+  }
+
   SpreadsheetApp.flush();
-  Logger.log('✅ Перенос завершён. Всего скопировано ячеек: ' + totalCopied);
+  Logger.log('✅ Перенос завершён. Скопировано: ' + totalCopied);
 }
 
 
