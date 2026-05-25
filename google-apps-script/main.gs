@@ -474,10 +474,14 @@ function readMonblan_(weekNum, year) {
  */
 function findPrevYearSheetName_(ss) {
   var sheets = ss.getSheets();
+  // Сначала ищем точное совпадение «2025»
   for (var i = 0; i < sheets.length; i++) {
-    if (sheets[i].getName().indexOf('2025') !== -1) {
-      return sheets[i].getName();
-    }
+    if (sheets[i].getName() === '2025') return '2025';
+  }
+  // Если нет — любое имя с «2025», кроме «старый»
+  for (var j = 0; j < sheets.length; j++) {
+    var n = sheets[j].getName();
+    if (n.indexOf('2025') !== -1 && n.indexOf('старый') === -1) return n;
   }
   return null;
 }
