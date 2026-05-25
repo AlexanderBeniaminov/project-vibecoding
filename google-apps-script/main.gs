@@ -46,6 +46,7 @@ var ROWS = {
   TOTAL_REVENUE:  5,   // Доход общий НФ+Кафе
   WEEK_NUM:       1,   // Номера недель (строка 1)
   DATES:          2,   // Диапазоны дат (строка 2)
+  PREV_YEAR_REV:  7,   // Выручка прошлого года за ту же неделю (из листа 2025)
   MB_REVENUE:     11,  // Выручка Монблан
   MB_CHECKS:      12,  // Чеков Монблан
   FB_PCT:         13,  // F&B % от оборота (формула)
@@ -64,10 +65,10 @@ var ROWS = {
   OCC_DANIEL:     29,  // Загрузка Даниэль
   OCC_ALEN:       30,  // Загрузка Ален
   CANCEL_PCT:     32,  // Доля отмен
-  DIRECT_PCT:     33,  // Доля прямых продаж
+  // Строка 33 (Доля прямых продаж) — не заполняем, ручной ввод
   PLAN_NEXT_MO:   35,  // План выручки след. мес. (ручной)
-  BOOKED_NEXT_MO: 36,  // Забронировано след. мес.
-  DYNAMIC:        37,  // Динамика (формула)
+  BOOKED_NEXT_MO: 36,  // Забронировано след. мес. (из TravelLine)
+  // Строка 37 (Динамика) — не заполняем, ручной ввод
   PCT_PLAN_NEXT:  38,  // % выполн. плана след. мес. (формула)
 };
 
@@ -124,8 +125,18 @@ function collectWeeklyHotelReport() {
   var mb = readMonblan_(week.num, week.year);
   Logger.log('  Монблан: выручка=' + mb.revenue + ', чеков=' + mb.checks);
 
+  // Прошлый год: читаем выручку за ту же неделю из листа "2025"
+  Logger.log('  Прошлый год: неделя ' + week.num + '...');
+  var prevRevenue = readPrevYearRevenue_(ss, week.num);
+  Logger.log('  Прошлый год: выручка=' + prevRevenue);
+
+  // Забронировано на следующий календарный месяц (из TravelLine)
+  Logger.log('  Броней на следующий месяц...');
+  var nextMonthRev = collectNextMonthBookings_(token);
+  Logger.log('  Забронировано след. месяц: ' + nextMonthRev);
+
   // Записываем данные
-  writeData_(sh, col, tl, mb);
+  writeData_(sh, col, tl, mb, prevRevenue, nextMonthRev);
   Logger.log('  Данные записаны');
 
   // Устанавливаем формулы
@@ -455,6 +466,106 @@ function readMonblan_(weekNum, year) {
 
 
 // ═══════════════════════════════════════════════════════════════
+// ПРОШЛЫЙ ГОД: ВЫРУЧКА ЗА ТУ ЖЕ НЕДЕЛЮ
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Ищет в текущей таблице лист с "2025" в названии,
+ * находит столбец с нужным номером недели (строка 1),
+ * возвращает значение строки 5 (Доход общий).
+ */
+function readPrevYearRevenue_(ss, weekNum) {
+  try {
+    // Ищем лист с "2025" в названии (например "2025" или "2025 старый")
+    var sheets = ss.getSheets();
+    var prevSheet = null;
+    for (var i = 0; i < sheets.length; i++) {
+      var name = sheets[i].getName();
+      if (name.indexOf('2025') !== -1) {
+        prevSheet = sheets[i];
+        break;
+      }
+    }
+
+    if (!prevSheet) {
+      Logger.log('  ⚠️ Лист «2025» не найден — строка 7 не заполняется');
+      return 0;
+    }
+
+    Logger.log('  Лист ПГ: «' + prevSheet.getName() + '»');
+
+    // Строка 1 = номера недель, данные с col C (index 2)
+    var row1 = prevSheet.getRange(1, 1, 1, 300).getValues()[0];
+    for (var j = 2; j < row1.length; j++) {
+      if (Number(row1[j]) === weekNum) {
+        var col = j + 1; // 1-based
+        var revenue = prevSheet.getRange(5, col).getValue() || 0;
+        Logger.log('  ПГ нед.' + weekNum + ' → столбец ' + columnToLetter_(col) +
+                   ', выручка=' + revenue);
+        return revenue;
+      }
+    }
+
+    Logger.log('  ⚠️ Неделя ' + weekNum + ' не найдена в листе «2025»');
+    return 0;
+
+  } catch(e) {
+    Logger.log('  ❌ Ошибка readPrevYearRevenue_: ' + e.message);
+    return 0;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TRAVELLINE: БРОНИ НА СЛЕДУЮЩИЙ КАЛЕНДАРНЫЙ МЕСЯЦ
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Запрашивает TravelLine и возвращает суммарную выручку
+ * активных броней с заездом в следующем календарном месяце.
+ */
+function collectNextMonthBookings_(token) {
+  try {
+    // Даты следующего месяца
+    var now = new Date();
+    var nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    var nextMonthEnd   = new Date(now.getFullYear(), now.getMonth() + 2, 0); // последний день
+
+    Logger.log('  Следующий месяц: ' +
+               Utilities.formatDate(nextMonthStart, 'UTC', 'dd.MM.yyyy') + ' – ' +
+               Utilities.formatDate(nextMonthEnd,   'UTC', 'dd.MM.yyyy'));
+
+    // Собираем номера броней с заездом в следующем месяце
+    var collected = collectBookings_(token, nextMonthStart, nextMonthEnd);
+    Logger.log('  Активных броней на след. мес.: ' + collected.active.length);
+    if (collected.active.length === 0) return 0;
+
+    // Загружаем детали и суммируем полную стоимость проживания
+    var bookings = fetchBookingDetails_(token, collected.active);
+    var totalRevenue = 0;
+    var nextMonthStartStr = Utilities.formatDate(nextMonthStart, 'UTC', 'yyyy-MM-dd');
+    var nextMonthEndStr   = Utilities.formatDate(nextMonthEnd,   'UTC', 'yyyy-MM-dd');
+
+    bookings.forEach(function(bk) {
+      (bk.roomStays || []).forEach(function(rs) {
+        // Берём только roomStays с заездом в следующем месяце
+        var arr = (rs.stayDates.arrivalDateTime || '').substring(0, 10);
+        if (arr >= nextMonthStartStr && arr <= nextMonthEndStr) {
+          totalRevenue += ((rs.total || {}).priceAfterTax) || 0;
+        }
+      });
+    });
+
+    return Math.round(totalRevenue);
+
+  } catch(e) {
+    Logger.log('  ❌ Ошибка collectNextMonthBookings_: ' + e.message);
+    return 0;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
 // ТАБЛИЦА: НАЙТИ ИЛИ СОЗДАТЬ СТОЛБЕЦ НЕДЕЛИ
 // ═══════════════════════════════════════════════════════════════
 
@@ -496,9 +607,14 @@ function findOrCreateWeekCol_(sh, week) {
 // ТАБЛИЦА: ЗАПИСЬ ДАННЫХ
 // ═══════════════════════════════════════════════════════════════
 
-function writeData_(sh, col, tl, mb) {
+function writeData_(sh, col, tl, mb, prevRevenue, nextMonthRev) {
   // Строка 5: Доход общий (НФ + Монблан)
   sh.getRange(ROWS.TOTAL_REVENUE, col).setValue(tl.rev_nf + mb.revenue);
+
+  // Строка 7: Выручка прошлого года за ту же неделю (из листа «2025»)
+  if (prevRevenue > 0) {
+    sh.getRange(ROWS.PREV_YEAR_REV, col).setValue(prevRevenue);
+  }
 
   // Монблан
   sh.getRange(ROWS.MB_REVENUE, col).setValue(mb.revenue);
@@ -521,7 +637,13 @@ function writeData_(sh, col, tl, mb) {
   sh.getRange(ROWS.OCC_DANIEL,   col).setValue(tl.occ_daniel);
   sh.getRange(ROWS.OCC_ALEN,     col).setValue(tl.occ_alen);
   sh.getRange(ROWS.CANCEL_PCT,   col).setValue(tl.cancel_pct);
-  sh.getRange(ROWS.DIRECT_PCT,   col).setValue(tl.direct_pct);
+  // Строка 33 (DIRECT_PCT) — ручной ввод, не трогаем
+
+  // Строка 36: Забронировано на следующий календарный месяц
+  if (nextMonthRev > 0) {
+    sh.getRange(ROWS.BOOKED_NEXT_MO, col).setValue(nextMonthRev);
+  }
+  // Строка 37 (DYNAMIC) — ручной ввод, не трогаем
 }
 
 
@@ -559,11 +681,7 @@ function setFormulas_(sh, col) {
   // % выполнения плана след. месяца = Забронировано / План
   sh.getRange(ROWS.PCT_PLAN_NEXT, col).setFormula('=' + X + '36/' + X + '35');
 
-  // Динамика = Забронировано / Забронировано предыдущей недели
-  if (col > 3) {
-    var prevX = columnToLetter_(col - 1);
-    sh.getRange(ROWS.DYNAMIC, col).setFormula('=' + X + '36/' + prevX + '36');
-  }
+  // Строка 37 (Динамика) — ручной ввод, формулу не ставим
 }
 
 
