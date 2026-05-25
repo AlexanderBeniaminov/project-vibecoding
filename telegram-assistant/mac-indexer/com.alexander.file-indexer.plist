@@ -26,6 +26,10 @@
     <key>StandardErrorPath</key>
     <string>/Users/user/file-indexer/indexer.error.log</string>
 
+    <!-- Запускать во время Power Nap (Mac спит с питанием) -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
     <!-- Не перезапускать при сбое (избежать бесконечного цикла) -->
     <key>ThrottleInterval</key>
     <integer>60</integer>

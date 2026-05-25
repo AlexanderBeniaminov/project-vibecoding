@@ -111,10 +111,19 @@ def scan_dir(base: Path) -> list[dict]:
     results = []
     if not base.exists():
         return results
-    try:
-        entries = list(base.rglob("*"))
-    except PermissionError:
-        return results
+
+    # mdfind (Spotlight) обходит ограничения macOS Privacy — rglob блокируется для LaunchAgent.
+    # Ищем только файлы поддерживаемых форматов — wildcard '*' в mdfind не работает.
+    all_exts = (
+        list(TEXT_EXTENSIONS - {".log"})  # логи пропускаем — мусор
+        + [".pptx", ".docx", ".pdf", ".xlsx"]
+    )
+    predicate = " || ".join(f"kMDItemFSName == '*{ext}'" for ext in all_exts)
+    proc = subprocess.run(
+        ["mdfind", "-onlyin", str(base), predicate],
+        capture_output=True, text=True, timeout=120
+    )
+    entries = [Path(p.strip()) for p in proc.stdout.strip().split("\n") if p.strip()]
 
     for p in entries:
         # Пропускаем скрытые файлы и исключённые папки
