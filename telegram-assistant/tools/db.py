@@ -25,6 +25,15 @@ def init_db():
             done INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
+        CREATE TABLE IF NOT EXISTS contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT DEFAULT '',
+            telegram TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
     """)
     conn.commit()
     conn.close()

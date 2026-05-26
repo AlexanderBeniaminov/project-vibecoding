@@ -74,7 +74,7 @@ import openai
 
 import config
 from tools.db import init_db
-from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, team_tasks, email_tool
+from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, team_tasks, email_tool, contacts as contacts_tool
 
 # ── Инициализация ─────────────────────────────────────────────
 bot = Bot(token=config.TELEGRAM_TOKEN)
@@ -375,6 +375,80 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "add_contact",
+            "description": (
+                "Сохранить или обновить контакт (имя, телефон, Telegram, email). "
+                "Используй когда пользователь говорит 'запомни контакт', 'добавь контакт' или называет данные человека."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name":     {"type": "string", "description": "Имя и фамилия"},
+                    "phone":    {"type": "string", "description": "Номер телефона"},
+                    "telegram": {"type": "string", "description": "Telegram username (с @ или без)"},
+                    "email":    {"type": "string", "description": "Email адрес"},
+                    "notes":    {"type": "string", "description": "Заметки о человеке"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_contact",
+            "description": "Найти контакт по имени, телефону или Telegram. Возвращает карточку контакта.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Имя или часть имени, телефон, @username"}
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_contacts",
+            "description": "Показать все сохранённые контакты.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_contact",
+            "description": "Удалить контакт по ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "integer"}
+                },
+                "required": ["contact_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_contact_card",
+            "description": (
+                "Получить карточку контакта для пересылки другому человеку. "
+                "Используй когда просят 'перешли контакт', 'поделись контактом'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Имя контакта"}
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_files",
             "description": (
                 "Найти файл на Mac Александра по имени или ключевым словам. "
@@ -528,6 +602,16 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             return "Перезапуск инициирован. Бот перезапустится через 2-3 секунды."
+        elif name == "add_contact":
+            return contacts_tool.add_contact(args["name"], args.get("phone",""), args.get("telegram",""), args.get("email",""), args.get("notes",""))
+        elif name == "find_contact":
+            return contacts_tool.find_contact(args["query"])
+        elif name == "list_contacts":
+            return contacts_tool.list_contacts()
+        elif name == "delete_contact":
+            return contacts_tool.delete_contact(args["contact_id"])
+        elif name == "get_contact_card":
+            return contacts_tool.format_contact_card(args["query"])
         elif name == "search_files":
             return email_tool.search_files(args["query"])
         elif name == "send_file_email":
@@ -616,7 +700,7 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             f"Ты мобильный ассистент Александра Бениаминова — работаешь 24/7 с телефона. "
             f"Сейчас {datetime.now(_MSK).strftime('%d.%m.%Y %H:%M')} МСК.\n"
             "Твоя зона: напоминалки, заметки, Google Calendar, командные задачи, веб-поиск, "
-            "поиск файлов на Mac и отправка файлов по email. "
+            "поиск файлов на Mac, отправка файлов по email, управление контактами. "
             "Для поиска файлов — вызови search_files, покажи результаты, дождись подтверждения пользователя, "
             "затем вызови send_file_email с полным путём файла и именем получателя. "
             "Адресная книга: Катя (info@entens.ru), Виктор (karpenko@entens.ru), "
