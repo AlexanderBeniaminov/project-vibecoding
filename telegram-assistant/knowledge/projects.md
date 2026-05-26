@@ -1,51 +1,51 @@
 # Проекты Александра Бениаминова
 
-## 1. Монблан — трекинг-лист ресторана
-**Статус:** активный  
-**Что делает:** Автоматически собирает данные из iiko (ресторанная система) и записывает в Google Sheets. Еженедельный и ежемесячный отчёты.  
-**Стек:** Python, iiko API, Google Sheets API (GAS + python)  
-**Листы:** «Еженедельно», «Ежедневно», «ЕжеМесячный»  
-**Особенности:** Инверсия фудкоста, сигналы с префиксом, диагностика через Groq  
-**Файлы:** `hotel-restaurant-processes/monblan-gas/`, `hotel-restaurant-processes/scripts/`  
+### `aihotel/` — AI-система управления ВК Губаха
+Два Python-агента (GitHub Actions, каждый понедельник):
+- **Агент 1** — читает данные из Google Sheets "2026 старый" → анализирует → пишет дайджест
+- **Агент 2** — дайджест + KPI-прогресс → DeepSeek V4 Pro (RouterAI) → задачи в "Задачи недели"
+- Команда: Виктор, Евгения, Надежда, Управляющий, Тех.директор
+- Стратегические KPI на апр–ноябрь 2026: загрузка 12%/19.8%, маржа 8%, выручка 15.4М, ДР 125, группы 6
+- → подробнее: `aihotel/CLAUDE.md`
+
+### `ресторан-монблан-отчёты/` — Монблан трекинг
+iiko → Google Sheets. Три потока: ежедневный / еженедельный (GAS) / ежемесячный (Python).
+- Стек: Python, iiko OLAP API, Google Sheets, GAS, GitHub Actions
+- → подробнее: `ресторан-монблан-отчёты/CLAUDE.md`
+
+### `telegram-assistant/` — Персональный AI-ассистент
+Telegram-бот на сервере. Голос, напоминания, заметки, Google Calendar, веб-поиск.
+- Стек: aiogram 3, DeepSeek V4 Pro (RouterAI), Groq Whisper, APScheduler, SQLite
+- Деплой: `bash telegram-assistant/deploy.sh`
+- → подробнее: `telegram-assistant/CLAUDE.md`
+
+### `infrastructure/` — Сервер + VPN
+VPS u1host Германия, Ubuntu 24.04. VLESS+XTLS-Reality (3X-UI). Python venv на /home/parser/venv.
+- → подробнее: `infrastructure/CLAUDE.md`
+
+### `entens-group_website/` — Лендинг EntenS Group
+Одностраничный сайт, весь код в `index.html`.
+- → подробнее: `entens-group_website/CLAUDE.md`
+
+### `otchety/` — Отчёты курорта Губаха
+Еженедельные отчёты для курорта. Отдельный проект, не пересекается с Монблан.
+- → подробнее: `otchety/CLAUDE.md`
+
+### `content-plan/` — Контент-план
+Посты, аудитория, tone-of-voice для соцсетей Александра.
 
 ---
 
-## 2. ВК Губаха — AI-система управления отелем
-**Статус:** активный  
-**Что делает:** Два AI-агента анализируют данные отеля и формируют еженедельные задачи для команды.  
-- **Агент 1 (MAX):** удалён  
-- **Агент 2:** генерирует задачи на основе KPI для менеджеров (Надежда, Евгения, Управляющий)  
-**Стек:** Python, GitHub Actions (автозапуск), Google Sheets  
-**Данные:** берутся из листа «2026 старый» вручную  
-**Команда объекта:** сб/вс — рабочие, вт/ср — выходные  
-**Файлы:** `hotel-restaurant-processes/`  
-
 ---
 
-## 3. TravelLine Collector
-**Статус:** активный  
-**Что делает:** Собирает данные о бронированиях из TravelLine API.  
-**Особенности:** roomTypeId для маппинга типов номеров, цена сервисов через `svc["total"]["priceAfterTax"]`  
-**Ограничение:** нельзя автоматизировать некоторые выгрузки  
+## Общая инфраструктура
 
----
-
-## 4. Сервер / Инфраструктура
-**Статус:** активный  
-**Сервер:** u1host.com, Германия, Ubuntu 24.04, 2GB RAM  
-**IP:** 185.184.122.158  
-**SSH алиас:** `ssh server`  
-**Python venv:** `/home/parser/venv` (Python 3.12)  
-**Боты и парсеры:** `/home/parser/bots/`, `/home/parser/scrapers/`  
-**VPN на сервере:** 3X-UI + VLESS + XTLS-Reality  
-**Документация:** `infrastructure/STATUS.md`, `infrastructure/PLAN.md`  
-
----
-
-## 5. Telegram AI Ассистент (этот бот)
-**Статус:** активный  
-**Что делает:** Персональный ассистент Александра — голосовые сообщения, напоминания, заметки, Google Calendar, веб-поиск  
-**Стек:** aiogram 3, RouterAI (DeepSeek V4 Pro), Groq Whisper, APScheduler, SQLite  
-**Файлы:** `telegram-assistant/`  
-**На сервере:** `/home/parser/bots/assistant/`  
-**Сервис:** `systemctl status telegram-assistant`  
+| Ресурс | Значение |
+|--------|----------|
+| VPS | 185.184.122.158, SSH алиас `ssh server` |
+| Python venv | `/home/parser/venv` (Python 3.12) |
+| Боты на сервере | `/home/parser/bots/` |
+| GCP личный | alex-personal-496919 |
+| GCP aihotel | aihotel-gubaha |
+| RouterAI | `https://routerai.ru/api/v1`, модель `deepseek/deepseek-v4-pro` |
+| GitHub репо | AlexanderBeniaminov/project-vibecoding |
