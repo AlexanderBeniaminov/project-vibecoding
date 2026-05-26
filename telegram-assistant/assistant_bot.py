@@ -89,6 +89,8 @@ ai_client = openai.AsyncOpenAI(
 
 histories: dict[int, list[dict]] = {}
 _pending_call_summaries: dict[int, str] = {}  # саммари звонков ожидающие действия
+_pending_call_transcripts: dict[int, str] = {}  # транскрипции для повторной генерации
+_awaiting_call_correction: dict[int, int] = {}  # user_id → message_id саммари
 
 # ── База знаний ───────────────────────────────────────────────
 def _load_knowledge() -> str:
@@ -1185,12 +1187,23 @@ async def handle_audio_file(message: Message):
     await message.answer("🤔 Составляю саммари...")
     summary = await _generate_call_summary(transcript, user_id, message.chat.id)
     _pending_call_summaries[user_id] = summary
+    _pending_call_transcripts[user_id] = transcript
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="📅 Создать напоминания", callback_data="call_remind"),
-        InlineKeyboardButton(text="💾 В заметки", callback_data="call_save"),
-    ]])
+    kb = _call_summary_kb()
     await message.answer(f"📋 *Саммари звонка:*\n\n{summary}", reply_markup=kb, parse_mode="Markdown")
+
+
+def _call_summary_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📅 Напоминания", callback_data="call_remind"),
+            InlineKeyboardButton(text="💾 В заметки", callback_data="call_save"),
+        ],
+        [
+            InlineKeyboardButton(text="✏️ Исправить", callback_data="call_edit"),
+            InlineKeyboardButton(text="🗑 Удалить", callback_data="call_delete"),
+        ],
+    ])
 
 
 @dp.callback_query(F.data == "call_remind")
@@ -1224,11 +1237,62 @@ async def call_save_callback(callback: CallbackQuery):
     await callback.answer()
 
 
+@dp.callback_query(F.data == "call_edit")
+async def call_edit_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    if user_id not in _pending_call_summaries:
+        await callback.answer("Саммари не найдено")
+        return
+    _awaiting_call_correction[user_id] = callback.message.message_id
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer("✏️ Напиши что нужно исправить или уточнить в саммари:")
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "call_delete")
+async def call_delete_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    _pending_call_summaries.pop(user_id, None)
+    _pending_call_transcripts.pop(user_id, None)
+    _awaiting_call_correction.pop(user_id, None)
+    await callback.message.edit_text("🗑 Саммари удалено.")
+    await callback.answer()
+
+
 # ── Обработка сообщений ───────────────────────────────────────
 @dp.message(F.text | F.voice)
 async def handle_message(message: Message):
     user_id = message.from_user.id
     if not is_allowed(user_id):
+        return
+
+    # Режим исправления саммари звонка
+    if user_id in _awaiting_call_correction:
+        _awaiting_call_correction.pop(user_id)
+        transcript = _pending_call_transcripts.get(user_id, "")
+        old_summary = _pending_call_summaries.get(user_id, "")
+        correction = message.text if message.text else (await transcribe_voice(message) if message.voice else "")
+        if not correction or correction.startswith("[Не удалось"):
+            await message.answer("Не удалось распознать корректировку. Попробуй ещё раз.")
+            return
+        await message.answer("🤔 Обновляю саммари...")
+        prompt = f"""Исходная транскрипция звонка:\n{transcript}\n\nПредыдущее саммари:\n{old_summary}\n\nКорректировка от пользователя: {correction}\n\nСоставь обновлённое саммари с учётом корректировки, в том же формате."""
+        try:
+            resp = await ai_client.chat.completions.create(
+                model=config.MODEL,
+                messages=[
+                    {"role": "system", "content": _CALL_SUMMARY_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=600,
+                temperature=0.3,
+            )
+            new_summary = resp.choices[0].message.content.strip()
+        except Exception as e:
+            await message.answer(f"Ошибка обновления: {e}")
+            return
+        _pending_call_summaries[user_id] = new_summary
+        await message.answer(f"📋 *Обновлённое саммари:*\n\n{new_summary}", reply_markup=_call_summary_kb(), parse_mode="Markdown")
         return
 
     # Режим исправления факта: следующее сообщение — новый текст факта
