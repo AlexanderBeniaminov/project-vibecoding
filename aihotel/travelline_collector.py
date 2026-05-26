@@ -253,6 +253,8 @@ def calculate(bookings: list, cancelled_count: int,
     alen_nights     = 0
     breakfast_count = 0
     direct_count    = 0
+    cottage_departures = 0   # уборки коттеджей = кол-во выездов за неделю
+    hostel_departures  = 0   # уборки хостелов = кол-во выездов за неделю
     total           = len(bookings)
     room_type_stats = {}
 
@@ -281,6 +283,17 @@ def calculate(bookings: list, cancelled_count: int,
             arr = rs["stayDates"]["arrivalDateTime"]
             dep = rs["stayDates"]["departureDateTime"]
             ov  = overlap_nights(arr, dep, week_start, week_end)
+
+            # Считаем уборки ДО фильтра по ov: любой выезд в неделю = уборка.
+            # Проверяем до ov==0, чтобы не пропустить гостей с заездом в прошлой неделе.
+            dep_date = date.fromisoformat(dep[:10])
+            if week_start <= dep_date <= week_end:
+                rt_id_clean = int(rs["roomType"]["id"]) if rs["roomType"]["id"].isdigit() else rs["roomType"]["id"]
+                if rt_id_clean in COTTAGE_TYPES:
+                    cottage_departures += 1
+                elif rt_id_clean in DANIELLE_TYPES or rt_id_clean in ALEN_TYPES:
+                    hostel_departures += 1
+
             if ov == 0:
                 continue
 
@@ -375,6 +388,10 @@ def calculate(bookings: list, cancelled_count: int,
     metrics[29] = round(danielle_nights / (TOTAL_DANIELLE * W), 4)
     metrics[30] = round(alen_nights     / (TOTAL_ALEN     * W), 4)
 
+    # Уборки = количество выездов за неделю по категориям
+    metrics[72] = cottage_departures
+    metrics[74] = hostel_departures
+
     return metrics, room_type_stats
 
 
@@ -396,6 +413,8 @@ METRIC_LABELS = {
     30: "Загрузка Ален %",
     32: "Доля отмен %",
     33: "Прямые продажи %",
+    72: "Уборки коттеджи",
+    74: "Уборки хостелы",
 }
 
 

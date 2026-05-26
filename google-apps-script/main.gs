@@ -66,6 +66,8 @@ var ROWS = {
   OCC_ALEN:       30,  // Загрузка Ален
   CANCEL_PCT:     32,  // Доля отмен
   // Строка 33 (Доля прямых продаж) — не заполняем, ручной ввод
+  CLEANINGS_COTTAGE: 72,  // Уборки коттеджи (кол-во выездов за неделю)
+  CLEANINGS_HOSTEL:  74,  // Уборки хостелы (кол-во выездов за неделю)
   PLAN_NEXT_MO:   35,  // План выручки след. мес. (ручной)
   BOOKED_NEXT_MO: 36,  // Забронировано след. мес. (из TravelLine)
   // Строка 37 (Динамика) — не заполняем, ручной ввод
@@ -318,6 +320,8 @@ function calcMetrics_(bookings, cancelledCount, weekStart, weekEnd) {
   var cottageRevenue = 0;
   var cottageLosList = [];
   var breakfastCount = 0;
+  var cottageDepartures = 0;  // уборки коттеджей = кол-во выездов за неделю
+  var hostelDepartures = 0;   // уборки хостелов = кол-во выездов за неделю
   var total = bookings.length;
 
   bookings.forEach(function(bk) {
@@ -335,6 +339,19 @@ function calcMetrics_(bookings, cancelledCount, weekStart, weekEnd) {
       var arr = rs.stayDates.arrivalDateTime;
       var dep = rs.stayDates.departureDateTime;
       var ov  = overlapNights_(arr, dep, weekStart, weekEnd);
+
+      // Считаем уборки ДО фильтра по ov: любой выезд в пределах недели = уборка.
+      // Проверяем до ov===0, чтобы не пропустить гостей с заездом в прошлой неделе.
+      var depDate = new Date(dep.substring(0, 10) + 'T00:00:00Z');
+      if (depDate >= weekStart && depDate <= weekEnd) {
+        var rtIdClean = parseInt(rs.roomType.id) || rs.roomType.id;
+        if (COTTAGE_TYPES[rtIdClean]) {
+          cottageDepartures++;
+        } else if (DANIEL_TYPES[rtIdClean] || ALEN_TYPES[rtIdClean]) {
+          hostelDepartures++;
+        }
+      }
+
       if (ov === 0) return;
 
       var arrDate = new Date(arr.substring(0, 10) + 'T00:00:00Z');
@@ -413,7 +430,9 @@ function calcMetrics_(bookings, cancelledCount, weekStart, weekEnd) {
     occ_cottage:    round4_(cottageNights / (UNITS_COTTAGE * W)),
     occ_daniel:     round4_(danielNights  / (UNITS_DANIEL  * W)),
     occ_alen:       round4_(alenNights    / (UNITS_ALEN    * W)),
-    breakfast_count: breakfastCount,
+    breakfast_count:      breakfastCount,
+    cottage_departures:   cottageDepartures,
+    hostel_departures:    hostelDepartures,
   };
 }
 
@@ -608,6 +627,10 @@ function writeData_(sh, col, tl, mb, nextMonthRev) {
   sh.getRange(ROWS.OCC_ALEN,     col).setValue(tl.occ_alen);
   sh.getRange(ROWS.CANCEL_PCT,   col).setValue(tl.cancel_pct);
   // Строка 33 (DIRECT_PCT) — ручной ввод, не трогаем
+
+  // Уборки: количество выездов за неделю по категориям
+  sh.getRange(ROWS.CLEANINGS_COTTAGE, col).setValue(tl.cottage_departures);
+  sh.getRange(ROWS.CLEANINGS_HOSTEL,  col).setValue(tl.hostel_departures);
 
   // Строка 36: Забронировано на следующий календарный месяц
   if (nextMonthRev > 0) {
