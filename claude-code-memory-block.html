@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Блок «Память» для CLAUDE.md</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Oswald:wght@600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #1E1E1E;
+    color: #D4C4A8;
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid #E8762B;
+  }
+
+  .header-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #E8762B;
+    background: rgba(232, 118, 43, 0.1);
+    border: 1px solid rgba(232, 118, 43, 0.3);
+    padding: 6px 16px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+
+  .header h1 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #F5E6D0;
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    font-size: 14px;
+    color: #8B7D6B;
+    line-height: 1.5;
+  }
+
+  /* Code block */
+  .code-wrapper {
+    position: relative;
+    background: #2A2A2A;
+    border: 1px solid #3A3A3A;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .code-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: #333;
+    border-bottom: 1px solid #3A3A3A;
+  }
+
+  .code-toolbar .filename {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #8B7D6B;
+  }
+
+  .copy-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1E1E1E;
+    background: #E8762B;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-btn:hover {
+    background: #F5E6D0;
+  }
+
+  .copy-btn.copied {
+    background: #4CAF50;
+    color: #fff;
+  }
+
+  .code-content {
+    padding: 20px;
+    overflow-x: auto;
+  }
+
+  .code-content pre {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #D4C4A8;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  /* Syntax highlighting */
+  .h2 { color: #E8762B; font-weight: 700; }
+  .h3 { color: #F5E6D0; font-weight: 600; }
+  .comment { color: #6A6A6A; }
+  .keyword { color: #E8762B; }
+  .bullet { color: #8B7D6B; }
+  .num { color: #D4A574; }
+  .filename-hl { color: #C9A96E; }
+  .important { color: #FF6B6B; font-weight: 600; }
+  .arrow { color: #E8762B; }
+
+  /* Instructions */
+  .instructions {
+    margin-top: 24px;
+    padding: 20px;
+    background: rgba(232, 118, 43, 0.06);
+    border: 1px solid rgba(232, 118, 43, 0.15);
+    border-radius: 8px;
+  }
+
+  .instructions h3 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 16px;
+    color: #E8762B;
+    margin-bottom: 12px;
+  }
+
+  .instructions ol {
+    padding-left: 20px;
+  }
+
+  .instructions li {
+    font-size: 14px;
+    color: #8B7D6B;
+    line-height: 1.6;
+    margin-bottom: 6px;
+  }
+
+  .instructions code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: rgba(232, 118, 43, 0.1);
+    color: #E8762B;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid #333;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #4A4A4A;
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 16px 8px; }
+    .code-content pre { font-size: 11px; }
+    .header h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div class="header-badge">CLAUDE.md // блок памяти</div>
+    <h1>Система памяти для Claude Code</h1>
+    <p>Скопируй этот блок и вставь в свой CLAUDE.md<br>Без него агент теряет контекст между сессиями</p>
+  </div>
+
+  <div class="code-wrapper">
+    <div class="code-toolbar">
+      <span class="filename">CLAUDE.md → раздел «Память»</span>
+      <button class="copy-btn" onclick="copyCode()">Копировать</button>
+    </div>
+    <div class="code-content">
+      <pre id="codeBlock"><span class="h2">## Память – КРИТИЧЕСКИ ВАЖНО</span>
+
+Без памяти ты бесполезен. Каждая сессия без записей = потерянный контекст.
+
+<span class="h3">### Хранилище</span>
+<span class="bullet">-</span> <span class="filename-hl">MEMORY.md</span> – долгосрочная (факты, проекты, предпочтения, решения)
+<span class="bullet">-</span> <span class="filename-hl">memory/YYYY-MM-DD.md</span> – дневник дня (задачи, прогресс, решения)
+<span class="bullet">-</span> <span class="filename-hl">knowledge/</span> – база знаний (архитектура, баги, чеклисты)
+
+<span class="h3">### При старте КАЖДОЙ сессии – ОБЯЗАТЕЛЬНО (не пропускай!):</span>
+<span class="num">1.</span> Прочитай MEMORY.md
+<span class="num">2.</span> Прочитай memory/ за последние 3 дня
+<span class="num">3.</span> Создай файл <span class="filename-hl">memory/YYYY-MM-DD.md</span> если его ещё нет сегодня. Запиши: дату, время старта, тему сессии
+<span class="num">4.</span> Если папок memory/ или knowledge/ не существует – создай их
+
+<span class="h3">### Во время работы – ОБЯЗАТЕЛЬНО:</span>
+<span class="bullet">-</span> Каждые 5 сообщений – дописывай итог в <span class="filename-hl">memory/YYYY-MM-DD.md</span>
+<span class="bullet">-</span> Новый постоянный факт (проект, предпочтение, решение) – сразу в <span class="filename-hl">MEMORY.md</span>
+<span class="bullet">-</span> Моя правка/коррекция – сохрани в <span class="filename-hl">memory/feedback_тема.md</span>
+<span class="bullet">-</span> Одинаковый вопрос 2+ раза – сохрани ответ в <span class="filename-hl">knowledge/</span>
+<span class="bullet">-</span> После создания/правки файла – запиши в дневник что сделал
+
+<span class="h3">### Перед завершением сессии:</span>
+<span class="bullet">-</span> Допиши в <span class="filename-hl">memory/YYYY-MM-DD.md</span> итог: что сделали, что осталось, ключевые решения
+<span class="bullet">-</span> Если узнал новые факты – обнови MEMORY.md
+
+<span class="h3">### Формат дневника (memory/YYYY-MM-DD.md):</span>
+<span class="comment"># YYYY-MM-DD</span>
+
+<span class="comment">## Сессия 1 (HH:MM)</span>
+<span class="comment">Тема: ...</span>
+
+<span class="comment">### Сделано</span>
+<span class="comment">- ...</span>
+
+<span class="comment">### Решения</span>
+<span class="comment">- ...</span>
+
+<span class="comment">### TODO на потом</span>
+<span class="comment">- ...</span>
+
+<span class="h3">### MEMORY.md:</span>
+<span class="bullet">-</span> Максимум 200 строк. Если больше – удали устаревшее, объедини дубли
+<span class="bullet">-</span> Структура: <span class="keyword">Клиент</span> <span class="arrow">→</span> <span class="keyword">Проекты</span> <span class="arrow">→</span> <span class="keyword">Стек</span> <span class="arrow">→</span> <span class="keyword">Предпочтения</span> <span class="arrow">→</span> <span class="keyword">Ссылки</span>
+
+<span class="h3">### knowledge/:</span>
+<span class="bullet">-</span> Архитектура проектов
+<span class="bullet">-</span> Решения багов которые могут повториться
+<span class="bullet">-</span> Чеклисты и инструкции
+
+<span class="h3">### Самопроверка:</span>
+<span class="important">Если ты провёл 10+ сообщений и НЕ записал ничего в memory/ – ты нарушил правила. Остановись и запиши прямо сейчас.</span></pre>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <h3>Как установить</h3>
+    <ol>
+      <li>Нажми <b>«Копировать»</b> выше</li>
+      <li>Открой файл <code>CLAUDE.md</code> в корне своего проекта</li>
+      <li>Вставь этот блок в раздел с правилами</li>
+      <li>Создай папки <code>memory/</code> и <code>knowledge/</code> если их нет</li>
+      <li>Создай пустой <code>MEMORY.md</code> в корне проекта</li>
+    </ol>
+  </div>
+
+  <div class="footer">
+    @mcdenil // нейросети в жизни и бизнесе
+  </div>
+
+</div>
+
+<script>
+function copyCode() {
+  const code = document.getElementById('codeBlock');
+  const text = code.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Скопировано ✓';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Копировать';
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+}
+</script>
+
+</body>
+</html>

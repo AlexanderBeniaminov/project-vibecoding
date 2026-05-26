@@ -1,36 +1,53 @@
-# План выполнения — Проект "Сервер + VPN"
+# План — Проект "Сервер + VPN"
+# Обновлено: 2026-05-14
 
 ## ✅ Выполнено
 
-- [x] VPS создан на Beget (84.54.30.209, Ubuntu 24.04)
-- [x] WireGuard установлен на сервере (wg-quick@wg0)
-- [x] Профили alex.conf и oleg.conf созданы, QR-коды скачаны
-- [x] WireGuard установлен на Mac, alex_split импортирован и подключён
-- [x] oleg_split импортирован на Mac (для ноутбука Олега)
-- [x] Порт WireGuard изменён с 51820 → 443/UDP (обход РКН)
-- [x] UFW FORWARD policy = ACCEPT
-- [x] AllowedIPs = 10.66.66.0/24 (split-tunnel, только трафик к серверу)
-- [x] Оба VPN работают одновременно: WireGuard + Happ Plus (Германия)
-- [x] SSH-конфиг: `ssh server` → 84.54.30.209, ключ id_ed25519
-- [x] Python venv создан (/home/parser/venv)
-- [x] Библиотеки установлены (requests, gspread, google-auth, loguru, python-telegram-bot)
-- [x] Все парсеры скопированы на сервер
-- [x] account_manager.py — добавлена поддержка VK MAX (notify_vkmax)
-- [x] vk_max_bot.py переписан под VK MAX Bot API (botapi.max.ru)
-- [x] daily_report.py — ежедневный отчёт из Google Sheets → VK MAX
-- [x] settings.py для alex заполнен (VK MAX токен + iiko таблица)
-- [x] service_account.json для alex загружен на сервер
-- [x] Cron: daily_report.py запускается в 06:00 UTC (09:00 МСК)
-- [x] Ежедневный отчёт протестирован — сообщение приходит в VK MAX ✅
+### Сервер (u1host, Германия, 185.184.122.158)
+- [x] VPS создан на u1host.com (Ubuntu 24.04, 2GB RAM, 30GB SSD)
+- [x] setup.sh выполнен — всё зелёное
+- [x] SSH-конфиг: `ssh server` → 185.184.122.158, ключ id_ed25519
+- [x] UFW настроен: 22/tcp (SSH), 443/tcp (VLESS), 26712/tcp (3X-UI панель)
+
+### VPN — VLESS + XTLS-Reality (3X-UI)
+- [x] AmneziaWG остановлен и заменён на VLESS
+- [x] 3X-UI v3.0.1 установлен, активен
+- [x] VLESS+Reality inbound: порт 443, SNI www.microsoft.com
+- [x] Клиенты созданы: alex, oleg, android (vless:// ссылки в ~/Downloads/)
+- [x] QR-коды: ~/Downloads/qr_alex.png, qr_oleg.png, qr_android.png
+
+### Клиенты
+- [x] Happ Plus на Mac — подключён через сервер alex (VLESS, 336ms)
+- [x] Claude десктоп на Mac — работает через Happ Plus
+- [x] VS Code Claude Code — работает через Happ Plus
+- [x] Hiddify на Android (Huawei Nova 11) — установлен и подключён
+- [x] Telegram на телефоне — работает (SOCKS5 → Hiddify)
+
+### Python и боты
+- [x] Python venv: /home/parser/venv (Python 3.12)
+- [x] Все парсеры на сервере: iiko, travelline, telegram, universal
+- [x] settings.py для alex заполнен (VK MAX + iiko)
+- [x] service_account.json для alex загружен
+- [x] Cron: daily_report.py → 06:00 UTC (09:00 МСК) → отчёт в VK MAX ✅
 
 ---
 
-## 🔲 Следующие шаги
+## 🔲 Осталось сделать
 
-### Шаг 1 — Systemd-сервис для VK MAX бота (автозапуск)
+### Приоритет 1 — Beget (через 3 дня, ~2026-05-17)
+- [ ] Убедиться что новый сервер стабильно работает 3 дня
+- [ ] Зайти на beget.com → отключить/удалить VPS 84.54.30.209
 
-**На сервере** (чтобы бот отвечал на /ping, /status, /report):
+### Приоритет 2 — Аккаунт Олег
+- [ ] Заполнить settings.py для oleg (VK MAX токен, iiko, Google Sheets)
+- [ ] Скопировать service_account.json: `cp /home/parser/config/alex/service_account.json /home/parser/config/oleg/`
+- [ ] Протестировать парсеры для oleg
+
+### Приоритет 3 — Интерактивный VK MAX бот (опционально)
+vk_max_bot.py отвечает на /ping, /status, /report в реальном времени.
+Нужен только если хочешь управлять сервером через VK MAX.
 ```bash
+# На сервере:
 cat > /etc/systemd/system/vkmax-bot.service << 'EOF'
 [Unit]
 Description=VK MAX Bot (alex)
@@ -50,68 +67,15 @@ EOF
 systemctl daemon-reload
 systemctl enable vkmax-bot
 systemctl start vkmax-bot
-systemctl status vkmax-bot
 ```
+
+### Приоритет 4 — Настройка Олег на Mac
+- [ ] В Happ Plus нажать + → вставить vless:// ссылку oleg из ~/Downloads/vless_links.txt
 
 ---
 
-### Шаг 2 — Настройка oleg
-
-Нужны данные:
-- VK MAX токен (если у Олега отдельный бот) или тот же бот с другим user_id
-- Google Sheets таблицы Олега
-- service_account.json (тот же файл, что для alex)
-
-```bash
-# Скопировать service_account.json для oleg
-scp /home/parser/config/alex/service_account.json \
-    /home/parser/config/oleg/service_account.json
-```
-
----
-
-### Шаг 3 — Telegram боты (опционально)
-
-1. Открыть Telegram → @BotFather → `/newbot`
-2. Скопировать TOKEN
-3. Написать боту `/start`, узнать CHAT_ID через:
-   `https://api.telegram.org/bot<TOKEN>/getUpdates`
-4. Добавить в settings.py:
-   ```python
-   TELEGRAM_BOT_TOKEN = "..."
-   TELEGRAM_CHAT_ID   = "..."
-   ```
-
----
-
-### Шаг 4 — WireGuard на Android (Huawei Nova 11)
-
-1. Установить приложение WireGuard из AppGallery
-2. QR-коды уже готовы: alex_qr.png и oleg_qr.png (скачаны ранее)
-3. Отсканировать QR в приложении
-
----
-
-### Шаг 5 — VS Code Remote-SSH
-
-```
-# ~/.ssh/config уже есть Host server → 84.54.30.209
-# Установить в VS Code: расширение "Remote - SSH"
-# Подключиться: Ctrl+Shift+P → "Remote-SSH: Connect to Host" → server
-```
-
----
-
-### Шаг 6 — Финальная проверка
-
-```bash
-# На сервере
-bash /home/parser/check_all.sh
-```
-
-**Чек-лист:**
-- [ ] VK MAX бот отвечает на /ping
-- [ ] Ежедневный отчёт приходит в 09:00 МСК
-- [ ] Cron запускает парсеры по расписанию
-- [ ] WireGuard watchdog работает
-- [ ] Логи пишутся в /home/parser/logs/
+## Важные детали
+- Happ Plus нужно запускать ДО Claude десктоп и VS Code
+- Панель 3X-UI: http://185.184.122.158:26712/0bdmSbbW17viRgbmb6/
+- Ссылки VLESS: ~/Downloads/vless_links.txt
+- Старый Beget: 84.54.30.209 — отключить 2026-05-17

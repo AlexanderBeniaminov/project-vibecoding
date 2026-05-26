@@ -3,7 +3,7 @@
 ## Кто пользователь
 - Александр, Россия, Mac M2, VS Code
 - Новичок в Linux/SSH/DevOps
-- Два аккаунта: alex (Александр) и oleg (Олег)
+- Один пользователь, два Claude-аккаунта: alex (основной) и oleg (резервный, тот же человек — для смены при исчерпании лимитов)
 
 ## Правила работы
 - Всегда давать готовые команды для copy-paste — без сокращений
@@ -13,25 +13,25 @@
 - Перед началом сессии читать STATUS.md
 
 ## Сервер
-- IP: 84.54.30.209
-- ОС: Ubuntu 24.04.4, 2GB RAM
+- IP: 185.184.122.158 (u1host.com, Германия)
+- ОС: Ubuntu 24.04.4, 2GB RAM, 30GB SSD
 - SSH: `ssh server` (алиас в ~/.ssh/config, ключ ~/.ssh/id_ed25519)
-- WireGuard: wg-quick@wg0, порт **443/UDP** (не 51820 — изменён для обхода РКН)
-- VPN-подсеть: 10.66.66.1 (сервер), 10.66.66.2 (alex), 10.66.66.3 (oleg)
+- VPN: **3X-UI + VLESS + XTLS-Reality**, порт **443/TCP**, SNI: microsoft.com
+- Панель 3X-UI: `http://185.184.122.158:26712/0bdmSbbW17viRgbmb6/` (порт 26712, basepath /0bdmSbbW17viRgbmb6/)
+- SSH-туннель к панели (альтернатива): `ssh -L 26712:localhost:26712 server` → `http://localhost:26712/0bdmSbbW17viRgbmb6/`
+- Клиент на устройствах: **Hiddify** (Mac / Android), подключается по ссылке `vless://...`
 - Python: /home/parser/venv/bin/python (Python 3.12)
+- Старый сервер Beget: 84.54.30.209 (алиас `ssh server-old`, отключить после проверки)
 
 ## Структура файлов на сервере
 ```
 /home/parser/
 ├── venv/                         # Python virtualenv
 ├── config/
-│   ├── alex/
-│   │   ├── settings.py           # ✅ заполнен (VK MAX + iiko)
-│   │   └── service_account.json  # ✅ загружен (aihotel-bot@aihotel-gubaha.iam.gserviceaccount.com)
-│   └── oleg/
-│       ├── settings.py           # ❌ не заполнен
-│       └── service_account.json  # ❌ не загружен
-├── parsers/                      # account_manager, iiko, travelline, telegram, universal
+│   └── alex/
+│       ├── settings.py           # ✅ заполнен (VK MAX + iiko)
+│       └── service_account.json  # ✅ загружен (aihotel-bot@aihotel-gubaha.iam.gserviceaccount.com)
+├── scrapers/                     # account_manager, iiko, travelline, telegram, universal
 ├── bots/                         # vk_max_bot.py, telegram_status_bot.py, daily_report.py
 ├── logs/                         # логи запусков
 └── data/                         # временные данные
@@ -50,7 +50,9 @@
 - Таблица iiko: 1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI
 
 ## Важные детали
-- Beget — российский хостинг. Claude через наш VPN НЕ работает
-- Claude работает через Happ Plus VPN (Германия) — не трогать!
-- WireGuard нужен только для SSH и управления сервером
-- settings.py для oleg ещё не заполнен
+- Сервер в Германии (u1host) — полный VPN-туннель, Claude/Telegram/все сайты работают
+- VLESS+Reality маскирует трафик под обычный HTTPS — обходит DPI лучше WireGuard/Amnezia
+- Hiddify (вкл) = весь интернет через DE, выкл = прямое подключение
+- Панель 3X-UI НЕ открыта в интернет — только через SSH-туннель (безопасность)
+- Аккаунт oleg = тот же Александр, резервный Claude-аккаунт. Смена: `claude logout` → `claude`
+- Папка config/oleg на сервере удалена — не нужна

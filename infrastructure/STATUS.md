@@ -1,9 +1,12 @@
 # Проект: Сервер + VPN — Статус задач
 
 ## Сервер
-- ВПС: Beget, IP 84.54.30.209, Ubuntu 24.04, 2GB RAM
-- Пользователь на сервере: parser (для парсеров), root (для настройки)
-- VPN-сеть: 10.66.66.0/24 (сервер 10.66.66.1, alex 10.66.66.2, oleg 10.66.66.3)
+- ВПС: u1host.com (Германия), IP 185.184.122.158, Ubuntu 24.04, 2GB RAM, 30GB SSD
+- SSH: `ssh server` → root@185.184.122.158
+- VPN: 3X-UI + VLESS + XTLS-Reality, порт 443/TCP, клиент — Happ Plus (Mac) / Hiddify (Android)
+- Панель 3X-UI: `http://185.184.122.158:26712/0bdmSbbW17viRgbmb6/`
+- Один пользователь (Александр), два Claude-аккаунта (alex/oleg) — смена через `claude logout`
+- Старый Beget 84.54.30.209: отключить ~2026-05-17
 
 ---
 
@@ -11,21 +14,22 @@
 
 | Задача | Статус | Примечание |
 |--------|--------|------------|
-| VPS создан на Beget | ✅ Готово | 84.54.30.209 |
+| VPS создан на u1host.com (Германия) | ✅ Готово | 185.184.122.158 |
 | setup.sh выполнен | ✅ Готово | Всё зелёное |
-| WireGuard установлен на сервере | ✅ Готово | wg-quick@wg0 |
-| Профили alex.conf и oleg.conf созданы | ✅ Готово | QR-коды скачаны |
-| WireGuard установлен на Mac (alex) | ✅ Готово | Импортирован alex.conf |
-| WireGuard подключается (зелёный) | ✅ Готово | Рукопожатие есть |
-| Split-tunnel: только трафик к серверу | ✅ Готово | AllowedIPs = 10.66.66.0/24 |
-| UFW FORWARD policy исправлен | ✅ Готово | DEFAULT_FORWARD_POLICY=ACCEPT |
-| Порт изменён с 51820 на 443/UDP | ✅ Готово | Обходит блокировку РКН |
-| WireGuard на Mac (alex_split) | ✅ Готово | Подключён, рукопожатие работает |
-| WireGuard на Mac (oleg_split) | ✅ Готово | Импортирован (для ноутбука Олега) |
-| Оба VPN одновременно (WireGuard + Happ Plus) | ✅ Готово | Не конфликтуют |
-| SSH-конфиг на Mac (~/.ssh/config) | ✅ Готово | Команда: ssh server |
-| WireGuard на Android Huawei Nova 11 | ❌ Не сделано | QR-коды готовы |
-| Watchdog (автоперезапуск VPN) | ✅ Готово | Настроен в cron |
+| AmneziaWG остановлен и отключён | ✅ Готово | inactive, disabled |
+| UFW: только нужные порты (22, 443/tcp, 26712/tcp) | ✅ Готово | WireGuard UDP и wg0 правила удалены |
+| 3X-UI панель установлена (v3.0.1) | ✅ Готово | active since 2026-05-13, порт 26712 |
+| VLESS + XTLS-Reality inbound настроен | ✅ Готово | Порт 443, SNI www.microsoft.com |
+| Клиент alex создан | ✅ Готово | UUID: 41be9190-..., vless:// в ~/Downloads/vless_links.txt |
+| Клиент android создан | ✅ Готово | UUID: 93f50951-..., vless:// в ~/Downloads/vless_links.txt |
+| Клиент oleg создан | ✅ Готово | UUID: 124c8dc3-..., добавлен через SQLite |
+| QR-коды сгенерированы | ✅ Готово | ~/Downloads/qr_alex.png, qr_android.png, qr_oleg.png |
+| SSH-конфиг на Mac | ✅ Готово | `ssh server` = новый, `ssh server-old` = Beget |
+| Happ Plus на Mac — подключён | ✅ Готово | ПОДКЛЮЧЕН через alex (VLESS), 336ms |
+| Сервер alex добавлен в Happ Plus | ✅ Готово | vless:// импортирован, активен |
+| VS Code Claude Code работает | ✅ Готово | через Happ Plus TUN (порт 10808) |
+| Claude десктоп на Mac | ✅ Готово | работает после перезапуска с активным Happ Plus |
+| Hiddify на Android (Huawei Nova 11) | ✅ Готово | Установлен, подключён через android-клиент |
 
 ---
 
@@ -33,18 +37,17 @@
 
 | Задача | Статус | Примечание |
 |--------|--------|------------|
-| Python venv создан | ✅ Готово | /home/parser/venv (создан 2026-05-05) |
-| Библиотеки установлены | ✅ Готово | requests, loguru, gspread, google-auth, python-telegram-bot |
-| account_manager.py | ✅ Готово | + поддержка VK MAX (notify_vkmax) |
-| travelline_parser.py | ✅ Готово | На сервере |
-| iiko_parser.py | ✅ Готово | На сервере |
-| telegram_monitor.py | ✅ Готово | На сервере |
-| universal_parser.py | ✅ Готово | На сервере |
-| settings.py для alex | ✅ Заполнено | VK MAX + iiko таблица |
-| settings.py для oleg | ❌ Не заполнено | Нужны данные Олега |
-| service_account.json для alex | ✅ Загружен | aihotel-bot@aihotel-gubaha.iam.gserviceaccount.com |
-| service_account.json для oleg | ❌ Не загружен | |
-| Cron: ежедневный отчёт (alex) | ✅ Готово | 06:00 UTC (09:00 МСК) через daily_report.py |
+| Python venv создан | ✅ Готово | /home/parser/venv (Python 3.12) |
+| Библиотеки установлены | ✅ Готово | requests, gspread, loguru, telegram и др. |
+| account_manager.py | ✅ Готово | /home/parser/scrapers/ |
+| travelline_parser.py | ✅ Готово | /home/parser/scrapers/ |
+| iiko_parser.py | ✅ Готово | /home/parser/scrapers/ |
+| telegram_monitor.py | ✅ Готово | /home/parser/scrapers/ |
+| universal_parser.py | ✅ Готово | /home/parser/scrapers/ |
+| settings.py (alex) | ✅ Готово | VK MAX + iiko таблица |
+| service_account.json (alex) | ✅ Готово | aihotel-bot@aihotel-gubaha.iam.gserviceaccount.com |
+| config/oleg удалён | ✅ Готово | oleg = тот же пользователь, отдельная папка не нужна |
+| Cron: ежедневный отчёт | ✅ Готово | 06:00 UTC (09:00 МСК) через daily_report.py |
 
 ---
 
@@ -52,58 +55,42 @@
 
 | Задача | Статус | Примечание |
 |--------|--------|------------|
-| telegram_status_bot.py | ✅ Готово | Код на сервере |
-| vk_max_bot.py | ✅ Готово | Переписан под VK MAX Bot API (max.ru) |
-| daily_report.py | ✅ Готово | Ежедневный отчёт → VK MAX |
-| VK MAX бот (alex) | ✅ Готово | "Отчёты Монблан", отправка работает |
-| VK MAX бот запущен как сервис | ❌ Не сделано | Нужен systemd unit |
-| Telegram бот alex | ❌ Не сделано | Нужен TOKEN из BotFather |
-| Telegram бот oleg | ❌ Не сделано | Нужен TOKEN из BotFather |
+| telegram_status_bot.py | ✅ Готово | /home/parser/bots/ |
+| vk_max_bot.py | ✅ Готово | /home/parser/bots/ |
+| daily_report.py | ✅ Готово | cron 06:00 UTC, отчёты приходят |
+| VK MAX бот как systemd-сервис | ⏸ Опционально | нужен только для /ping /status в реальном времени |
+| Telegram бот | ⏸ Опционально | нужен TOKEN из BotFather если потребуется |
 
 ---
 
-## БЛОК 4 — Google Sheets (alex)
+## БЛОК 4 — Google Sheets
 
 | Задача | Статус | Примечание |
 |--------|--------|------------|
 | Service Account | ✅ Готово | aihotel-bot@aihotel-gubaha.iam.gserviceaccount.com |
-| Таблица iiko (alex) | ✅ Подключена | 1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI |
-| Лист ЕжеДневно | ✅ Работает | Выручка/Кухня/Бар/Чек/Гости/Завтраки |
-| Ежедневный отчёт VK MAX | ✅ Протестирован | Успешно отправлен 2026-05-05 |
-| Таблицы для oleg | ❌ Не настроено | |
+| Таблица iiko | ✅ Подключена | 1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI |
 
 ---
 
-## БЛОК 5 — VS Code Remote SSH
+## БЛОК 5 — Финальная проверка
 
 | Задача | Статус | Примечание |
 |--------|--------|------------|
-| Расширение Remote-SSH установлено | ❌ Не сделано | |
-| SSH-конфиг настроен (alex + oleg) | ❌ Не сделано | |
-| Подключение к серверу из VS Code | ❌ Не сделано | |
+| Hiddify подключается на Mac (alex) | ❌ Нужно проверить | После настройки 3X-UI |
+| curl ifconfig.me через VPN = немецкий IP | ❌ Нужно проверить | |
+| claude.ai открывается через VPN | ❌ Нужно проверить | |
+| Telegram работает через VPN | ❌ Нужно проверить | |
+| Ежедневный отчёт VK MAX | ❌ Нужно проверить | Подождать 09:00 МСК |
+| Отключить Beget | ❌ После 3 дней проверки | beget.com панель управления |
 
 ---
 
-## БЛОК 6 — Финальная проверка
+## Текущий приоритет
 
-| Задача | Статус | Примечание |
-|--------|--------|------------|
-| check_all.sh прошёл без ошибок | ❌ Не проверено | |
-| claude.ai через VPN (alex) | ❌ Не проверено | |
-| claude.ai через VPN (oleg) | ❌ Не проверено | |
-| Российские сайты без VPN | ❌ Не проверено | split-tunnel |
-| Парсер → Google Sheets (alex) | ❌ Не проверено | |
-| Парсер → Google Sheets (oleg) | ❌ Не проверено | |
-| Telegram уведомление (alex) | ❌ Не проверено | |
-| Telegram уведомление (oleg) | ❌ Не проверено | |
-
----
-
-## Текущий приоритет (продолжить следующий раз)
-
-1. 🤖 Запустить VK MAX бота как systemd-сервис (автозапуск)
-2. ⚙️ Настроить settings.py и service_account.json для oleg
-3. 🤖 Создать Telegram боты через BotFather (alex + oleg)
-4. 📱 WireGuard на Android Huawei Nova 11
-5. 🖥️ VS Code Remote-SSH
-6. ✅ Финальная проверка check_all.sh
+1. ✅ ~~Сервер настроен: 3X-UI v3.0.1, VLESS+Reality, 3 клиента, UFW чистый~~
+2. ✅ ~~Happ Plus на Mac подключён к серверу alex (VLESS), VS Code работает~~
+3. ✅ ~~Claude десктоп работает — перезапуск с активным Happ Plus~~
+4. ✅ ~~Android — Hiddify установлен и подключён~~
+5. 🤖 **VK MAX бот** — запустить как systemd-сервис (опционально)
+6. ⏱ Подождать 09:00 МСК — ежедневный отчёт VK MAX
+7. 🗑 Через 3 дня — отключить Beget на beget.com
