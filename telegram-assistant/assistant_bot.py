@@ -1386,6 +1386,63 @@ async def morning_briefing():
             print(f"[morning_briefing] ошибка для {user_id}: {e}")
 
 
+# ── Еженедельный обзор (понедельник 09:00) ────────────────────
+async def weekly_review():
+    """Отправляет обзор прошедшей недели каждый понедельник в 09:00 МСК."""
+    for user_id in config.ALLOWED_USER_IDS:
+        try:
+            from tools.db import get_conn as _db_conn
+            conn = _db_conn()
+
+            # Заметки за последние 7 дней
+            rows_notes = conn.execute(
+                "SELECT id, text, created_at FROM notes WHERE created_at >= datetime('now', '-7 days') ORDER BY id DESC"
+            ).fetchall()
+
+            # Идеи в очереди (категория idea/ideas)
+            rows_ideas = conn.execute(
+                "SELECT id, text, created_at FROM memory WHERE category IN ('idea','ideas') ORDER BY id DESC LIMIT 20"
+            ).fetchall()
+
+            # Просроченные напоминания за неделю (выполненные)
+            rows_rem = conn.execute(
+                """SELECT title, scheduled_at FROM reminders
+                   WHERE user_id=? AND done=1
+                   AND scheduled_at >= datetime('now', '-7 days')
+                   ORDER BY scheduled_at DESC""",
+                (user_id,)
+            ).fetchall()
+            conn.close()
+
+            lines = ["📊 *Обзор недели*\n"]
+
+            if rows_notes:
+                lines.append(f"📝 *Заметки за неделю ({len(rows_notes)} шт):*")
+                for r in rows_notes:
+                    dt = r["created_at"][:10]
+                    lines.append(f"  • ({dt}) {r['text'][:120]}")
+                lines.append("")
+
+            if rows_ideas:
+                lines.append(f"💡 *Идеи в очереди ({len(rows_ideas)} шт):*")
+                for r in rows_ideas:
+                    lines.append(f"  • {r['text'][:120]}")
+                lines.append("")
+
+            if rows_rem:
+                lines.append(f"✅ *Выполнено за неделю ({len(rows_rem)} задач):*")
+                for r in rows_rem[:10]:
+                    lines.append(f"  • {r['title']}")
+                lines.append("")
+
+            if len(lines) == 1:
+                lines.append("За прошедшую неделю нет заметок, идей и выполненных задач.")
+
+            await bot.send_message(user_id, "\n".join(lines), parse_mode="Markdown")
+        except Exception as e:
+            print(f"[weekly_review] ошибка для {user_id}: {e}")
+
+
 # ── Команда /schedule ─────────────────────────────────────────
 @dp.message(Command("schedule"))
 async def cmd_schedule(message: Message):
@@ -1410,6 +1467,13 @@ async def main():
         hour=9, minute=0,
         timezone="Europe/Moscow",
         id="morning_briefing",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        weekly_review, "cron",
+        day_of_week="mon", hour=9, minute=5,
+        timezone="Europe/Moscow",
+        id="weekly_review",
         replace_existing=True,
     )
     scheduler.start()
