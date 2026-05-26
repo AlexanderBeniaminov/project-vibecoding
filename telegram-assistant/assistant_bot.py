@@ -3,6 +3,7 @@ assistant_bot.py — Персональный AI-ассистент Алекса
 """
 import asyncio
 import json
+import logging
 import sys
 import tempfile
 import os
@@ -669,6 +670,32 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
     return "Не удалось обработать запрос. Попробуй переформулировать."
 
 # ── Транскрипция голоса ───────────────────────────────────────
+
+# Известные галлюцинации Whisper — пустой результат или промпт вместо текста
+_WHISPER_HALLUCINATIONS = {
+    "transcribe the audio",
+    "transcribe the video",
+    "thank you for watching",
+    "thanks for watching",
+    "subtitle by",
+    "subtitles by",
+    "downloaded from",
+    "you",
+    "",
+}
+
+def _is_whisper_hallucination(text: str) -> bool:
+    """Проверяет, является ли результат галлюцинацией Whisper."""
+    cleaned = text.strip().lower().rstrip(".")
+    if not cleaned:
+        return True
+    if cleaned in _WHISPER_HALLUCINATIONS:
+        return True
+    # Слишком короткий текст для 9+ секунд аудио (< 3 символов)
+    if len(cleaned) < 3:
+        return True
+    return False
+
 async def transcribe_voice(message: Message) -> str:
     from groq import Groq
     voice = message.voice
@@ -677,18 +704,52 @@ async def transcribe_voice(message: Message) -> str:
         tmp_path = tmp.name
     try:
         await bot.download_file(file.file_path, tmp_path)
+
+        # Проверяем что файл реально скачался
+        file_size = os.path.getsize(tmp_path)
+        if file_size < 100:
+            return "[Не удалось распознать голос: пустой аудиофайл]"
+
         groq_client = Groq(api_key=config.GROQ_API_KEY)
+
+        # Prompt подсказывает модели что это русская речь — снижает галлюцинации
+        ru_prompt = "Это голосовое сообщение на русском языке."
+
+        # Первая попытка — turbo
         with open(tmp_path, "rb") as f:
             tr = groq_client.audio.transcriptions.create(
                 model="whisper-large-v3-turbo",
                 file=("voice.ogg", f, "audio/ogg"),
                 language="ru",
+                prompt=ru_prompt,
             )
-        return tr.text
+        result = tr.text.strip()
+
+        # Если галлюцинация — повторяем через whisper-large-v3 (точнее, но медленнее)
+        if _is_whisper_hallucination(result):
+            logging.warning(f"[Whisper] turbo галлюцинация: {repr(result)}, пробуем whisper-large-v3")
+            with open(tmp_path, "rb") as f:
+                tr2 = groq_client.audio.transcriptions.create(
+                    model="whisper-large-v3",
+                    file=("voice.ogg", f, "audio/ogg"),
+                    language="ru",
+                    prompt=ru_prompt,
+                )
+            result = tr2.text.strip()
+
+        # Если и повтор галлюцинация — сообщаем пользователю
+        if _is_whisper_hallucination(result):
+            logging.warning(f"[Whisper] оба варианта дали галлюцинацию, файл {file_size} байт")
+            return "[Не удалось распознать голос: Whisper не смог разобрать аудио. Попробуй отправить ещё раз или напиши текстом.]"
+
+        return result
+
     except Exception as e:
+        logging.error(f"[Whisper] ошибка транскрипции: {e}")
         return f"[Не удалось распознать голос: {e}]"
     finally:
-        os.unlink(tmp_path)
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 # ── Доступ ────────────────────────────────────────────────────
 def is_allowed(user_id: int) -> bool:
