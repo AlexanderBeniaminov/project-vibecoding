@@ -27,6 +27,24 @@ var MONBLAN_SHEET_ID = '1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI';
 var MONBLAN_GID      = 2051236241;
 var HOTEL_SHEET_GID  = 2018226789;
 
+// Сегменты (Евгения + Надежда): файл с воронкой и данными по сегментам
+var SEG_SHEET_ID   = '1CdeyCx0VlzqNpUSDhmIdJPZYuR_1nv33bHu5FLnHX_8';
+var SEG_SHEET_NAME = '2026 ✓';
+
+// Маппинг: [строка в «2026 ✓», строка в «2026» финансового отчёта]
+var SEG_MAPPING = [
+  [5,  51],   // Физики: Бронь  ★
+  [8,  52],   // Физики: Сумма  ★
+  [12, 40],   // ДР: Бронь      ★
+  [14, 41],   // ДР: Проживания ★
+  [15, 42],   // ДР: Сумма      ★
+  [19, 44],   // Группы: Бронь  ★
+  [21, 45],   // Группы: Проживания ★
+  [22, 46],   // Группы: Сумма  ★
+  [26, 48],   // Корп: Бронь    ★
+  [29, 49],   // Корп: Сумма    ★
+];
+
 var TL_AUTH_URL = 'https://partner.tlintegration.com/auth/token';
 var TL_API_BASE = 'https://partner.tlintegration.com/api/read-reservation/v1';
 
@@ -143,6 +161,10 @@ function collectWeeklyHotelReport() {
   // Устанавливаем формулы (включая строки 6 и 7)
   setFormulas_(sh, col, prevSheetName);
   Logger.log('  Формулы установлены');
+
+  // Синхронизируем сегменты (строки 40–52) из файла Евгении/Надежды
+  syncSegments_(sh, col, week.num);
+  Logger.log('  Сегменты синхронизированы');
 
   SpreadsheetApp.flush();
   Logger.log('✅ Готово: неделя ' + week.num + ' (' + week.dateLabel +
@@ -923,6 +945,64 @@ function copyRowsFromOldSheet() {
 
   SpreadsheetApp.flush();
   Logger.log('✅ Перенос завершён. Скопировано: ' + totalCopied);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// СЕГМЕНТЫ: СИНХРОНИЗАЦИЯ ИЗ ФАЙЛА ЕВГЕНИИ/НАДЕЖДЫ
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Читает данные по сегментам гостей из листа «2026 ✓» файла Евгении/Надежды
+ * и переносит строки 40–52 в финансовый отчёт для нужной недели.
+ *
+ * SEG_MAPPING = [[строка в «2026 ✓», строка в «2026» финансового отчёта], ...]
+ * Строка 1 листа «2026 ✓» содержит ISO-номера недель начиная со столбца C (col 3).
+ *
+ * @param {Sheet} sh2026    - лист «2026» финансового отчёта
+ * @param {number} col      - номер столбца текущей недели в финансовом отчёте (1-based)
+ * @param {number} weekNum  - ISO-номер недели
+ */
+function syncSegments_(sh2026, col, weekNum) {
+  try {
+    var segSS = SpreadsheetApp.openById(SEG_SHEET_ID);
+    var segSh = segSS.getSheetByName(SEG_SHEET_NAME);
+    if (!segSh) {
+      Logger.log('  ⚠️ Лист «' + SEG_SHEET_NAME + '» не найден в ' + SEG_SHEET_ID);
+      return;
+    }
+
+    // Ищем столбец нужной недели в строке 1 (начиная с col C = col 3)
+    var row1 = segSh.getRange(1, 3, 1, 60).getValues()[0];
+    var segCol = -1;
+    for (var i = 0; i < row1.length; i++) {
+      if (Number(row1[i]) === weekNum) {
+        segCol = i + 3; // 1-based: col C = 3, поэтому +3
+        break;
+      }
+    }
+    if (segCol === -1) {
+      Logger.log('  ⚠️ Неделя ' + weekNum + ' не найдена в «' + SEG_SHEET_NAME + '»');
+      return;
+    }
+
+    var written = 0;
+    SEG_MAPPING.forEach(function(m) {
+      var segRow  = m[0];  // строка в «2026 ✓»
+      var finRow  = m[1];  // строка в финансовом отчёте
+      var v = segSh.getRange(segRow, segCol).getValue();
+      // Записываем только если в источнике есть значение (не пусто и не 0)
+      if (v !== '' && v !== null && v !== undefined && v !== 0) {
+        sh2026.getRange(finRow, col).setValue(v);
+        written++;
+      }
+    });
+
+    Logger.log('  ✅ Сегменты нед.' + weekNum + ': ' + written + '/' + SEG_MAPPING.length + ' значений');
+
+  } catch(e) {
+    Logger.log('  ❌ syncSegments_ ошибка: ' + e.message);
+  }
 }
 
 
