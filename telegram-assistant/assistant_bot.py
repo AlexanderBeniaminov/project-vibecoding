@@ -67,7 +67,7 @@ def _parse_dsml_tool_calls(text: str) -> list[tuple[str, dict]]:
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import openai
 
@@ -92,7 +92,7 @@ histories: dict[int, list[dict]] = {}
 def _load_knowledge() -> str:
     knowledge_dir = Path(getattr(config, "KNOWLEDGE_DIR", "/home/parser/bots/assistant/knowledge"))
     parts = []
-    for fname in ["projects.md", "user.md"]:
+    for fname in ["projects.md", "user.md", "bot_facts.md"]:
         fpath = knowledge_dir / fname
         if fpath.exists():
             parts.append(fpath.read_text(encoding="utf-8"))
@@ -351,8 +351,8 @@ TOOLS = [
                 "properties": {
                     "target": {
                         "type": "string",
-                        "enum": ["projects", "user"],
-                        "description": "'projects' — изменения в проектах, 'user' — информация об Александре",
+                        "enum": ["projects", "user", "bot_facts"],
+                        "description": "'projects' — изменения в проектах, 'user' — информация об Александре, 'bot_facts' — запомненные факты из диалогов",
                     },
                     "content": {
                         "type": "string",
@@ -508,11 +508,47 @@ async def _keep_typing(chat_id: int, stop: asyncio.Event):
             pass
 
 # Инструменты, требующие мгновенного подтверждения пользователю
+# remember_fact убран — он требует подтверждения через inline-кнопки
 _ACTION_TOOLS = {
     "create_calendar_event", "add_reminder", "add_note",
-    "delete_note", "cancel_reminder", "remember_fact",
+    "delete_note", "cancel_reminder",
     "forget_fact", "update_knowledge",
 }
+
+# Состояние: user_id → fact_id (ожидаем исправление текста факта)
+_awaiting_correction: dict[int, int] = {}
+
+
+def _fact_approval_keyboard(fact_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Верно", callback_data=f"fact_ok_{fact_id}"),
+        InlineKeyboardButton(text="✏️ Исправить", callback_data=f"fact_fix_{fact_id}"),
+        InlineKeyboardButton(text="❌ Не то", callback_data=f"fact_no_{fact_id}"),
+    ]])
+
+
+async def _send_fact_approval(chat_id: int, fact_id: int, text: str):
+    """Отправляет сообщение с запросом подтверждения факта."""
+    await bot.send_message(
+        chat_id,
+        f"📝 *Запомнить этот факт?*\n\n{text}",
+        parse_mode="Markdown",
+        reply_markup=_fact_approval_keyboard(fact_id),
+    )
+
+async def _execute_and_notify(name: str, args: dict, user_id: int, chat_id: int) -> str:
+    """Выполняет инструмент. Для remember_fact — отправляет запрос на подтверждение."""
+    if name == "remember_fact":
+        fact_id, orig_cat, text = mem_tool.remember_fact_pending(
+            args["text"], args.get("category", "fact")
+        )
+        await _send_fact_approval(chat_id, fact_id, text)
+        return f"Факт #{fact_id} отправлен пользователю на подтверждение [{orig_cat}]."
+    result = execute_tool(name, args, user_id)
+    if name in _ACTION_TOOLS:
+        await bot.send_message(chat_id, f"✅ {result}")
+    return str(result)
+
 
 # ── LLM-цикл ─────────────────────────────────────────────────
 async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
@@ -551,9 +587,10 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             "если идея/мысль → add_note с tags='идея'; "
             "если факт о проекте/решение → remember_fact. "
             "Не спрашивай 'сохранить?', 'куда записать?' — просто сохраняй и кратко подтверди. "
-            "ПОДТВЕРЖДЕНИЯ: для инструментов create_calendar_event, add_reminder, add_note, remember_fact "
+            "ПОДТВЕРЖДЕНИЯ: для инструментов create_calendar_event, add_reminder, add_note "
             "пользователь уже видит мгновенное ✅-подтверждение. Не повторяй его содержимое. "
-            "Добавляй только если есть что-то существенное (контекст, уточнение) — иначе промолчи."
+            "Для remember_fact — пользователь видит запрос на подтверждение с кнопками ✅/✏️/❌. "
+            "Не добавляй ничего лишнего — просто скажи что отправил на подтверждение."
             f"{knowledge_section}"
             f"{memory_section}"
         ),
@@ -579,11 +616,9 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
                 messages.append({"role": "assistant", "content": _strip_dsml(content) or ""})
                 results_parts = []
                 for name, args in dsml_calls:
-                    result = execute_tool(name, args, user_id)
+                    result = await _execute_and_notify(name, args, user_id, chat_id)
                     results_parts.append(f"[{name}]: {result}")
                     total_tool_calls += 1
-                    if name in _ACTION_TOOLS:
-                        await bot.send_message(chat_id, f"✅ {result}")
                 messages.append({
                     "role": "user",
                     "content": "Результаты инструментов:\n\n" + "\n\n".join(results_parts) + "\n\nОтветь пользователю текстом.",
@@ -603,14 +638,12 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
 
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments)
-            result = execute_tool(tc.function.name, args, user_id)
+            result = await _execute_and_notify(tc.function.name, args, user_id, chat_id)
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
-                "content": str(result),
+                "content": result,
             })
-            if tc.function.name in _ACTION_TOOLS:
-                await bot.send_message(chat_id, f"✅ {result}")
 
         # После выполнения API tool_calls — делаем финальный вызов без tools
         # DeepSeek склонен петлять с повторными поисками; без tools он обязан ответить текстом
@@ -625,10 +658,8 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
         if dsml_final:
             results_parts = []
             for name, args in dsml_final:
-                r = execute_tool(name, args, user_id)
+                r = await _execute_and_notify(name, args, user_id, chat_id)
                 results_parts.append(f"[{name}]: {r}")
-                if name in _ACTION_TOOLS:
-                    await bot.send_message(chat_id, f"✅ {r}")
             # Последняя попытка — text-only с результатами
             messages.append({"role": "user", "content": "Результаты:\n" + "\n".join(results_parts) + "\n\nОтветь пользователю текстом."})
             last_resp = await ai_client.chat.completions.create(model=config.MODEL, messages=messages, max_tokens=2000)
@@ -712,6 +743,23 @@ async def cmd_memory(message: Message):
         return
     await message.answer(mem_tool.list_memories())
 
+
+@dp.message(Command("facts"))
+async def cmd_facts(message: Message):
+    """Показывает факты, ожидающие подтверждения."""
+    if not is_allowed(message.from_user.id):
+        return
+    pending = mem_tool.get_pending_facts()
+    if not pending:
+        await message.answer("✅ Нет фактов на проверке.")
+        return
+    await message.answer(f"⏳ Факты на проверке ({len(pending)}):")
+    for f in pending:
+        await message.answer(
+            f"#{f['id']} [{f['category']}]: {f['text']}",
+            reply_markup=_fact_approval_keyboard(f["id"]),
+        )
+
 @dp.message(Command("restart"))
 async def cmd_restart(message: Message):
     if not is_allowed(message.from_user.id):
@@ -764,11 +812,53 @@ async def handle_snooze(callback: CallbackQuery):
         )
         await callback.answer(f"Отложено: {label}")
 
+# ── Подтверждение фактов ─────────────────────────────────────
+@dp.callback_query(F.data.startswith("fact_ok_"))
+async def handle_fact_approve(callback: CallbackQuery):
+    if not is_allowed(callback.from_user.id):
+        return
+    fact_id = int(callback.data.split("_")[2])
+    result = mem_tool.approve_fact(fact_id)
+    await callback.message.edit_text(f"✅ {result}", reply_markup=None)
+    await callback.answer("Сохранено!")
+
+
+@dp.callback_query(F.data.startswith("fact_fix_"))
+async def handle_fact_fix(callback: CallbackQuery):
+    if not is_allowed(callback.from_user.id):
+        return
+    fact_id = int(callback.data.split("_")[2])
+    _awaiting_correction[callback.from_user.id] = fact_id
+    await callback.message.edit_text(
+        callback.message.text + "\n\n✏️ _Введи правильный текст:_",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("fact_no_"))
+async def handle_fact_deny(callback: CallbackQuery):
+    if not is_allowed(callback.from_user.id):
+        return
+    fact_id = int(callback.data.split("_")[2])
+    mem_tool.reject_fact(fact_id)
+    await callback.message.edit_text("❌ Факт отклонён", reply_markup=None)
+    await callback.answer("Отклонено")
+
+
 # ── Обработка сообщений ───────────────────────────────────────
 @dp.message(F.text | F.voice)
 async def handle_message(message: Message):
     user_id = message.from_user.id
     if not is_allowed(user_id):
+        return
+
+    # Режим исправления факта: следующее сообщение — новый текст факта
+    if message.text and user_id in _awaiting_correction:
+        fact_id = _awaiting_correction.pop(user_id)
+        result = mem_tool.correct_fact(fact_id, message.text.strip())
+        await message.answer(f"✅ {result}")
         return
 
     if message.voice:
