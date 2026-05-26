@@ -16,3 +16,15 @@ KNOWLEDGE_DIR = "/home/parser/bots/assistant/knowledge"
 
 # Google Sheets — Задачи недели (aihotel ВК Губаха)
 STRATEGY_SHEET_ID = "11eaWcbY1pFMfniACcpZkodJgLOzTRpbXmyejSK9LEQ4"
+
+# Email (отправка файлов с Mac)
+MAIL_FROM = "ab@entens.ru"
+FILE_INDEX_PATH = "/home/parser/bots/assistant/data/file_index.json"
+FILE_REQUEST_PATH = "/home/parser/bots/assistant/data/file_request.json"
+EMAIL_CONTACTS = {
+    "Катя": "info@entens.ru",
+    "Виктор": "karpenko@entens.ru",
+    "Алексей": "ap@entens.ru",
+    "Алексей рабочая": "ap@entens.ru",
+    "Алексей личная": "aprosandeev@mail.ru",
+}

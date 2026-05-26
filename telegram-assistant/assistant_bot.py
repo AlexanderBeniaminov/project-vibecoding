@@ -74,7 +74,7 @@ import openai
 
 import config
 from tools.db import init_db
-from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, team_tasks
+from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, team_tasks, email_tool
 
 # ── Инициализация ─────────────────────────────────────────────
 bot = Bot(token=config.TELEGRAM_TOKEN)
@@ -372,7 +372,52 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
-    # search_files удалён — поиск файлов теперь через OpenClaw на Mac
+    {
+        "type": "function",
+        "function": {
+            "name": "search_files",
+            "description": (
+                "Найти файл на Mac Александра по имени или ключевым словам. "
+                "Используй когда просят найти файл, документ, PDF, отчёт и т.п. "
+                "Возвращает список найденных файлов с путями."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Имя файла или ключевые слова"}
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_file_email",
+            "description": (
+                "Отправить файл с Mac на email. Вызывай после того как пользователь подтвердил "
+                "какой файл и кому отправить. Принимает полный путь к файлу из search_files. "
+                "Известные контакты: Катя, Виктор, Алексей (рабочая), Алексей (личная)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string", "description": "Полный путь к файлу (из результата search_files)"},
+                    "to_name": {"type": "string", "description": "Имя получателя из адресной книги или email напрямую"},
+                    "subject": {"type": "string", "description": "Тема письма (необязательно, по умолчанию — имя файла)"},
+                },
+                "required": ["file_path", "to_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_send_status",
+            "description": "Проверить статус последней отправки файла по email.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -483,6 +528,12 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             return "Перезапуск инициирован. Бот перезапустится через 2-3 секунды."
+        elif name == "search_files":
+            return email_tool.search_files(args["query"])
+        elif name == "send_file_email":
+            return email_tool.send_file_email(args["file_path"], args["to_name"], args.get("subject", ""))
+        elif name == "check_send_status":
+            return email_tool.check_send_status()
         elif name == "add_team_task":
             return team_tasks.add_team_task(
                 args["executor"],
@@ -514,6 +565,7 @@ _ACTION_TOOLS = {
     "create_calendar_event", "add_reminder", "add_note",
     "delete_note", "cancel_reminder",
     "forget_fact", "update_knowledge",
+    "send_file_email",
 }
 
 # Состояние: user_id → fact_id (ожидаем исправление текста факта)
@@ -563,9 +615,12 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
         "content": (
             f"Ты мобильный ассистент Александра Бениаминова — работаешь 24/7 с телефона. "
             f"Сейчас {datetime.now(_MSK).strftime('%d.%m.%Y %H:%M')} МСК.\n"
-            "Твоя зона: напоминалки, заметки, Google Calendar, командные задачи, веб-поиск. "
-            "Файлы на Mac, браузер, работа с документами — это зона OpenClaw-бота на Mac Александра: "
-            "если просят найти файл или поработать с документами — скажи обратиться к @OClaw-боту. "
+            "Твоя зона: напоминалки, заметки, Google Calendar, командные задачи, веб-поиск, "
+            "поиск файлов на Mac и отправка файлов по email. "
+            "Для поиска файлов — вызови search_files, покажи результаты, дождись подтверждения пользователя, "
+            "затем вызови send_file_email с полным путём файла и именем получателя. "
+            "Адресная книга: Катя (info@entens.ru), Виктор (karpenko@entens.ru), "
+            "Алексей рабочая (ap@entens.ru), Алексей личная (aprosandeev@mail.ru). "
             "Правила: отвечай максимум 2-3 предложения, только по последнему вопросу, без списков. "
             "После вызова инструмента — одно короткое подтверждение. "
             "Если узнал что-то важное о пользователе или проектах — вызови remember_fact. "
