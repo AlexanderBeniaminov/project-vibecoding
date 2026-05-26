@@ -891,38 +891,62 @@ async def transcribe_voice(message: Message) -> str:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
+_WHISPER_SUPPORTED = {".mp3", ".mp4", ".m4a", ".wav", ".ogg", ".webm", ".flac", ".opus", ".mpeg", ".mpga"}
+_NEEDS_CONVERT = {".amr", ".aac", ".3gp", ".3gpp", ".caf", ".wma"}
+
+async def _convert_to_mp3(src_path: str) -> str:
+    """Конвертирует аудио в mp3 через ffmpeg. Возвращает путь к новому файлу."""
+    dst_path = src_path + ".mp3"
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-y", "-i", src_path, "-ar", "16000", "-ac", "1", "-b:a", "64k", dst_path,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await proc.wait()
+    if not os.path.exists(dst_path) or os.path.getsize(dst_path) < 100:
+        raise RuntimeError("ffmpeg не смог сконвертировать файл")
+    return dst_path
+
+
 async def transcribe_audio_file(file_id: str, filename: str = "audio.m4a") -> str:
     """Транскрибирует аудиофайл (запись звонка от Cube ACR и других источников)."""
     from groq import Groq
     ext = Path(filename).suffix.lower()
-    if ext not in {".mp3", ".mp4", ".m4a", ".wav", ".ogg", ".webm", ".aac", ".flac"}:
-        ext = ".m4a"
-    mime_map = {".mp3": "audio/mpeg", ".mp4": "audio/mp4", ".m4a": "audio/mp4",
-                ".wav": "audio/wav", ".ogg": "audio/ogg", ".webm": "audio/webm",
-                ".aac": "audio/aac", ".flac": "audio/flac"}
-    mime = mime_map.get(ext, "audio/mp4")
     tg_file = await bot.get_file(file_id)
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
         tmp_path = tmp.name
+    converted_path = None
     try:
         await bot.download_file(tg_file.file_path, tmp_path)
         if os.path.getsize(tmp_path) < 100:
             return "[Не удалось распознать: пустой аудиофайл]"
+
+        # AMR и другие форматы не поддерживает Whisper — конвертируем через ffmpeg
+        if ext in _NEEDS_CONVERT or ext not in _WHISPER_SUPPORTED:
+            logging.info(f"[Whisper] конвертирую {ext} → mp3")
+            converted_path = await _convert_to_mp3(tmp_path)
+            audio_path, audio_name, mime = converted_path, "audio.mp3", "audio/mpeg"
+        else:
+            mime_map = {".mp3": "audio/mpeg", ".mp4": "audio/mp4", ".m4a": "audio/mp4",
+                        ".wav": "audio/wav", ".ogg": "audio/ogg", ".webm": "audio/webm",
+                        ".flac": "audio/flac", ".opus": "audio/opus"}
+            audio_path, audio_name, mime = tmp_path, filename, mime_map.get(ext, "audio/mpeg")
+
         groq_client = Groq(api_key=config.GROQ_API_KEY)
         ru_prompt = "Это запись телефонного разговора на русском языке."
-        with open(tmp_path, "rb") as f:
+        with open(audio_path, "rb") as f:
             tr = groq_client.audio.transcriptions.create(
                 model="whisper-large-v3-turbo",
-                file=(filename, f, mime),
+                file=(audio_name, f, mime),
                 language="ru",
                 prompt=ru_prompt,
             )
         result = tr.text.strip()
         if _is_whisper_hallucination(result):
-            with open(tmp_path, "rb") as f:
+            with open(audio_path, "rb") as f:
                 tr2 = groq_client.audio.transcriptions.create(
                     model="whisper-large-v3",
-                    file=(filename, f, mime),
+                    file=(audio_name, f, mime),
                     language="ru",
                     prompt=ru_prompt,
                 )
@@ -936,6 +960,8 @@ async def transcribe_audio_file(file_id: str, filename: str = "audio.m4a") -> st
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+        if converted_path and os.path.exists(converted_path):
+            os.unlink(converted_path)
 
 
 _CALL_SUMMARY_SYSTEM = """Ты составляешь саммари телефонного разговора.
