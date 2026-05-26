@@ -88,6 +88,7 @@ ai_client = openai.AsyncOpenAI(
 )
 
 histories: dict[int, list[dict]] = {}
+_pending_call_summaries: dict[int, str] = {}  # саммари звонков ожидающие действия
 
 # ── База знаний ───────────────────────────────────────────────
 def _load_knowledge() -> str:
@@ -890,6 +891,88 @@ async def transcribe_voice(message: Message) -> str:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
+async def transcribe_audio_file(file_id: str, filename: str = "audio.m4a") -> str:
+    """Транскрибирует аудиофайл (запись звонка от Cube ACR и других источников)."""
+    from groq import Groq
+    ext = Path(filename).suffix.lower()
+    if ext not in {".mp3", ".mp4", ".m4a", ".wav", ".ogg", ".webm", ".aac", ".flac"}:
+        ext = ".m4a"
+    mime_map = {".mp3": "audio/mpeg", ".mp4": "audio/mp4", ".m4a": "audio/mp4",
+                ".wav": "audio/wav", ".ogg": "audio/ogg", ".webm": "audio/webm",
+                ".aac": "audio/aac", ".flac": "audio/flac"}
+    mime = mime_map.get(ext, "audio/mp4")
+    tg_file = await bot.get_file(file_id)
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        await bot.download_file(tg_file.file_path, tmp_path)
+        if os.path.getsize(tmp_path) < 100:
+            return "[Не удалось распознать: пустой аудиофайл]"
+        groq_client = Groq(api_key=config.GROQ_API_KEY)
+        ru_prompt = "Это запись телефонного разговора на русском языке."
+        with open(tmp_path, "rb") as f:
+            tr = groq_client.audio.transcriptions.create(
+                model="whisper-large-v3-turbo",
+                file=(filename, f, mime),
+                language="ru",
+                prompt=ru_prompt,
+            )
+        result = tr.text.strip()
+        if _is_whisper_hallucination(result):
+            with open(tmp_path, "rb") as f:
+                tr2 = groq_client.audio.transcriptions.create(
+                    model="whisper-large-v3",
+                    file=(filename, f, mime),
+                    language="ru",
+                    prompt=ru_prompt,
+                )
+            result = tr2.text.strip()
+        if _is_whisper_hallucination(result):
+            return "[Не удалось распознать запись звонка. Попробуй переслать файл ещё раз.]"
+        return result
+    except Exception as e:
+        logging.error(f"[Whisper] ошибка транскрипции файла: {e}")
+        return f"[Не удалось распознать: {e}]"
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+_CALL_SUMMARY_SYSTEM = """Ты составляешь саммари телефонного разговора.
+Выдели самое важное в структурированном виде. Будь конкретным — имена, цифры, даты.
+Если чего-то нет в разговоре — не придумывай, просто пропусти блок."""
+
+async def _generate_call_summary(transcript: str, user_id: int, chat_id: int) -> str:
+    prompt = f"""Составь саммари этого телефонного разговора:
+
+{transcript}
+
+Формат:
+👥 *Участники:* [имена или описания сторон]
+
+✅ *Договорённости:*
+• [каждая договорённость отдельной строкой]
+
+📋 *Мои задачи:*
+• [задача — дедлайн если упоминался]
+
+❓ *Открытые вопросы:* [если есть, иначе пропусти блок]"""
+    try:
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[
+                {"role": "system", "content": _CALL_SUMMARY_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=600,
+            temperature=0.3,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        logging.error(f"[CallSummary] ошибка: {e}")
+        return "Не удалось составить саммари. Транскрипция выше — используй её вручную."
+
+
 # ── Доступ ────────────────────────────────────────────────────
 def is_allowed(user_id: int) -> bool:
     return not config.ALLOWED_USER_IDS or user_id in config.ALLOWED_USER_IDS
@@ -1045,6 +1128,74 @@ async def handle_fact_deny(callback: CallbackQuery):
     mem_tool.reject_fact(fact_id)
     await callback.message.edit_text("❌ Факт отклонён", reply_markup=None)
     await callback.answer("Отклонено")
+
+
+# ── Запись звонков → саммари ─────────────────────────────────
+@dp.message(F.audio | F.document)
+async def handle_audio_file(message: Message):
+    user_id = message.from_user.id
+    if not is_allowed(user_id):
+        return
+    if message.document:
+        mime = message.document.mime_type or ""
+        if not mime.startswith("audio/"):
+            return
+        file_id = message.document.file_id
+        filename = message.document.file_name or "audio.m4a"
+    else:
+        file_id = message.audio.file_id
+        filename = message.audio.file_name or "audio.m4a"
+
+    await message.answer("🎙 Транскрибирую запись звонка...")
+    transcript = await transcribe_audio_file(file_id, filename)
+    if transcript.startswith("[Не удалось"):
+        await message.answer(transcript)
+        return
+
+    # Транскрипция — отправляем отдельно (может быть длинной)
+    preview = transcript if len(transcript) <= 3000 else transcript[:3000] + "…"
+    await message.answer(f"📝 *Транскрипция:*\n_{preview}_", parse_mode="Markdown")
+
+    await message.answer("🤔 Составляю саммари...")
+    summary = await _generate_call_summary(transcript, user_id, message.chat.id)
+    _pending_call_summaries[user_id] = summary
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="📅 Создать напоминания", callback_data="call_remind"),
+        InlineKeyboardButton(text="💾 В заметки", callback_data="call_save"),
+    ]])
+    await message.answer(f"📋 *Саммари звонка:*\n\n{summary}", reply_markup=kb, parse_mode="Markdown")
+
+
+@dp.callback_query(F.data == "call_remind")
+async def call_remind_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    summary = _pending_call_summaries.get(user_id, "")
+    if not summary:
+        await callback.answer("Саммари не найдено")
+        return
+    await callback.message.edit_reply_markup(reply_markup=None)
+    # Передаём саммари в основной обработчик как запрос на создание напоминаний
+    history = histories.setdefault(user_id, [])
+    history.append({"role": "user", "content": f"Создай напоминания по задачам из этого саммари звонка:\n{summary}"})
+    response = await run_llm(history, user_id, callback.message.chat.id)
+    history.append({"role": "assistant", "content": response})
+    await callback.message.answer(response)
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "call_save")
+async def call_save_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    summary = _pending_call_summaries.pop(user_id, "")
+    if not summary:
+        await callback.answer("Саммари не найдено")
+        return
+    await callback.message.edit_reply_markup(reply_markup=None)
+    note_text = f"Звонок {datetime.now(_MSK).strftime('%d.%m.%Y %H:%M')}:\n{summary}"
+    result = notes.add_note(note_text)
+    await callback.message.answer(f"💾 {result}")
+    await callback.answer()
 
 
 # ── Обработка сообщений ───────────────────────────────────────
