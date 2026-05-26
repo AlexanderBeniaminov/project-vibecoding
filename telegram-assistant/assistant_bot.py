@@ -47,6 +47,68 @@ def _clean_response(text: str) -> str:
     return text.strip() or "(пустой ответ)"
 
 
+# ── Проектные заметки → Google Sheets ─────────────────────────────
+_PROJECT_NOTES_SHEET_ID = "1aiCKUs-Le-adHSfAOOC2AHRs1vCWzm-E3lucPTbRRkc"
+_PROJECT_SA = "/home/parser/config/personal/service_account.json"
+_PROJECT_MAP = {
+    "губаха": "Губаха", "губахи": "Губаха", "губахе": "Губаха", "губаху": "Губаха",
+    "юникорн": "Юникорн", "unicorn": "Юникорн",
+    "прочее": "Прочее", "проче": "Прочее", "офис": "Прочее",
+    "разное": "Прочее", "общее": "Прочее",
+}
+
+
+async def _save_project_note(project_raw: str, text: str) -> str:
+    """Асинхронная обёртка — запускает синхронный Sheets API в executor."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _save_project_note_sync, project_raw, text)
+
+
+def _save_project_note_sync(project_raw: str, text: str) -> str:
+    from google.oauth2.service_account import Credentials
+    from googleapiclient.discovery import build
+    from datetime import datetime as _dt
+
+    key = project_raw.strip().lower()
+    project = _PROJECT_MAP.get(key, project_raw.strip().capitalize())
+
+    now = _dt.now()
+    row = [now.strftime("%d.%m.%Y"), now.strftime("%H:%M"), text.strip()]
+
+    try:
+        creds = Credentials.from_service_account_file(
+            _PROJECT_SA, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        svc = build("sheets", "v4", credentials=creds, cache_discovery=False)
+
+        # Проверяем — есть ли лист, если нет — создаём
+        meta = svc.spreadsheets().get(spreadsheetId=_PROJECT_NOTES_SHEET_ID).execute()
+        existing = [s["properties"]["title"] for s in meta["sheets"]]
+        if project not in existing:
+            svc.spreadsheets().batchUpdate(
+                spreadsheetId=_PROJECT_NOTES_SHEET_ID,
+                body={"requests": [{"addSheet": {"properties": {"title": project}}}]}
+            ).execute()
+            svc.spreadsheets().values().update(
+                spreadsheetId=_PROJECT_NOTES_SHEET_ID,
+                range=f"'{project}'!A1:C1",
+                valueInputOption="USER_ENTERED",
+                body={"values": [["Дата", "Время", "Мысль / Идея / План"]]}
+            ).execute()
+
+        svc.spreadsheets().values().append(
+            spreadsheetId=_PROJECT_NOTES_SHEET_ID,
+            range=f"'{project}'!A:C",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [row]},
+        ).execute()
+        return f"✅ Записано в *{project}*:\n_{text.strip()}_"
+    except Exception as e:
+        return f"❌ Ошибка записи в Sheets: {e}"
+
+
 def _parse_dsml_tool_calls(text: str) -> list[tuple[str, dict]]:
     """Парсит DSML-формат тул-коллов из текста ответа модели."""
     if not _DSML_CHECK_RE.search(text):
@@ -1310,6 +1372,18 @@ async def handle_message(message: Message):
         await message.answer(f"🎙 _{text}_", parse_mode="Markdown")
     else:
         text = message.text
+
+    # ── Детектор «проект X» → запись в Google Sheets ──────────────
+    _project_match = re.match(
+        r"(?:для\s+)?проект(?:а|е|у)?\s+(губах[аиу]?|юникорн|unicorn|прочее?|офис|разное|общее)\W+(.+)",
+        text.strip(), re.IGNORECASE | re.DOTALL
+    )
+    if _project_match:
+        _proj_raw = _project_match.group(1).strip()
+        _proj_text = _project_match.group(2).strip()
+        await message.answer(await _save_project_note(_proj_raw, _proj_text), parse_mode="Markdown")
+        return
+    # ──────────────────────────────────────────────────────────────
 
     history = histories.setdefault(user_id, [])
     history.append({"role": "user", "content": text})
