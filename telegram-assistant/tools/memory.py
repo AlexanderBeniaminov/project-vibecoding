@@ -99,6 +99,8 @@ def get_recent_summary(limit: int = 5) -> str:
 _KNOWLEDGE_FILES = {
     "projects": "projects.md",
     "user": "user.md",
+    "bot_facts": "bot_facts.md",  # факты из Telegram-диалогов
+    "facts": "bot_facts.md",      # алиас
 }
 
 def update_knowledge(target: str, content: str, mode: str = "append") -> str:
