@@ -256,6 +256,23 @@ def _read_range(sa_path: str, sheet_id: str, range_str: str) -> list:
         spreadsheetId=sheet_id, range=range_str
     ).execute().get("values", [])
 
+def _extract_answer(text: str) -> str:
+    """Вырезает финальный ответ из текста с рассуждениями DeepSeek."""
+    if not text:
+        return ""
+    # Убираем мета-фразы про промпт и рассуждения
+    text = re.sub(
+        r'.*?(выручка|загрузка|гости|adr|revpar|доход|данных|уточни)',
+        lambda m: m.group(0)[m.start(1):],
+        text, count=1, flags=re.IGNORECASE | re.DOTALL
+    )
+    # Берём только первое предложение/строку с цифрой или вопросом
+    for line in text.split("\n"):
+        line = line.strip().strip('"«»')
+        if line and (re.search(r'\d', line) or line.endswith("?")):
+            return line
+    return text.strip()[:200]
+
 def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
     """Передаёт LLM только нужные строки в формате 'метрика: значение'."""
     import urllib.request
@@ -265,15 +282,14 @@ def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
         "model": config.MODEL,
         "messages": [
             {"role": "system", "content": (
-                f"Ты аналитик. Сегодня {today}. "
-                "ЗАПРЕЩЕНО: рассуждать, объяснять, думать вслух. "
-                "ОБЯЗАТЕЛЬНО: ответить ОДНОЙ строкой — метрика и цифра. "
-                f"Пример: «Выручка {context}: 4 823 500 ₽». "
-                "Если нужной цифры нет — задай один уточняющий вопрос."
+                f"Сегодня {today}. Данные: {context}. "
+                f"Ответь на вопрос пользователя. "
+                f"Формат ответа СТРОГО: «[Метрика] [период]: [число] ₽» — и больше ничего. "
+                f"Если данных нет — напиши только один вопрос для уточнения."
             )},
-            {"role": "user", "content": f"Данные ({context}):\n{table_str}\n\nВопрос: {question}\n\nОдна строка:"}
+            {"role": "user", "content": f"{table_str}\n\n{question}"}
         ],
-        "max_tokens": 80, "temperature": 0.0,
+        "max_tokens": 60, "temperature": 0.0,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -284,7 +300,8 @@ def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
     with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.loads(resp.read().decode("utf-8"))
     msg = result["choices"][0]["message"]
-    return (msg.get("content") or "").strip() or (msg.get("reasoning") or "")[-200:]
+    raw = (msg.get("content") or "").strip() or (msg.get("reasoning") or "")[-200:]
+    return _extract_answer(raw)
 
 def _monblan_monthly_sync(month: int, year: int, question: str) -> str:
     """Читает Монблан ЕжеМесячный: находит нужную колонку по дате YYYY-MM."""
