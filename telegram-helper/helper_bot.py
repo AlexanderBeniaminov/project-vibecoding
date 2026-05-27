@@ -62,6 +62,20 @@ def _system_prompt() -> str:
         "4. Никогда не выдумывай данные и не рассуждай вслух."
     )
 
+# ── Нормализация ASR-ошибок Whisper ──────────────────────────────
+_ASR_FIXES = [
+    # Монблан — частые ошибки распознавания
+    (r'\bмаун\w*лан\w*', 'монблан'),
+    (r'\bман\w*лан\w*', 'монблан'),
+    (r'\bмонб\w{2,}\b', 'монблан'),
+    (r'\bmont\s*blanc\b', 'монблан'),
+]
+def _fix_asr(text: str) -> str:
+    result = text
+    for pattern, replacement in _ASR_FIXES:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    return result
+
 # ── Очистка ответа ────────────────────────────────────────────────
 def _clean(text: str) -> str:
     text = re.sub(r'<\|?\s*(?:think|thinking|DSML)\s*\|?>.*?<\|?\s*/?\s*(?:think|thinking|DSML)\s*\|?>', '', text, flags=re.DOTALL | re.IGNORECASE)
@@ -264,22 +278,34 @@ def _read_range(sa_path: str, sheet_id: str, range_str: str) -> list:
         spreadsheetId=sheet_id, range=range_str
     ).execute().get("values", [])
 
-def _extract_answer(text: str) -> str:
+def _extract_answer(text: str, question: str = "") -> str:
     """Вырезает финальный ответ из текста с рассуждениями DeepSeek."""
     if not text:
         return ""
-    # Убираем мета-фразы про промпт и рассуждения
-    text = re.sub(
-        r'.*?(выручка|загрузка|гости|adr|revpar|доход|данных|уточни)',
-        lambda m: m.group(0)[m.start(1):],
-        text, count=1, flags=re.IGNORECASE | re.DOTALL
-    )
-    # Берём только первое предложение/строку с цифрой или вопросом
+    # Убираем кавычки и артефакты в начале
+    text = text.strip().strip('"«»').strip()
+    # Если ответ — эхо вопроса (похоже на повтор), возвращаем пусто
+    if question:
+        q_words = set(re.findall(r'\w{4,}', question.lower()))
+        a_words = set(re.findall(r'\w{4,}', text.lower()))
+        overlap = len(q_words & a_words) / max(len(q_words), 1)
+        if overlap > 0.6 and not re.search(r'\d{3,}', text):
+            return "Нет данных за этот период."
+    # Ищем строку с числом (ответ с цифрой) или вопросом
     for line in text.split("\n"):
-        line = line.strip().strip('"«»')
-        if line and (re.search(r'\d', line) or line.endswith("?")):
+        line = line.strip().strip('"«»').strip()
+        if not line:
+            continue
+        if re.search(r'\d{3,}', line):   # есть число ≥ 3 цифр — это цифра выручки
             return line
-    return text.strip()[:200]
+        if line.endswith("?"):            # уточняющий вопрос
+            return line
+    # Fallback — первая непустая строка
+    for line in text.split("\n"):
+        line = line.strip()
+        if line:
+            return line[:200]
+    return text[:200]
 
 def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
     """Передаёт LLM только нужные строки в формате 'метрика: значение'."""
@@ -287,17 +313,17 @@ def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
     today = datetime.now(_MSK).strftime("%d.%m.%Y")
     table_str = "\n".join(rows_kv[:60])
     payload = {
-        "model": config.MODEL,
+        "model": config.VISION_MODEL,   # Claude Sonnet — точнее следует формату
         "messages": [
             {"role": "system", "content": (
-                f"Сегодня {today}. Данные: {context}. "
-                f"Ответь на вопрос пользователя. "
-                f"Формат ответа СТРОГО: «[Метрика] [период]: [число] ₽» — и больше ничего. "
-                f"Если данных нет — напиши только один вопрос для уточнения."
+                f"Сегодня {today}. Источник: {context}. "
+                "Ответь на вопрос ОДНОЙ строкой: «[Метрика] [период]: [число] ₽». "
+                "Только цифра из данных. Никаких пояснений. "
+                "Если нужного периода нет — задай один уточняющий вопрос."
             )},
-            {"role": "user", "content": f"{table_str}\n\n{question}"}
+            {"role": "user", "content": f"Данные:\n{table_str}\n\nВопрос: {question}"}
         ],
-        "max_tokens": 60, "temperature": 0.0,
+        "max_tokens": 80, "temperature": 0.0,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -308,8 +334,8 @@ def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
     with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.loads(resp.read().decode("utf-8"))
     msg = result["choices"][0]["message"]
-    raw = (msg.get("content") or "").strip() or (msg.get("reasoning") or "")[-200:]
-    return _extract_answer(raw)
+    raw = (msg.get("content") or "").strip()
+    return _extract_answer(raw, question)
 
 def _monblan_monthly_sync(month: int, year: int, question: str) -> str:
     """Читает Монблан ЕжеМесячный: находит нужную колонку по дате YYYY-MM."""
@@ -727,6 +753,7 @@ async def handle_message(message: Message):
         if text.startswith("[Не удалось"):
             await message.answer(text)
             return
+        text = _fix_asr(text)   # исправляем ошибки Whisper
         await message.answer(f"🎙 _{text}_", parse_mode="Markdown")
     else:
         text = message.text
