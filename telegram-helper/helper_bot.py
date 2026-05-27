@@ -205,38 +205,75 @@ _CRM_TRIGGERS = ["договорились с ", "сказал ", " хочет "
 # ══════════════════════════════════════════════════════════════════
 # БЛОК 3: ДАННЫЕ ИЗ ТАБЛИЦ
 # ══════════════════════════════════════════════════════════════════
-def _sheets_read(sa_path: str, sheet_id: str, range_str: str) -> list:
+
+# ID таблиц (из Drive-папки 1mfJEc9_XefwJQUWbfnMLOFf7EKSKEJgL)
+_MONBLAN_ID    = "1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI"  # Отчет из IIKO
+_GOG_MONTHLY_ID = "1ADBN7fecyqFvEG6igJfVfwG2vso6oW742y3-ai9ps8c" # ЕжеМесячный отчет ГОГ
+_GOG_WEEKLY_ID  = "1Ohm7tst750zDzSeIewJFj_cPC6vl0-5J0UiuNfZvY_k" # ЕжеНедельный отчет ГОГ
+
+_MONTH_NUM = {
+    "январ": 1, "феврал": 2, "март": 3, "марта": 3, "апрел": 4,
+    "май": 5, "мая": 5, "июн": 6, "июл": 7,
+    "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12,
+}
+_MONTH_RU = {
+    1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",
+    5: "Май", 6: "Июнь", 7: "Июль", 8: "Август",
+    9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь",
+}
+
+def _idx_to_col(i: int) -> str:
+    """Индекс колонки → буква (0=A, 26=AA, ...)"""
+    if i < 26:
+        return chr(65 + i)
+    return chr(64 + i // 26) + chr(65 + i % 26)
+
+def _parse_month_year(q: str) -> tuple:
+    """Извлекает (месяц: int, год: int) из текста запроса."""
+    year = datetime.now().year
+    # Год: "26 года", "2026", "25", "2025"
+    y_m = re.search(r'\b(20(\d{2})|(\d{2}))\s*(?:год|г\.?)?', q)
+    if y_m:
+        raw = y_m.group(1)
+        y = int(raw)
+        year = 2000 + y if y < 100 else y
+    # Месяц
+    for prefix, num in _MONTH_NUM.items():
+        if prefix in q:
+            return (num, year)
+    return (None, year)
+
+def _sheets_svc(sa_path: str):
     from google.oauth2.service_account import Credentials
     from googleapiclient.discovery import build
     creds = Credentials.from_service_account_file(
         sa_path, scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
-    svc = build("sheets", "v4", credentials=creds, cache_discovery=False)
-    return svc.spreadsheets().values().get(
+    return build("sheets", "v4", credentials=creds, cache_discovery=False)
+
+def _read_range(sa_path: str, sheet_id: str, range_str: str) -> list:
+    return _sheets_svc(sa_path).spreadsheets().values().get(
         spreadsheetId=sheet_id, range=range_str
     ).execute().get("values", [])
 
-def _ask_ai_sync(table_data: list, query: str, context: str) -> str:
+def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
+    """Передаёт LLM только нужные строки в формате 'метрика: значение'."""
     import urllib.request
-    rows_text = [" | ".join(str(c) for c in row[:20]) for row in table_data[:40]]
-    table_str = "\n".join(rows_text)
-    today = datetime.now().strftime("%d.%m.%Y")
+    today = datetime.now(_MSK).strftime("%d.%m.%Y")
+    table_str = "\n".join(rows_kv[:60])
     payload = {
         "model": config.MODEL,
         "messages": [
             {"role": "system", "content": (
-                f"Ты аналитик данных. Сегодня {today}. "
-                "ЗАПРЕЩЕНО: рассуждать, объяснять структуру таблицы, думать вслух, писать промежуточные вычисления. "
-                "РАЗРЕШЕНО только одно из двух: "
-                "A) Если ответ есть в данных — одна строка с цифрой. Формат: «[Метрика] за [период]: [число] ₽». "
-                "B) Если ответа нет или запрос неоднозначен — один короткий уточняющий вопрос. "
-                "Примеры правильных ответов: "
-                "«Выручка Монблан за апрель 2026: 4 823 500 ₽» "
-                "«За какой год интересует апрель — 2025 или 2026?»"
+                f"Ты аналитик. Сегодня {today}. "
+                "ЗАПРЕЩЕНО: рассуждать, объяснять, думать вслух. "
+                "ОБЯЗАТЕЛЬНО: ответить ОДНОЙ строкой — метрика и цифра. "
+                f"Пример: «Выручка {context}: 4 823 500 ₽». "
+                "Если нужной цифры нет — задай один уточняющий вопрос."
             )},
-            {"role": "user", "content": f"Таблица ({context}):\n{table_str}\n\nВопрос пользователя: {query}\n\nОтвет (одна строка):"}
+            {"role": "user", "content": f"Данные ({context}):\n{table_str}\n\nВопрос: {question}\n\nОдна строка:"}
         ],
-        "max_tokens": 100, "temperature": 0.0,
+        "max_tokens": 80, "temperature": 0.0,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -247,36 +284,95 @@ def _ask_ai_sync(table_data: list, query: str, context: str) -> str:
     with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.loads(resp.read().decode("utf-8"))
     msg = result["choices"][0]["message"]
-    content = (msg.get("content") or "").strip()
-    return content or (msg.get("reasoning") or "")[-500:]
+    return (msg.get("content") or "").strip() or (msg.get("reasoning") or "")[-200:]
+
+def _monblan_monthly_sync(month: int, year: int, question: str) -> str:
+    """Читает Монблан ЕжеМесячный: находит нужную колонку по дате YYYY-MM."""
+    svc = _sheets_svc(config.MONBLAN_SA)
+    # Строка 2 содержит даты вида "2026-04"
+    header = svc.spreadsheets().values().get(
+        spreadsheetId=_MONBLAN_ID, range="ЕжеМесячный!A2:AZ2"
+    ).execute().get("values", [[]])[0]
+    target = f"{year}-{month:02d}"
+    if target not in header:
+        return f"Данных Монблан за {_MONTH_RU.get(month, month)} {year} нет в таблице."
+    col_idx = header.index(target)
+    col_letter = _idx_to_col(col_idx)
+    # Читаем метки (колонка A) и целевую колонку
+    rows = svc.spreadsheets().values().get(
+        spreadsheetId=_MONBLAN_ID, range=f"ЕжеМесячный!A3:{col_letter}60"
+    ).execute().get("values", [])
+    kv = []
+    for row in rows:
+        label = row[0].strip() if row and row[0] else ""
+        value = row[col_idx].strip() if len(row) > col_idx and row[col_idx] else ""
+        if label and value and not label.startswith("%"):
+            kv.append(f"{label}: {value}")
+    ctx = f"Монблан {_MONTH_RU.get(month, month)} {year}"
+    return _ask_sheets_ai(kv, question, ctx)
+
+def _gog_monthly_sync(month: int, year: int, question: str) -> str:
+    """Читает ГОГ ЕжеМесячный отчет — лист 'Апрель 26'."""
+    short_year = str(year)[-2:]
+    sheet_name = f"{_MONTH_RU.get(month, month)} {short_year}"
+    try:
+        rows = _read_range(config.AIHOTEL_SA, _GOG_MONTHLY_ID, f"'{sheet_name}'!A1:F30")
+    except Exception:
+        return f"Данных ГОГ за {sheet_name} нет в таблице."
+    kv = []
+    for row in rows:
+        # Структура: [пусто, метрика, 2025_значение, %, 2026_значение, %]
+        if len(row) >= 2 and row[1]:
+            parts = [row[1]]
+            if len(row) > 2 and row[2]: parts.append(f"{year-1}: {row[2]}")
+            if len(row) > 4 and row[4]: parts.append(f"{year}: {row[4]}")
+            kv.append(" | ".join(parts))
+    ctx = f"ГОГ Губаха {sheet_name}"
+    return _ask_sheets_ai(kv, question, ctx)
+
+def _gog_weekly_sync(question: str) -> str:
+    """Читает ГОГ еженедельный дайджест."""
+    rows = _read_range(config.AIHOTEL_SA, _GOG_WEEKLY_ID, "Дайджест!A1:D50")
+    kv = [" | ".join(str(c) for c in row if c) for row in rows if any(row)]
+    return _ask_sheets_ai(kv, question, "ГОГ Губаха еженедельный дайджест")
 
 def query_sheets_sync(question: str) -> str:
     q = question.lower()
-    if any(k in q for k in ["монблан", "ресторан", "monblan"]):
-        _months = ["январ", "феврал", "март", "апрел", "май", "июн", "июл",
-                   "август", "сентябр", "октябр", "ноябр", "декабр", "месяц"]
-        if any(w in q for w in _months):
-            data = _sheets_read(config.MONBLAN_SA, config.MONBLAN_SHEET_ID, "ЕжеМесячный!A1:Z30")
-            ctx = "Монблан ежемесячная таблица"
-        elif any(w in q for w in ["сегодня", "вчера", "день"]):
-            data = _sheets_read(config.MONBLAN_SA, config.MONBLAN_SHEET_ID, "ЕжеДневно!A1:AZ15")
-            ctx = "Монблан ежедневная таблица"
-        else:
-            data = _sheets_read(config.MONBLAN_SA, config.MONBLAN_SHEET_ID, "ЕжеНедельно!A1:CZ30")
-            ctx = "Монблан еженедельная таблица"
-    elif any(k in q for k in ["задачи", "kpi", "стратег"]):
-        data = _sheets_read(config.PERSONAL_SA, config.STRATEGY_SHEET_ID, "'Задачи недели'!A1:F50")
-        ctx = "Губаха задачи недели"
-    else:
-        try:
-            data = _sheets_read(config.AIHOTEL_SA, config.GUBAHA_FINANCE_SHEET_ID, "Дайджест!A1:D50")
-            ctx = "Губаха финансовый дайджест"
-        except Exception:
-            data = _sheets_read(config.AIHOTEL_SA, config.GUBAHA_FINANCE_SHEET_ID, "2026!A1:Z30")
-            ctx = "Губаха финансы 2026"
-    return _ask_ai_sync(data, question, ctx)
+    month, year = _parse_month_year(q)
+    is_monblan = any(k in q for k in ["монблан", "monblan", "кафе", "ресторан"])
+    is_gog = any(k in q for k in ["губаха", "отель", "хостел", "коттедж", "гог", "номер", "загрузк", "заезд", "бронь"])
+    is_weekly = any(k in q for k in ["недел", "неделю", "неделя"])
+    is_daily = any(k in q for k in ["сегодня", "вчера", "день", "дневн"])
+    is_tasks = any(k in q for k in ["задач", "kpi", "стратег"])
 
-_SHEETS_KEYWORDS = ["выручка", "загрузка", "гост", "бронь", "заезд", "фудкост", "монблан", "губаха"]
+    if is_tasks:
+        rows = _read_range(config.PERSONAL_SA, config.STRATEGY_SHEET_ID, "'Задачи недели'!A1:H50")
+        kv = [" | ".join(str(c) for c in row if c) for row in rows if any(row)]
+        return _ask_sheets_ai(kv, question, "Задачи недели Губаха")
+
+    if is_monblan:
+        if month and not is_weekly and not is_daily:
+            return _monblan_monthly_sync(month, year, question)
+        elif is_daily:
+            rows = _read_range(config.MONBLAN_SA, _MONBLAN_ID, "ЕжеДневно!A1:AZ15")
+            kv = [" | ".join(str(c) for c in row if c) for row in rows if any(row)]
+            return _ask_sheets_ai(kv, question, "Монблан ежедневно")
+        else:
+            rows = _read_range(config.MONBLAN_SA, _MONBLAN_ID, "ЕжеНедельно!A1:CZ30")
+            kv = [" | ".join(str(c) for c in row[:15] if c) for row in rows if any(row)]
+            return _ask_sheets_ai(kv, question, "Монблан еженедельно")
+
+    if is_gog or (not is_monblan and month):
+        if month and not is_weekly:
+            return _gog_monthly_sync(month, year, question)
+        else:
+            return _gog_weekly_sync(question)
+
+    # Общий вопрос без явного объекта — спрашиваем уточнение
+    return "Уточни: это про Монблан (кафе) или про Губаха (отель/коттеджи/хостел)?"
+
+_SHEETS_KEYWORDS = ["выручка", "загрузка", "гост", "бронь", "заезд", "фудкост",
+                    "монблан", "губаха", "отель", "хостел", "коттедж", "номер", "adr", "revpar"]
 
 
 # ══════════════════════════════════════════════════════════════════
