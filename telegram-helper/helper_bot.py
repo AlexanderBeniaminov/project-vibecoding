@@ -220,10 +220,16 @@ def _ask_ai_sync(table_data: list, query: str, context: str) -> str:
     payload = {
         "model": config.MODEL,
         "messages": [
-            {"role": "system", "content": f"Ты аналитик. Сегодня {today}. Отвечай коротко — только цифры и факты."},
-            {"role": "user", "content": f"Данные: {context}\n\n{table_str}\n\nВопрос: {query}"}
+            {"role": "system", "content": (
+                f"Ты аналитик. Сегодня {today}. "
+                "ПРАВИЛО: отвечай ТОЛЬКО на заданный вопрос — одним предложением с конкретной цифрой. "
+                "Никаких объяснений, рассуждений, процентов и лишних деталей. "
+                "Пример правильного ответа: «Выручка Монблан в апреле: 4 823 500 ₽». "
+                "Если данных нет — скажи «Данных за этот период нет»."
+            )},
+            {"role": "user", "content": f"Данные ({context}):\n{table_str}\n\nВопрос: {query}"}
         ],
-        "max_tokens": 2000, "temperature": 0.1,
+        "max_tokens": 150, "temperature": 0.0,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
