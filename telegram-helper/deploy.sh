@@ -10,5 +10,9 @@ rsync -avz --exclude '__pycache__' --exclude '*.pyc' --exclude 'config.py' --exc
   "$SCRIPT_DIR/" "$SERVER:$REMOTE_DIR/"
 
 echo "Перезапускаю сервис..."
-ssh "$SERVER" "systemctl restart telegram-helper && sleep 2 && systemctl status telegram-helper --no-pager | grep -E 'Active|PID'"
+ssh "$SERVER" "systemctl restart telegram-helper && sleep 3 && systemctl status telegram-helper --no-pager | grep -E 'Active|PID'"
+
+echo ""
+echo "Последние логи:"
+ssh "$SERVER" "journalctl -u telegram-helper -n 5 --no-pager"
 echo "Done."
