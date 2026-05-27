@@ -86,6 +86,14 @@ async def transcribe_voice(message: Message) -> str:
     except Exception as e:
         return f"[Не удалось распознать: {e}]"
 
+# ── Безопасная отправка (fallback без Markdown) ───────────────────
+async def _safe_answer(message: Message, text: str, parse_mode: str = "Markdown"):
+    try:
+        await message.answer(text, parse_mode=parse_mode)
+    except Exception:
+        # Если Markdown сломан — отправляем plain text
+        await message.answer(text, parse_mode=None)
+
 # ── Typing indicator ──────────────────────────────────────────────
 async def _keep_typing(chat_id: int, stop: asyncio.Event):
     while not stop.is_set():
@@ -763,7 +771,7 @@ async def handle_message(message: Message):
         await message.answer("📊 Загружаю данные...")
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, query_sheets_sync, text)
-        await message.answer(result, parse_mode="Markdown")
+        await _safe_answer(message, result, parse_mode=None)
         return
 
     # ── 6. Почта — дайджест ───────────────────────────────────────
@@ -771,7 +779,7 @@ async def handle_message(message: Message):
         loop = asyncio.get_event_loop()
         await message.answer("📬 Загружаю...")
         result = await loop.run_in_executor(None, mail_digest_sync)
-        await message.answer(result, parse_mode="Markdown")
+        await _safe_answer(message, result)
         return
 
     # ── 7. Написать письмо ────────────────────────────────────────
@@ -801,7 +809,7 @@ async def handle_message(message: Message):
             stop.set(); typing.cancel()
             try: await typing
             except asyncio.CancelledError: pass
-        await message.answer(result, parse_mode="Markdown")
+        await _safe_answer(message, result)
         return
 
     # ── 9. AI-чат (fallback) ──────────────────────────────────────
@@ -825,7 +833,7 @@ async def handle_message(message: Message):
         except asyncio.CancelledError: pass
 
     history.append({"role": "assistant", "content": response})
-    await message.answer(response, parse_mode="Markdown")
+    await _safe_answer(message, response)
 
 
 # ══════════════════════════════════════════════════════════════════
