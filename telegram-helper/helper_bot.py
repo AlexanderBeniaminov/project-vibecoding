@@ -278,6 +278,47 @@ def _read_range(sa_path: str, sheet_id: str, range_str: str) -> list:
         spreadsheetId=sheet_id, range=range_str
     ).execute().get("values", [])
 
+def _direct_lookup(rows_kv: list, question: str, context: str) -> str | None:
+    """Прямой поиск без LLM — для типовых запросов по выручке/загрузке/гостям."""
+    q = question.lower()
+    result_lines = []
+
+    # Выручка — ищем строку "Выручка всего"
+    if any(k in q for k in ["выручк", "доход"]):
+        for row in rows_kv:
+            if re.match(r"выручка всего", row, re.IGNORECASE) or re.match(r"доход", row, re.IGNORECASE):
+                if ":" in row:
+                    label, value = row.split(":", 1)
+                    return f"{label.strip()} {context}: {value.strip()} руб."
+
+    # Загрузка
+    if "загрузк" in q:
+        for row in rows_kv:
+            if re.match(r"загрузка", row, re.IGNORECASE) and ":" in row:
+                label, value = row.split(":", 1)
+                return f"{label.strip()} {context}: {value.strip()}"
+
+    # Гости / количество гостей
+    if any(k in q for k in ["гост", "посетит", "человек"]):
+        for row in rows_kv:
+            if re.match(r"(кол-во гостей|гост|посетит)", row, re.IGNORECASE) and ":" in row:
+                label, value = row.split(":", 1)
+                return f"{label.strip()} {context}: {value.strip()}"
+
+    # ADR / RevPar
+    if "adr" in q:
+        for row in rows_kv:
+            if re.match(r"adr", row, re.IGNORECASE) and ":" in row:
+                label, value = row.split(":", 1)
+                return f"{label.strip()} {context}: {value.strip()} руб."
+    if "revpar" in q:
+        for row in rows_kv:
+            if re.match(r"revpar", row, re.IGNORECASE) and ":" in row:
+                label, value = row.split(":", 1)
+                return f"{label.strip()} {context}: {value.strip()} руб."
+
+    return None   # не нашли — идём в LLM
+
 def _extract_answer(text: str, question: str = "") -> str:
     """Вырезает финальный ответ из текста с рассуждениями DeepSeek."""
     if not text:
@@ -383,34 +424,36 @@ def _load_sheets_data(question: str) -> tuple:
     return (None, "Уточни: это про Монблан (кафе) или про Губаха (отель/коттеджи/хостел)?")
 
 async def query_sheets(question: str) -> str:
-    """Async: грузит данные (sync executor) → спрашивает Claude (async ai_client)."""
+    """Async: грузит данные → прямой поиск → если не нашли, спрашивает Claude."""
     loop = asyncio.get_event_loop()
     rows_kv, context = await loop.run_in_executor(None, _load_sheets_data, question)
 
-    # Если данных нет — вернуть сообщение напрямую
     if rows_kv is None:
         return context
 
+    # 1. Сначала прямой поиск без LLM (быстро и точно)
+    direct = _direct_lookup(rows_kv, question, context)
+    if direct:
+        return direct
+
+    # 2. Fallback — Claude для сложных/составных вопросов
     today = datetime.now(_MSK).strftime("%d.%m.%Y")
     table_str = "\n".join(rows_kv[:60])
-
     resp = await ai_client.chat.completions.create(
-        model=config.VISION_MODEL,   # Claude Sonnet — строго следует формату
+        model=config.VISION_MODEL,
         messages=[
             {"role": "system", "content": (
-                f"Сегодня {today}. Данные: {context}.\n"
-                "Найди в данных ответ на вопрос пользователя.\n"
-                "Ответь ОДНОЙ строкой: название метрики и число.\n"
-                "Пример: Выручка всего: 4 823 500 руб.\n"
-                "Без пояснений, без вступлений, без повтора вопроса."
+                f"Данные из таблицы за {context} (уже загружены, период точный).\n"
+                "Ответь на вопрос одной строкой: метрика и число. Пример: Кухня март 2026: 2 564 170 руб.\n"
+                "Только цифра, никаких объяснений."
             )},
-            {"role": "user", "content": f"Данные:\n{table_str}\n\nВопрос: {question}"}
+            {"role": "user", "content": f"{table_str}\n\n{question}\n\nОтвет:"}
         ],
-        max_tokens=80,
+        max_tokens=60,
         temperature=0.0,
     )
     raw = (resp.choices[0].message.content or "").strip()
-    return _extract_answer(raw, question)
+    return _extract_answer(raw, question) or f"Данные за {context} загружены, но ответ не найден."
 
 _SHEETS_KEYWORDS = ["выручка", "загрузка", "гост", "бронь", "заезд", "фудкост",
                     "монблан", "губаха", "отель", "хостел", "коттедж", "номер", "adr", "revpar"]
