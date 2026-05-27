@@ -20,6 +20,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import openai
+import requests
+from bs4 import BeautifulSoup
+from ddgs import DDGS
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -377,7 +380,42 @@ async def compose_email(user_id: int, recipient: str, subject_hint: str, voice_t
 
 
 # ══════════════════════════════════════════════════════════════════
-# БЛОК 5: ФОТО (Vision через Claude)
+# БЛОК 5: ВЕБ-ПОИСК (DuckDuckGo)
+# ══════════════════════════════════════════════════════════════════
+_SEARCH_RE = re.compile(
+    r"^(найди|поищи|найдите|поищите|погугли|ищи|покажи|расскажи про|что такое|кто такой|узнай)\b",
+    re.IGNORECASE
+)
+
+def _web_search(query: str, max_results: int = 6) -> str:
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+        if not results:
+            return "По этому запросу ничего не найдено."
+        lines = []
+        for r in results:
+            lines.append(f"{r['title']}\n{r['body']}\n{r['href']}")
+        return "\n\n".join(lines)
+    except Exception as e:
+        return f"Ошибка поиска: {e}"
+
+async def web_search_and_answer(query: str) -> str:
+    """Ищет в интернете и суммаризирует ответ через LLM."""
+    loop = asyncio.get_event_loop()
+    raw = await loop.run_in_executor(None, _web_search, query)
+    if raw.startswith("Ошибка") or raw.startswith("По этому"):
+        return raw
+    now = datetime.now(_MSK).strftime("%d.%m.%Y %H:%M")
+    messages = [
+        {"role": "system", "content": f"Ты помощник. Сейчас {now} МСК. Отвечай коротко по-русски — только факты из результатов поиска."},
+        {"role": "user", "content": f"Запрос: {query}\n\nРезультаты поиска:\n{raw}\n\nДай краткий ответ."}
+    ]
+    return await run_llm(messages)
+
+
+# ══════════════════════════════════════════════════════════════════
+# БЛОК 6: ФОТО (Vision через Claude)
 # ══════════════════════════════════════════════════════════════════
 async def analyze_photo(message: Message, voice_hint: str = "") -> str:
     photo = message.photo[-1] if message.photo else None
@@ -625,7 +663,20 @@ async def handle_message(message: Message):
             await message.answer(f"❌ {e}")
         return
 
-    # ── 8. AI-чат (fallback) ──────────────────────────────────────
+    # ── 8. Веб-поиск ─────────────────────────────────────────────
+    if _SEARCH_RE.match(text.strip()) or any(k in q for k in ["расписание", "онлайн табло", "курс валют", "погода", "новости"]):
+        stop = asyncio.Event()
+        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+        try:
+            result = await web_search_and_answer(text)
+        finally:
+            stop.set(); typing.cancel()
+            try: await typing
+            except asyncio.CancelledError: pass
+        await message.answer(result, parse_mode="Markdown")
+        return
+
+    # ── 9. AI-чат (fallback) ──────────────────────────────────────
     history = histories.setdefault(user_id, [])
     if not history:
         history.append({"role": "system", "content": _system_prompt()})
