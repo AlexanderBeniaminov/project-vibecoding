@@ -307,50 +307,17 @@ def _extract_answer(text: str, question: str = "") -> str:
             return line[:200]
     return text[:200]
 
-def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
-    """Передаёт LLM только нужные строки в формате 'метрика: значение'."""
-    import urllib.request
-    today = datetime.now(_MSK).strftime("%d.%m.%Y")
-    table_str = "\n".join(rows_kv[:60])
-    payload = {
-        "model": config.MODEL,
-        "messages": [
-            {"role": "system", "content": (
-                f"Сегодня {today}. Источник данных: {context}. "
-                "ИНСТРУКЦИЯ: найди в данных ответ на вопрос и выведи ТОЛЬКО результат.\n"
-                "Формат: [Метрика]: [число] руб.\n"
-                "Например: Выручка всего: 4 823 500 руб.\n"
-                "НЕ объясняй, НЕ рассуждай, НЕ повторяй вопрос. Только итоговая строка."
-            )},
-            {"role": "user", "content": f"Данные:\n{table_str}\n\nВопрос: {question}"}
-        ],
-        "max_tokens": 50, "temperature": 0.0,
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        f"{config.ROUTERAI_BASE_URL}/chat/completions", data=data,
-        headers={"Authorization": f"Bearer {config.ROUTERAI_API_KEY}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
-    msg = result["choices"][0]["message"]
-    raw = (msg.get("content") or "").strip() or (msg.get("reasoning") or "")[-300:]
-    return _extract_answer(raw, question)
-
-def _monblan_monthly_sync(month: int, year: int, question: str) -> str:
-    """Читает Монблан ЕжеМесячный: находит нужную колонку по дате YYYY-MM."""
+# Загрузка данных (sync) — возвращает (rows_kv, context)
+def _monblan_monthly_load(month: int, year: int) -> tuple:
     svc = _sheets_svc(config.MONBLAN_SA)
-    # Строка 2 содержит даты вида "2026-04"
     header = svc.spreadsheets().values().get(
         spreadsheetId=_MONBLAN_ID, range="ЕжеМесячный!A2:AZ2"
     ).execute().get("values", [[]])[0]
     target = f"{year}-{month:02d}"
     if target not in header:
-        return f"Данных Монблан за {_MONTH_RU.get(month, month)} {year} нет в таблице."
+        return (None, f"Данных Монблан за {_MONTH_RU.get(month, month)} {year} нет в таблице.")
     col_idx = header.index(target)
     col_letter = _idx_to_col(col_idx)
-    # Читаем метки (колонка A) и целевую колонку
     rows = svc.spreadsheets().values().get(
         spreadsheetId=_MONBLAN_ID, range=f"ЕжеМесячный!A3:{col_letter}60"
     ).execute().get("values", [])
@@ -360,68 +327,90 @@ def _monblan_monthly_sync(month: int, year: int, question: str) -> str:
         value = row[col_idx].strip() if len(row) > col_idx and row[col_idx] else ""
         if label and value and not label.startswith("%"):
             kv.append(f"{label}: {value}")
-    ctx = f"Монблан {_MONTH_RU.get(month, month)} {year}"
-    return _ask_sheets_ai(kv, question, ctx)
+    return (kv, f"Монблан {_MONTH_RU.get(month, month)} {year}")
 
-def _gog_monthly_sync(month: int, year: int, question: str) -> str:
-    """Читает ГОГ ЕжеМесячный отчет — лист 'Апрель 26'."""
+def _gog_monthly_load(month: int, year: int) -> tuple:
     short_year = str(year)[-2:]
     sheet_name = f"{_MONTH_RU.get(month, month)} {short_year}"
     try:
         rows = _read_range(config.AIHOTEL_SA, _GOG_MONTHLY_ID, f"'{sheet_name}'!A1:F30")
     except Exception:
-        return f"Данных ГОГ за {sheet_name} нет в таблице."
+        return (None, f"Данных ГОГ за {sheet_name} нет в таблице.")
     kv = []
     for row in rows:
-        # Структура: [пусто, метрика, 2025_значение, %, 2026_значение, %]
         if len(row) >= 2 and row[1]:
             parts = [row[1]]
             if len(row) > 2 and row[2]: parts.append(f"{year-1}: {row[2]}")
             if len(row) > 4 and row[4]: parts.append(f"{year}: {row[4]}")
             kv.append(" | ".join(parts))
-    ctx = f"ГОГ Губаха {sheet_name}"
-    return _ask_sheets_ai(kv, question, ctx)
+    return (kv, f"ГОГ Губаха {sheet_name}")
 
-def _gog_weekly_sync(question: str) -> str:
-    """Читает ГОГ еженедельный дайджест."""
-    rows = _read_range(config.AIHOTEL_SA, _GOG_WEEKLY_ID, "Дайджест!A1:D50")
-    kv = [" | ".join(str(c) for c in row if c) for row in rows if any(row)]
-    return _ask_sheets_ai(kv, question, "ГОГ Губаха еженедельный дайджест")
-
-def query_sheets_sync(question: str) -> str:
+def _load_sheets_data(question: str) -> tuple:
+    """Sync: роутинг и загрузка данных. Возвращает (rows_kv | None, context_or_error)."""
     q = question.lower()
     month, year = _parse_month_year(q)
     is_monblan = any(k in q for k in ["монблан", "monblan", "кафе", "ресторан"])
-    is_gog = any(k in q for k in ["губаха", "отель", "хостел", "коттедж", "гог", "номер", "загрузк", "заезд", "бронь"])
-    is_weekly = any(k in q for k in ["недел", "неделю", "неделя"])
-    is_daily = any(k in q for k in ["сегодня", "вчера", "день", "дневн"])
-    is_tasks = any(k in q for k in ["задач", "kpi", "стратег"])
+    is_gog     = any(k in q for k in ["губаха", "отель", "хостел", "коттедж", "гог", "номер", "загрузк", "заезд", "бронь"])
+    is_weekly  = any(k in q for k in ["недел", "неделю", "неделя"])
+    is_daily   = any(k in q for k in ["сегодня", "вчера", "день", "дневн"])
+    is_tasks   = any(k in q for k in ["задач", "kpi", "стратег"])
 
     if is_tasks:
         rows = _read_range(config.PERSONAL_SA, config.STRATEGY_SHEET_ID, "'Задачи недели'!A1:H50")
         kv = [" | ".join(str(c) for c in row if c) for row in rows if any(row)]
-        return _ask_sheets_ai(kv, question, "Задачи недели Губаха")
+        return (kv, "Задачи недели Губаха")
 
     if is_monblan:
         if month and not is_weekly and not is_daily:
-            return _monblan_monthly_sync(month, year, question)
+            return _monblan_monthly_load(month, year)
         elif is_daily:
             rows = _read_range(config.MONBLAN_SA, _MONBLAN_ID, "ЕжеДневно!A1:AZ15")
             kv = [" | ".join(str(c) for c in row if c) for row in rows if any(row)]
-            return _ask_sheets_ai(kv, question, "Монблан ежедневно")
+            return (kv, "Монблан ежедневно")
         else:
             rows = _read_range(config.MONBLAN_SA, _MONBLAN_ID, "ЕжеНедельно!A1:CZ30")
             kv = [" | ".join(str(c) for c in row[:15] if c) for row in rows if any(row)]
-            return _ask_sheets_ai(kv, question, "Монблан еженедельно")
+            return (kv, "Монблан еженедельно")
 
     if is_gog or (not is_monblan and month):
         if month and not is_weekly:
-            return _gog_monthly_sync(month, year, question)
+            return _gog_monthly_load(month, year)
         else:
-            return _gog_weekly_sync(question)
+            rows = _read_range(config.AIHOTEL_SA, _GOG_WEEKLY_ID, "Дайджест!A1:D50")
+            kv = [" | ".join(str(c) for c in row if c) for row in rows if any(row)]
+            return (kv, "ГОГ Губаха еженедельный дайджест")
 
-    # Общий вопрос без явного объекта — спрашиваем уточнение
-    return "Уточни: это про Монблан (кафе) или про Губаха (отель/коттеджи/хостел)?"
+    return (None, "Уточни: это про Монблан (кафе) или про Губаха (отель/коттеджи/хостел)?")
+
+async def query_sheets(question: str) -> str:
+    """Async: грузит данные (sync executor) → спрашивает Claude (async ai_client)."""
+    loop = asyncio.get_event_loop()
+    rows_kv, context = await loop.run_in_executor(None, _load_sheets_data, question)
+
+    # Если данных нет — вернуть сообщение напрямую
+    if rows_kv is None:
+        return context
+
+    today = datetime.now(_MSK).strftime("%d.%m.%Y")
+    table_str = "\n".join(rows_kv[:60])
+
+    resp = await ai_client.chat.completions.create(
+        model=config.VISION_MODEL,   # Claude Sonnet — строго следует формату
+        messages=[
+            {"role": "system", "content": (
+                f"Сегодня {today}. Данные: {context}.\n"
+                "Найди в данных ответ на вопрос пользователя.\n"
+                "Ответь ОДНОЙ строкой: название метрики и число.\n"
+                "Пример: Выручка всего: 4 823 500 руб.\n"
+                "Без пояснений, без вступлений, без повтора вопроса."
+            )},
+            {"role": "user", "content": f"Данные:\n{table_str}\n\nВопрос: {question}"}
+        ],
+        max_tokens=80,
+        temperature=0.0,
+    )
+    raw = (resp.choices[0].message.content or "").strip()
+    return _extract_answer(raw, question)
 
 _SHEETS_KEYWORDS = ["выручка", "загрузка", "гост", "бронь", "заезд", "фудкост",
                     "монблан", "губаха", "отель", "хостел", "коттедж", "номер", "adr", "revpar"]
@@ -800,8 +789,9 @@ async def handle_message(message: Message):
         stop = asyncio.Event()
         typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
         try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, query_sheets_sync, text)
+            result = await query_sheets(text)
+        except Exception as e:
+            result = f"Ошибка загрузки данных: {e}"
         finally:
             stop.set(); typing.cancel()
             try: await typing
