@@ -313,17 +313,18 @@ def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
     today = datetime.now(_MSK).strftime("%d.%m.%Y")
     table_str = "\n".join(rows_kv[:60])
     payload = {
-        "model": config.VISION_MODEL,   # Claude Sonnet — точнее следует формату
+        "model": config.MODEL,
         "messages": [
             {"role": "system", "content": (
-                f"Сегодня {today}. Источник: {context}. "
-                "Ответь на вопрос ОДНОЙ строкой: «[Метрика] [период]: [число] ₽». "
-                "Только цифра из данных. Никаких пояснений. "
-                "Если нужного периода нет — задай один уточняющий вопрос."
+                f"Сегодня {today}. Источник данных: {context}. "
+                "ИНСТРУКЦИЯ: найди в данных ответ на вопрос и выведи ТОЛЬКО результат.\n"
+                "Формат: [Метрика]: [число] руб.\n"
+                "Например: Выручка всего: 4 823 500 руб.\n"
+                "НЕ объясняй, НЕ рассуждай, НЕ повторяй вопрос. Только итоговая строка."
             )},
             {"role": "user", "content": f"Данные:\n{table_str}\n\nВопрос: {question}"}
         ],
-        "max_tokens": 80, "temperature": 0.0,
+        "max_tokens": 50, "temperature": 0.0,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -334,7 +335,7 @@ def _ask_sheets_ai(rows_kv: list, question: str, context: str) -> str:
     with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.loads(resp.read().decode("utf-8"))
     msg = result["choices"][0]["message"]
-    raw = (msg.get("content") or "").strip()
+    raw = (msg.get("content") or "").strip() or (msg.get("reasoning") or "")[-300:]
     return _extract_answer(raw, question)
 
 def _monblan_monthly_sync(month: int, year: int, question: str) -> str:
@@ -796,16 +797,30 @@ async def handle_message(message: Message):
     # ── 5. Данные из таблиц ───────────────────────────────────────
     if any(k in q for k in _SHEETS_KEYWORDS):
         await message.answer("📊 Загружаю данные...")
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, query_sheets_sync, text)
+        stop = asyncio.Event()
+        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, query_sheets_sync, text)
+        finally:
+            stop.set(); typing.cancel()
+            try: await typing
+            except asyncio.CancelledError: pass
         await _safe_answer(message, result, parse_mode=None)
         return
 
     # ── 6. Почта — дайджест ───────────────────────────────────────
     if any(k in q for k in ["почта", "письм", "входящ", "пришло на почту"]):
-        loop = asyncio.get_event_loop()
         await message.answer("📬 Загружаю...")
-        result = await loop.run_in_executor(None, mail_digest_sync)
+        stop = asyncio.Event()
+        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, mail_digest_sync)
+        finally:
+            stop.set(); typing.cancel()
+            try: await typing
+            except asyncio.CancelledError: pass
         await _safe_answer(message, result)
         return
 
