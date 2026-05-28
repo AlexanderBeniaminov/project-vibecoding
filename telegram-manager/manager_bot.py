@@ -357,14 +357,22 @@ async def _parse_nlp(user_text: str) -> dict | None:
                 {"role": "system", "content": _NLP_SYSTEM},
                 {"role": "user", "content": user_text},
             ],
-            max_tokens=400,
+            max_tokens=600,
             temperature=0,
         )
-        raw = resp.choices[0].message.content or ""
-        raw = re.sub(r"^```[a-z]*\n?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+        msg = resp.choices[0].message
+        raw = (msg.content or "").strip()
+        # DeepSeek иногда кладёт ответ в reasoning вместо content
+        if not raw and hasattr(msg, "reasoning"):
+            raw = (msg.reasoning or "").strip()
+        raw = re.sub(r"^```[a-z]*\n?|```$", "", raw, flags=re.MULTILINE).strip()
+        # Вытащить JSON если он внутри текста
+        json_m = re.search(r'\{.*\}', raw, re.DOTALL)
+        if json_m:
+            raw = json_m.group(0)
         return json.loads(raw)
     except Exception as e:
-        logging.warning("NLP parse error: %s", e)
+        logging.warning("NLP parse error: %s | raw=%r", e, locals().get("raw", ""))
         return None
 
 
@@ -384,7 +392,11 @@ async def _reformat_with_llm(original: str, instruction: str) -> str:
             ],
             max_tokens=2000,
         )
-        return (resp.choices[0].message.content or original).strip()
+        msg = resp.choices[0].message
+        result = (msg.content or "").strip()
+        if not result and hasattr(msg, "reasoning"):
+            result = (msg.reasoning or "").strip()
+        return result or original
     except Exception:
         return original
 
