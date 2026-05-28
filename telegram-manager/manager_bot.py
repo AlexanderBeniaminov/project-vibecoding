@@ -90,6 +90,9 @@ RULE_TYPE_NAMES = {
 # {chat_id: {original_text, instruction, reformatted}}
 _pending_reformat: dict[int, dict] = {}
 
+# Текст пользователя ожидающий выбора бота (когда NLP не распознал)
+_pending_rule_text: dict[int, str] = {}
+
 
 def _auth(message: Message) -> bool:
     return message.from_user.id in config.ALLOWED_USER_IDS
@@ -316,6 +319,39 @@ async def cb_save_rule_cancel(callback: CallbackQuery):
     await callback.answer("Не сохранено.")
 
 
+@dp.callback_query(F.data.startswith("rule_for:"))
+async def cb_rule_for(callback: CallbackQuery):
+    """Fallback: пользователь выбирает бота вручную когда NLP не распознал."""
+    target = callback.data.split(":")[1]
+    chat_id = callback.message.chat.id
+
+    if target == "cancel":
+        _pending_rule_text.pop(chat_id, None)
+        await callback.message.edit_text("Отменено.")
+        await callback.answer()
+        return
+
+    original_text = _pending_rule_text.pop(chat_id, None)
+    if not original_text:
+        await callback.answer("Данные истекли — повтори команду.")
+        return
+
+    rule_id = rules_db.create_rule(
+        target_bot=target,
+        rule_type="system_addon",
+        instruction=original_text,
+        description=original_text[:80],
+    )
+    rule_engine.invalidate_cache(target if target != "all" else None)
+    bot_label = BOT_NAMES.get(target, target)
+    await callback.message.edit_text(
+        f"✅ Правило #{rule_id} создано для «{bot_label}».\n\n"
+        f"_Инструкция:_ {original_text[:120]}",
+        parse_mode="Markdown",
+    )
+    await callback.answer()
+
+
 # ── NLP + "Переделай" ─────────────────────────────────────────────────────────
 
 _NLP_SYSTEM = """Ты менеджер правил для двух Telegram-ботов: Напоминатор (assistant) и Помощник (helper).
@@ -357,19 +393,16 @@ async def _parse_nlp(user_text: str) -> dict | None:
                 {"role": "system", "content": _NLP_SYSTEM},
                 {"role": "user", "content": user_text},
             ],
-            max_tokens=600,
+            max_tokens=400,
             temperature=0,
+            response_format={"type": "json_object"},
         )
         msg = resp.choices[0].message
         raw = (msg.content or "").strip()
-        # DeepSeek иногда кладёт ответ в reasoning вместо content
-        if not raw and hasattr(msg, "reasoning"):
-            raw = (msg.reasoning or "").strip()
+        if not raw:
+            logging.warning("NLP: пустой content от LLM, raw=%r", raw)
+            return None
         raw = re.sub(r"^```[a-z]*\n?|```$", "", raw, flags=re.MULTILINE).strip()
-        # Вытащить JSON если он внутри текста
-        json_m = re.search(r'\{.*\}', raw, re.DOTALL)
-        if json_m:
-            raw = json_m.group(0)
         return json.loads(raw)
     except Exception as e:
         logging.warning("NLP parse error: %s | raw=%r", e, locals().get("raw", ""))
@@ -482,10 +515,21 @@ async def handle_message(message: Message):
         except asyncio.CancelledError: pass
 
     if not parsed or parsed.get("action") not in ("create_rule", "reformat_now"):
+        # LLM не распознал → предлагаем выбрать бота вручную и создадим system_addon
+        _pending_rule_text[message.chat.id] = text
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📌 Напоминатор", callback_data="rule_for:assistant"),
+                InlineKeyboardButton(text="📌 Помощник", callback_data="rule_for:helper"),
+            ],
+            [
+                InlineKeyboardButton(text="📌 Оба бота", callback_data="rule_for:all"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="rule_for:cancel"),
+            ],
+        ])
         await message.answer(
-            "Не понял команду. Попробуй:\n"
-            "«Напоминатор, сделай ответы короче»\n"
-            "или процитируй сообщение и напиши «переделай — [инструкция]»"
+            "Для какого бота создать правило?",
+            reply_markup=kb,
         )
         return
 
