@@ -414,9 +414,10 @@ async def cb_rule_for(callback: CallbackQuery):
     )
     rule_engine.invalidate_cache(target if target != "all" else None)
     bot_label = BOT_NAMES.get(target, target)
+    instr = original_text if len(original_text) <= 800 else original_text[:800] + "…"
     await callback.message.edit_text(
         f"✅ Правило #{rule_id} создано для «{bot_label}».\n\n"
-        f"_Инструкция:_ {original_text[:120]}",
+        f"_Инструкция:_ {instr}",
         parse_mode="Markdown",
     )
     await callback.answer()
