@@ -98,6 +98,75 @@ def _auth(message: Message) -> bool:
     return message.from_user.id in config.ALLOWED_USER_IDS
 
 
+# ── /start ────────────────────────────────────────────────────────────────────
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    if not _auth(message):
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📋 Все правила", callback_data="start_rules:all"),
+            InlineKeyboardButton(text="📌 Напоминатор", callback_data="start_rules:assistant"),
+        ],
+        [
+            InlineKeyboardButton(text="📌 Помощник", callback_data="start_rules:helper"),
+            InlineKeyboardButton(text="❓ Помощь", callback_data="start_help"),
+        ],
+    ])
+    await message.answer(
+        "🤖 *Менеджер ботов*\n\n"
+        "Управляй правилами Напоминатора и Помощника.\n"
+        "Просто напиши команду голосом или текстом — например:\n"
+        "_«Напоминатор, сделай ответы короче»_",
+        parse_mode="Markdown",
+        reply_markup=kb,
+    )
+
+
+@dp.callback_query(F.data.startswith("start_rules:"))
+async def cb_start_rules(callback: CallbackQuery):
+    bot_filter = callback.data.split(":")[1]
+    rules = rules_db.list_rules(bot_filter if bot_filter != "all" else None)
+    if not rules:
+        target = BOT_NAMES.get(bot_filter, "всем ботам") if bot_filter != "all" else "всем ботам"
+        await callback.message.edit_text(f"Правил для «{target}» нет.\n\nНапиши команду, например:\n_«Помощник, всегда отвечай кратко»_", parse_mode="Markdown")
+        await callback.answer()
+        return
+    lines = []
+    for r in rules:
+        status = "✅" if r["active"] else "❌"
+        bot_label = BOT_NAMES.get(r["target_bot"], r["target_bot"])
+        type_label = RULE_TYPE_NAMES.get(r["rule_type"], r["rule_type"])
+        desc = r["description"] or r["instruction"][:60]
+        lines.append(f"{status} #{r['id']} [{bot_label}] {type_label}\n    {desc}")
+    await callback.message.edit_text("📋 *Правила:*\n\n" + "\n\n".join(lines), parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "start_help")
+async def cb_start_help(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "🤖 *Управляющий бот*\n\n"
+        "*Команды:*\n"
+        "/rules — все правила\n"
+        "/rules assistant — правила Напоминатора\n"
+        "/rules helper — правила Помощника\n"
+        "/rule 5 — детали правила №5\n"
+        "/delete\\_rule 5 — удалить правило\n"
+        "/toggle\\_rule 5 — вкл/выкл правило\n"
+        "/history 5 — когда применялось\n\n"
+        "*NLP-команды:*\n"
+        "Напоминатор, сделай ответы короче\n"
+        "Помощник, всегда уточняй дедлайн\n"
+        "добавь правило для всех: отвечай по-русски\n\n"
+        "*Переделай:*\n"
+        "Процитируй сообщение бота → напиши «переделай — инструкция»",
+        parse_mode="Markdown",
+    )
+    await callback.answer()
+
+
 # ── /help ─────────────────────────────────────────────────────────────────────
 
 @dp.message(Command("help"))
