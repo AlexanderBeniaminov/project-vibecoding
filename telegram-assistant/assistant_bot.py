@@ -617,7 +617,20 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
         elif name == "delete_note":
             return notes.delete_note(args["note_id"])
         elif name == "add_reminder":
-            return rem_tool.add_reminder(args["text"], args["remind_at"], user_id)
+            remind_at = args.get("remind_at")
+            if not remind_at:
+                from datetime import timedelta as _td
+                now_msk = datetime.now(_MSK)
+                tomorrow = (now_msk + _td(days=1)).strftime("%Y-%m-%d")
+                today = now_msk.strftime("%Y-%m-%d")
+                return (
+                    f"ОШИБКА: поле remind_at не передано. "
+                    f"Текущее время МСК: {now_msk.strftime('%Y-%m-%dT%H:%M:%S')}. "
+                    f"Сегодня={today}, завтра={tomorrow}. "
+                    f"Вызови add_reminder снова с remind_at в формате YYYY-MM-DDTHH:MM:SS, "
+                    f"например remind_at='{tomorrow}T09:30:00' для завтра в 9:30."
+                )
+            return rem_tool.add_reminder(args["text"], remind_at, user_id)
         elif name == "list_reminders":
             return rem_tool.list_reminders(user_id)
         elif name == "cancel_reminder":
@@ -856,17 +869,25 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
 
         messages.append(msg.model_dump(exclude_unset=True))
         total_tool_calls += len(msg.tool_calls)
+        any_tool_error = False
 
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments)
             result = await _execute_and_notify(tc.function.name, args, user_id, chat_id)
+            # Детектируем ошибки инструментов чтобы дать LLM повторный шанс
+            if result.startswith("ОШИБКА:") or result.startswith("Ошибка инструмента"):
+                any_tool_error = True
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
                 "content": result,
             })
 
-        # После выполнения API tool_calls — делаем финальный вызов без tools
+        # Если инструмент вернул ошибку — продолжаем цикл с tools чтобы LLM мог повторить
+        if any_tool_error and total_tool_calls < 5:
+            continue
+
+        # Нет ошибок — финальный вызов без tools
         # DeepSeek склонен петлять с повторными поисками; без tools он обязан ответить текстом
         final_resp = await ai_client.chat.completions.create(
             model=config.MODEL,
