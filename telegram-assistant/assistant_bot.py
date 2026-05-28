@@ -1668,12 +1668,12 @@ async def weekly_review():
                 "SELECT id, text, created_at FROM memory WHERE category IN ('idea','ideas') ORDER BY id DESC LIMIT 20"
             ).fetchall()
 
-            # Просроченные напоминания за неделю (выполненные)
+            # Выполненные напоминания за неделю
             rows_rem = conn.execute(
-                """SELECT title, scheduled_at FROM reminders
+                """SELECT text, remind_at FROM reminders
                    WHERE user_id=? AND done=1
-                   AND scheduled_at >= datetime('now', '-7 days')
-                   ORDER BY scheduled_at DESC""",
+                   AND remind_at >= datetime('now', '-7 days')
+                   ORDER BY remind_at DESC""",
                 (user_id,)
             ).fetchall()
             conn.close()
@@ -1696,7 +1696,7 @@ async def weekly_review():
             if rows_rem:
                 lines.append(f"✅ *Выполнено за неделю ({len(rows_rem)} задач):*")
                 for r in rows_rem[:10]:
-                    lines.append(f"  • {r['title']}")
+                    lines.append(f"  • {r['text']}")
                 lines.append("")
 
             if len(lines) == 1:
@@ -1727,9 +1727,9 @@ async def daily_summary():
 
             # Напоминания на сегодня (выполненные и активные)
             rows_rem = conn.execute(
-                """SELECT title, done FROM reminders
-                   WHERE user_id=? AND scheduled_at LIKE ?
-                   ORDER BY done, scheduled_at""",
+                """SELECT text, done FROM reminders
+                   WHERE user_id=? AND remind_at LIKE ?
+                   ORDER BY done, remind_at""",
                 (user_id, f"{today_iso}%",)
             ).fetchall()
 
@@ -1749,8 +1749,8 @@ async def daily_summary():
             if rows_notes:
                 data_lines.append(f"Заметки ({len(rows_notes)}): " + " | ".join(r['text'][:80] for r in rows_notes[:10]))
             if rows_rem:
-                done = [r['title'] for r in rows_rem if r['done']]
-                pending = [r['title'] for r in rows_rem if not r['done']]
+                done = [r['text'] for r in rows_rem if r['done']]
+                pending = [r['text'] for r in rows_rem if not r['done']]
                 if done:
                     data_lines.append(f"Выполнено: {chr(10).join(done[:5])}")
                 if pending:
