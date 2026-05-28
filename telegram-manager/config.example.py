@@ -7,3 +7,4 @@ ROUTERAI_BASE_URL = "https://routerai.ru/api/v1"
 ROUTERAI_API_KEY = ""
 MODEL = "deepseek/deepseek-v4-pro"
 SHARED_DIR = "/home/parser/bots/shared"
+GROQ_API_KEY = ""  # тот же что у assistant и helper

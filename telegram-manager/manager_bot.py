@@ -28,6 +28,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     Message,
 )
+from groq import Groq
 from openai import AsyncOpenAI
 
 sys.path.insert(0, "/home/parser/bots/shared")
@@ -45,6 +46,33 @@ ai_client = AsyncOpenAI(
     base_url=config.ROUTERAI_BASE_URL,
     api_key=config.ROUTERAI_API_KEY,
 )
+
+async def _keep_typing(chat_id: int, stop: asyncio.Event) -> None:
+    while not stop.is_set():
+        await bot.send_chat_action(chat_id, "typing")
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=4)
+        except asyncio.TimeoutError:
+            pass
+
+
+async def transcribe_voice(message: Message) -> str:
+    voice = message.voice
+    if not voice:
+        return ""
+    file = await bot.get_file(voice.file_id)
+    file_bytes = await bot.download_file(file.file_path)
+    groq_client = Groq(api_key=config.GROQ_API_KEY)
+    try:
+        tr = groq_client.audio.transcriptions.create(
+            file=("voice.ogg", file_bytes.read(), "audio/ogg"),
+            model="whisper-large-v3-turbo",
+            language="ru",
+        )
+        return tr.text.strip()
+    except Exception as e:
+        return f"[Не удалось распознать: {e}]"
+
 
 BOT_NAMES = {
     "assistant": "Напоминатор",
@@ -361,12 +389,28 @@ async def _reformat_with_llm(original: str, instruction: str) -> str:
         return original
 
 
-@dp.message()
+@dp.message(F.text | F.voice)
 async def handle_message(message: Message):
     if not _auth(message):
         return
 
-    text = (message.text or message.caption or "").strip()
+    # ── Транскрипция голосового ────────────────────────────────────────────────
+    if message.voice:
+        stop = asyncio.Event()
+        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+        try:
+            text = await transcribe_voice(message)
+        finally:
+            stop.set(); typing.cancel()
+            try: await typing
+            except asyncio.CancelledError: pass
+        if not text or text.startswith("[Не удалось"):
+            await message.answer(text or "Не удалось распознать голосовое.")
+            return
+        await message.answer(f"🎙 _{text}_", parse_mode="Markdown")
+    else:
+        text = (message.text or "").strip()
+
     if not text:
         return
 
@@ -383,8 +427,14 @@ async def handle_message(message: Message):
                 await message.answer("Укажи инструкцию: «переделай — добавь процентное изменение»")
                 return
 
-            await message.answer("✏️ Переформатирую...")
-            reformatted = await _reformat_with_llm(original_text, instruction)
+            stop = asyncio.Event()
+            typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+            try:
+                reformatted = await _reformat_with_llm(original_text, instruction)
+            finally:
+                stop.set(); typing.cancel()
+                try: await typing
+                except asyncio.CancelledError: pass
 
             _pending_reformat[message.chat.id] = {
                 "original": original_text,
@@ -410,7 +460,15 @@ async def handle_message(message: Message):
             return
 
     # ── NLP: создание правила ─────────────────────────────────────────────────
-    parsed = await _parse_nlp(text)
+    stop = asyncio.Event()
+    typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+    try:
+        parsed = await _parse_nlp(text)
+    finally:
+        stop.set(); typing.cancel()
+        try: await typing
+        except asyncio.CancelledError: pass
+
     if not parsed or parsed.get("action") not in ("create_rule", "reformat_now"):
         await message.answer(
             "Не понял команду. Попробуй:\n"
