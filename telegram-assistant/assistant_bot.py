@@ -806,6 +806,15 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             f"{memory_section}"
         ),
     }
+    try:
+        sys.path.insert(0, "/home/parser/bots/shared")
+        from rule_engine import get_system_addons
+        addons = get_system_addons("assistant")
+        if addons:
+            system_msg["content"] += f"\n\nПРАВИЛА ПОЛЬЗОВАТЕЛЯ:\n{addons}"
+    except Exception:
+        pass
+
     messages = [system_msg] + history
     total_tool_calls = 0
 
@@ -1420,6 +1429,12 @@ async def handle_message(message: Message):
         response = _strip_dsml(response)
     if _has_dsml(response):
         response = "Ищу информацию... попробуй повторить запрос."
+
+    try:
+        from rule_engine import apply_rules
+        response = await apply_rules(response, text, "assistant", ai_client)
+    except Exception:
+        pass
 
     history.append({"role": "assistant", "content": response})
 

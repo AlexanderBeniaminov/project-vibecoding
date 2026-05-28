@@ -49,7 +49,7 @@ def is_allowed(user_id: int) -> bool:
 # ── Системный промпт ──────────────────────────────────────────────
 def _system_prompt() -> str:
     now = datetime.now(_MSK).strftime("%d.%m.%Y %H:%M")
-    return (
+    base_prompt = (
         f"Ты бизнес-ассистент Александра Бениаминова. Сейчас {now} МСК. Язык: русский.\n\n"
         "МОДЕЛЬ: Если задача требует глубокого анализа, составления отчёта или сложного "
         "рассуждения — сам предложи: «Это лучше решит Claude Sonnet 4.6 — переключить?»\n\n"
@@ -99,6 +99,15 @@ def _system_prompt() -> str:
         "- НЕЛЬЗЯ предлагать альтернативный период если данных нет — говори прямо.\n\n"
         "СТИЛЬ: коротко и конкретно. Уточняй неполные запросы — не угадывай."
     )
+    try:
+        sys.path.insert(0, "/home/parser/bots/shared")
+        from rule_engine import get_system_addons as _get_addons
+        addons = _get_addons("helper")
+        if addons:
+            base_prompt += f"\n\nПРАВИЛА ПОЛЬЗОВАТЕЛЯ:\n{addons}"
+    except Exception:
+        pass
+    return base_prompt
 
 # ── Нормализация ASR-ошибок Whisper ──────────────────────────────
 _ASR_FIXES = [
@@ -944,6 +953,12 @@ async def handle_message(message: Message):
         stop.set(); typing.cancel()
         try: await typing
         except asyncio.CancelledError: pass
+
+    try:
+        from rule_engine import apply_rules as _apply_rules
+        response = await _apply_rules(response, text, "helper", ai_client)
+    except Exception:
+        pass
 
     history.append({"role": "assistant", "content": response})
     await _safe_answer(message, response)

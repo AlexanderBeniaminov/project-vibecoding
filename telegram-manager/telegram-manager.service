@@ -1,0 +1,15 @@
+[Unit]
+Description=Telegram Manager Bot
+After=network.target
+
+[Service]
+Type=simple
+User=parser
+WorkingDirectory=/home/parser/bots/manager
+ExecStart=/home/parser/venv/bin/python manager_bot.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
