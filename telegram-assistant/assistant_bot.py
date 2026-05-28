@@ -154,6 +154,8 @@ _pending_call_summaries: dict[int, str] = {}  # саммари звонков о
 _pending_call_transcripts: dict[int, str] = {}  # транскрипции для повторной генерации
 _awaiting_call_correction: dict[int, int] = {}  # user_id → message_id саммари
 _pending_reformat: dict[int, dict] = {}  # {user_id: {instruction, original}}
+_last_message_time: dict[int, float] = {}
+_CONTEXT_TTL = 300  # 5 минут — после паузы контекст считается новым
 
 # ── База знаний ───────────────────────────────────────────────
 def _load_knowledge() -> str:
@@ -1527,6 +1529,13 @@ async def handle_message(message: Message):
     user_id = message.from_user.id
     if not is_allowed(user_id):
         return
+
+    # Сброс контекста при паузе > 5 минут
+    now_ts = datetime.now().timestamp()
+    prev_ts = _last_message_time.get(user_id, 0)
+    _last_message_time[user_id] = now_ts
+    if prev_ts > 0 and (now_ts - prev_ts) > _CONTEXT_TTL:
+        histories.pop(user_id, None)
 
     # Режим исправления саммари звонка
     if user_id in _awaiting_call_correction:

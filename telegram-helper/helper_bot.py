@@ -42,6 +42,8 @@ ai_client = openai.AsyncOpenAI(
 
 histories: dict[int, list] = {}
 _pending_reformat: dict[int, dict] = {}  # {user_id: {instruction, original}}
+_last_message_time: dict[int, float] = {}
+_CONTEXT_TTL = 300  # 5 минут — после паузы контекст считается новым
 
 # ── Проверка доступа ──────────────────────────────────────────────
 def is_allowed(user_id: int) -> bool:
@@ -995,6 +997,13 @@ async def handle_message(message: Message):
     user_id = message.from_user.id
     if not is_allowed(user_id):
         return
+
+    # Сброс контекста при паузе > 5 минут
+    now_ts = datetime.now().timestamp()
+    prev_ts = _last_message_time.get(user_id, 0)
+    _last_message_time[user_id] = now_ts
+    if prev_ts > 0 and (now_ts - prev_ts) > _CONTEXT_TTL:
+        histories.pop(user_id, None)
 
     if message.voice:
         text = await transcribe_voice(message)
