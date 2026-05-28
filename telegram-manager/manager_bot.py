@@ -23,6 +23,7 @@ import sys
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import (
+    BotCommand,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -635,6 +636,15 @@ async def handle_message(message: Message):
 
 async def main():
     rules_db.init_db()
+    await bot.set_my_commands([
+        BotCommand(command="start",       description="Главная — список правил"),
+        BotCommand(command="rules",       description="Все правила"),
+        BotCommand(command="rule",        description="Детали правила: /rule <id>"),
+        BotCommand(command="toggle_rule", description="Вкл/выкл правило: /toggle_rule <id>"),
+        BotCommand(command="delete_rule", description="Удалить правило: /delete_rule <id>"),
+        BotCommand(command="history",     description="История применений: /history <id>"),
+        BotCommand(command="help",        description="Справка"),
+    ])
     await dp.start_polling(bot)
 
 
