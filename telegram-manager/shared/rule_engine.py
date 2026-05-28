@@ -8,7 +8,7 @@ import sys
 import os
 
 _cache: dict = {}  # {bot_name: (timestamp, rules)}
-CACHE_TTL = 60
+CACHE_TTL = 10
 
 
 def _get_db():
