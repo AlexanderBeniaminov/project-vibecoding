@@ -834,9 +834,9 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
     messages = [system_msg] + history
     total_tool_calls = 0
 
-    for _ in range(10):
-        force_text = total_tool_calls >= 3
-        # Не передаём tools когда нужен текстовый ответ — DeepSeek игнорирует tool_choice="none"
+    for _ in range(12):
+        # Защита от бесконечного цикла: после 10 tool_calls — только текстовый ответ
+        force_text = total_tool_calls >= 10
         create_kwargs: dict = {"model": config.MODEL, "messages": messages, "max_tokens": 2000}
         if not force_text:
             create_kwargs["tools"] = TOOLS
@@ -846,9 +846,9 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
 
         if not msg.tool_calls:
             content = msg.content or ""
-            # DeepSeek иногда возвращает тул-коллы в текстовом DSML-формате вместо API tool_calls
+            # DeepSeek иногда возвращает tool_calls в текстовом DSML-формате
             dsml_calls = _parse_dsml_tool_calls(content)
-            if dsml_calls and total_tool_calls < 6:
+            if dsml_calls and total_tool_calls < 10:
                 messages.append({"role": "assistant", "content": _strip_dsml(content) or ""})
                 results_parts = []
                 for name, args in dsml_calls:
@@ -859,56 +859,23 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
                     "role": "user",
                     "content": "Результаты инструментов:\n\n" + "\n\n".join(results_parts) + "\n\nОтветь пользователю текстом.",
                 })
-                # Финальный вызов без tools — DeepSeek обязан ответить текстом, не DSML
-                final_resp = await ai_client.chat.completions.create(
-                    model=config.MODEL,
-                    messages=messages,
-                    max_tokens=2000,
-                )
-                return _strip_dsml(final_resp.choices[0].message.content or "") or "(пустой ответ)"
-            # Всегда стрипаем DSML — страховка на случай если парсер не сработал или лимит исчерпан
+                continue  # LLM получит результаты и ответит текстом или сделает ещё tool_calls
             return _strip_dsml(content) or "(пустой ответ)"
 
+        # Выполняем все tool_calls этой итерации
         messages.append(msg.model_dump(exclude_unset=True))
         total_tool_calls += len(msg.tool_calls)
-        any_tool_error = False
 
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments)
             result = await _execute_and_notify(tc.function.name, args, user_id, chat_id)
-            # Детектируем ошибки инструментов чтобы дать LLM повторный шанс
-            if result.startswith("ОШИБКА:") or result.startswith("Ошибка инструмента"):
-                any_tool_error = True
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
                 "content": result,
             })
-
-        # Если инструмент вернул ошибку — продолжаем цикл с tools чтобы LLM мог повторить
-        if any_tool_error and total_tool_calls < 5:
-            continue
-
-        # Нет ошибок — финальный вызов без tools
-        # DeepSeek склонен петлять с повторными поисками; без tools он обязан ответить текстом
-        final_resp = await ai_client.chat.completions.create(
-            model=config.MODEL,
-            messages=messages,
-            max_tokens=2000,
-        )
-        final_content = final_resp.choices[0].message.content or ""
-        # Если финальный ответ снова DSML — парсим и выполняем, затем возвращаем результаты напрямую
-        dsml_final = _parse_dsml_tool_calls(final_content)
-        if dsml_final:
-            results_parts = []
-            for name, args in dsml_final:
-                r = await _execute_and_notify(name, args, user_id, chat_id)
-                results_parts.append(f"[{name}]: {r}")
-            # Последняя попытка — text-only с результатами
-            messages.append({"role": "user", "content": "Результаты:\n" + "\n".join(results_parts) + "\n\nОтветь пользователю текстом."})
-            last_resp = await ai_client.chat.completions.create(model=config.MODEL, messages=messages, max_tokens=2000)
-            return _strip_dsml(last_resp.choices[0].message.content or "") or "(пустой ответ)"
-        return _strip_dsml(final_content) or "(пустой ответ)"
+        # Продолжаем цикл — LLM сам решит: ещё tool_calls или финальный текстовый ответ.
+        # Это позволяет выполнять многошаговые задачи (удалить 5 → создать 3 напоминания).
 
     return "Не удалось обработать запрос. Попробуй переформулировать."
 
