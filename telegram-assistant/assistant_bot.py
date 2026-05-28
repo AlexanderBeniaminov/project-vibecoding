@@ -153,6 +153,7 @@ histories: dict[int, list[dict]] = {}
 _pending_call_summaries: dict[int, str] = {}  # саммари звонков ожидающие действия
 _pending_call_transcripts: dict[int, str] = {}  # транскрипции для повторной генерации
 _awaiting_call_correction: dict[int, int] = {}  # user_id → message_id саммари
+_pending_reformat: dict[int, dict] = {}  # {user_id: {instruction, original}}
 
 # ── База знаний ───────────────────────────────────────────────
 def _load_knowledge() -> str:
@@ -1336,6 +1337,169 @@ async def call_delete_callback(callback: CallbackQuery):
     await callback.answer()
 
 
+# ── Управление правилами прямо в чате ────────────────────────
+
+def _shared_db():
+    if "/home/parser/bots/shared" not in sys.path:
+        sys.path.insert(0, "/home/parser/bots/shared")
+    import rules_db
+    return rules_db
+
+def _shared_engine():
+    if "/home/parser/bots/shared" not in sys.path:
+        sys.path.insert(0, "/home/parser/bots/shared")
+    import rule_engine
+    return rule_engine
+
+_BOT_NAME = "assistant"
+
+RULE_TYPE_NAMES = {
+    "system_addon": "📌 В промпт",
+    "reformat": "✏️ Переформат",
+    "append": "➕ Дописать в конец",
+    "prepend": "⬆️ Вставить в начало",
+}
+
+
+async def _do_reformat(message: Message, text: str) -> None:
+    user_id = message.from_user.id
+    instruction = re.sub(r'^переделай\s*[—–-]?\s*', '', text, flags=re.IGNORECASE).strip()
+    if not instruction:
+        await message.answer("Укажи инструкцию: «переделай — пиши короче»")
+        return
+    original = (message.reply_to_message.text or "").strip()
+    if not original:
+        await message.answer("Не удалось получить текст исходного сообщения.")
+        return
+    await message.answer("✏️ Переформатирую...")
+    try:
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[
+                {"role": "system", "content": "Переформатируй текст согласно инструкции. Верни только результат."},
+                {"role": "user", "content": f"Инструкция: {instruction}\n\nТекст:\n{original}"},
+            ],
+            max_tokens=2000,
+        )
+        reformatted = (resp.choices[0].message.content or original).strip()
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+        return
+    _pending_reformat[user_id] = {"instruction": instruction, "original": original}
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="💾 Сохранить как правило", callback_data=f"save_rule:{_BOT_NAME}"),
+        InlineKeyboardButton(text="✅ Готово", callback_data="reformat_done"),
+    ]])
+    await message.answer(f"*Результат:*\n\n{reformatted}\n\n_Сохранить это как правило для следующих ответов?_",
+                         parse_mode="Markdown", reply_markup=kb)
+
+
+@dp.callback_query(F.data.startswith("save_rule:"))
+async def cb_save_rule(callback: CallbackQuery):
+    bot_name = callback.data.split(":")[1]
+    pending = _pending_reformat.pop(callback.from_user.id, None)
+    if not pending:
+        await callback.answer("Данные истекли.")
+        return
+    try:
+        db = _shared_db()
+        rule_id = db.create_rule(bot_name, "reformat", pending["instruction"],
+                                 description=f"Авто: {pending['instruction'][:60]}")
+        _shared_engine().invalidate_cache(bot_name)
+        await callback.message.edit_text(
+            f"💾 Правило #{rule_id} сохранено.\nБуду так форматировать следующие ответы."
+        )
+    except Exception as e:
+        await callback.message.edit_text(f"Ошибка сохранения: {e}")
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "reformat_done")
+async def cb_reformat_done(callback: CallbackQuery):
+    _pending_reformat.pop(callback.from_user.id, None)
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.answer("Готово.")
+
+
+@dp.callback_query(F.data.startswith("del_rule:"))
+async def cb_del_rule_confirm(callback: CallbackQuery):
+    rule_id = int(callback.data.split(":")[1])
+    try:
+        db = _shared_db()
+        ok = db.delete_rule(rule_id)
+        _shared_engine().invalidate_cache()
+        text = f"🗑 Правило #{rule_id} удалено." if ok else f"Правило #{rule_id} не найдено."
+    except Exception as e:
+        text = f"Ошибка: {e}"
+    await callback.message.edit_text(text)
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "del_cancel")
+async def cb_del_cancel(callback: CallbackQuery):
+    await callback.message.edit_text("Отменено.")
+    await callback.answer()
+
+
+@dp.message(Command("rules"))
+async def cmd_rules(message: Message):
+    if not is_allowed(message.from_user.id):
+        return
+    try:
+        rules = _shared_db().list_rules(_BOT_NAME)
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+        return
+    if not rules:
+        await message.answer("Правил нет. Процитируй мой ответ и напиши «переделай — инструкция».")
+        return
+    lines = []
+    for r in rules:
+        status = "✅" if r["active"] else "❌"
+        type_label = RULE_TYPE_NAMES.get(r["rule_type"], r["rule_type"])
+        desc = r["description"] or r["instruction"][:60]
+        lines.append(f"{status} #{r['id']} {type_label}\n    {desc}")
+    await message.answer("📋 *Мои правила:*\n\n" + "\n\n".join(lines), parse_mode="Markdown")
+
+
+@dp.message(Command("toggle_rule"))
+async def cmd_toggle_rule(message: Message):
+    if not is_allowed(message.from_user.id):
+        return
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Использование: /toggle_rule <id>")
+        return
+    rule_id = int(parts[1])
+    try:
+        new_state = _shared_db().toggle_rule(rule_id)
+        _shared_engine().invalidate_cache()
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+        return
+    if new_state is None:
+        await message.answer(f"Правило #{rule_id} не найдено.")
+        return
+    emoji = "✅" if new_state else "❌"
+    await message.answer(f"{emoji} Правило #{rule_id} {'активно' if new_state else 'выключено'}.")
+
+
+@dp.message(Command("delete_rule"))
+async def cmd_delete_rule(message: Message):
+    if not is_allowed(message.from_user.id):
+        return
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Использование: /delete_rule <id>")
+        return
+    rule_id = int(parts[1])
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Удалить", callback_data=f"del_rule:{rule_id}"),
+        InlineKeyboardButton(text="❌ Отмена", callback_data="del_cancel"),
+    ]])
+    await message.answer(f"Удалить правило #{rule_id}?", reply_markup=kb)
+
+
 # ── Обработка сообщений ───────────────────────────────────────
 @dp.message(F.text | F.voice)
 async def handle_message(message: Message):
@@ -1387,6 +1551,14 @@ async def handle_message(message: Message):
         await message.answer(f"🎙 _{text}_", parse_mode="Markdown")
     else:
         text = message.text
+
+    # Перехват «переделай» — reply на мой ответ
+    if (message.reply_to_message
+            and message.reply_to_message.from_user
+            and message.reply_to_message.from_user.id == bot.id
+            and text.lower().startswith("переделай")):
+        await _do_reformat(message, text)
+        return
 
     # ── Детектор «проект X» → запись в Google Sheets ──────────────
     _project_match = re.match(
