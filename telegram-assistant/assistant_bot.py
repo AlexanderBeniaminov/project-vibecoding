@@ -724,13 +724,11 @@ async def _keep_typing(chat_id: int, stop: asyncio.Event):
         except asyncio.TimeoutError:
             pass
 
-# Инструменты, требующие мгновенного подтверждения пользователю
-# remember_fact убран — он требует подтверждения через inline-кнопки
+# Инструменты с мгновенным системным подтверждением.
+# Сюда НЕ входят add_reminder, add_note, cancel_reminder и т.п. —
+# LLM сам пишет подтверждение в финальном ответе, дублировать не нужно.
 _ACTION_TOOLS = {
-    "create_calendar_event", "add_reminder", "add_note",
-    "delete_note", "cancel_reminder",
-    "forget_fact", "update_knowledge",
-    "send_file_email",
+    "send_file_email",  # высокорисковое действие — важно подтвердить сразу
 }
 
 # Состояние: user_id → fact_id (ожидаем исправление текста факта)
