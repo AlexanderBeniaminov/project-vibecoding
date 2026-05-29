@@ -5,11 +5,16 @@ helper_bot.py — @pomoshniknamac_bot «Помощник»
 """
 import asyncio
 import base64
+import io
+import logging
+import os
 import re
+import sys
 import json
 import imaplib
 import smtplib
 import sqlite3
+import tempfile
 import email as email_lib
 import email.header
 import email.utils
@@ -827,6 +832,200 @@ async def handle_photo(message: Message):
         await message.answer(f"{result}\n\n{task_result}", parse_mode="Markdown")
     else:
         await message.answer(result, parse_mode="Markdown")
+
+# ── Документы (PDF, Word, Excel, изображения) ────────────────
+
+_MAX_DOC_SIZE = 20 * 1024 * 1024  # 20 МБ — лимит Telegram Bot API
+
+
+async def _download_doc(doc) -> bytes | None:
+    if doc.file_size and doc.file_size > _MAX_DOC_SIZE:
+        return None
+    tg_file = await bot.get_file(doc.file_id)
+    buf = await bot.download_file(tg_file.file_path)
+    return buf.read()
+
+
+async def _analyze_pdf(raw: bytes, hint: str) -> str:
+    import pdfplumber
+    text = ""
+    with pdfplumber.open(io.BytesIO(raw)) as pdf:
+        for page in pdf.pages[:15]:
+            text += (page.extract_text() or "") + "\n"
+    text = text.strip()
+
+    if len(text) > 200:
+        prompt = hint or "Проанализируй документ. Выдели: тип, стороны, ключевые условия, сроки, суммы."
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[
+                {"role": "system", "content": "Анализируй юридический/деловой документ. Отвечай структурированно по-русски."},
+                {"role": "user", "content": f"{prompt}\n\n---\n{text[:12000]}"},
+            ],
+            max_tokens=2000,
+        )
+        return _clean((resp.choices[0].message.content or "").strip())
+
+    # Скан → конвертируем в картинки → vision
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(raw); tmp_path = tmp.name
+    try:
+        from pdf2image import convert_from_path
+        images = convert_from_path(tmp_path, dpi=150, first_page=1, last_page=3)
+        if not images:
+            return "Не удалось извлечь текст из PDF."
+        content: list = []
+        for img in images[:2]:
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            content.append({"type": "image_url", "image_url": {
+                "url": f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
+            }})
+        content.append({"type": "text", "text": hint or "Проанализируй документ. Выдели: тип, стороны, ключевые условия, сроки, суммы."})
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[{"role": "user", "content": content}],
+            max_tokens=2000,
+        )
+        return _clean((resp.choices[0].message.content or "").strip())
+    finally:
+        os.unlink(tmp_path)
+
+
+async def _analyze_docx(raw: bytes, hint: str) -> str:
+    import docx
+    doc = docx.Document(io.BytesIO(raw))
+    text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    if not text:
+        return "Документ Word пустой или не содержит текста."
+    prompt = hint or "Проанализируй документ. Выдели: тип, стороны, ключевые условия, сроки, суммы."
+    resp = await ai_client.chat.completions.create(
+        model=config.MODEL,
+        messages=[
+            {"role": "system", "content": "Анализируй документ. Отвечай структурированно по-русски."},
+            {"role": "user", "content": f"{prompt}\n\n---\n{text[:12000]}"},
+        ],
+        max_tokens=2000,
+    )
+    return _clean((resp.choices[0].message.content or "").strip())
+
+
+async def _analyze_xlsx(raw: bytes, hint: str) -> str:
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    parts = []
+    for name in wb.sheetnames[:3]:
+        ws = wb[name]
+        rows = []
+        for row in ws.iter_rows(max_row=60, values_only=True):
+            cells = [str(c) if c is not None else "" for c in row]
+            if any(c.strip() for c in cells):
+                rows.append(" | ".join(cells))
+        if rows:
+            parts.append(f"Лист «{name}»:\n" + "\n".join(rows[:60]))
+    text = "\n\n".join(parts)
+    if not text:
+        return "Excel-файл пустой или не содержит данных."
+    prompt = hint or "Проанализируй таблицу. Что здесь за данные? Выдели ключевые показатели."
+    resp = await ai_client.chat.completions.create(
+        model=config.MODEL,
+        messages=[
+            {"role": "system", "content": "Анализируй таблицу. Отвечай по-русски."},
+            {"role": "user", "content": f"{prompt}\n\n---\n{text[:8000]}"},
+        ],
+        max_tokens=1500,
+    )
+    return _clean((resp.choices[0].message.content or "").strip())
+
+
+async def _analyze_image_as_doc(raw: bytes, mime: str, hint: str) -> str:
+    content = [
+        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(raw).decode()}"}},
+        {"type": "text", "text": hint or "Проанализируй изображение. Опиши что видишь."},
+    ]
+    resp = await ai_client.chat.completions.create(
+        model=config.MODEL,
+        messages=[{"role": "user", "content": content}],
+        max_tokens=1500,
+    )
+    return _clean((resp.choices[0].message.content or "").strip())
+
+
+@dp.message(F.document)
+async def handle_document(message: Message):
+    if not is_allowed(message.from_user.id):
+        return
+    user_id = message.from_user.id
+    doc = message.document
+    filename = doc.file_name or "document"
+    ext = Path(filename).suffix.lower()
+    mime = doc.mime_type or ""
+    hint = (message.caption or "").strip()
+
+    # Аудио-документы — пропускаем (нет транскрипции в Помощнике)
+    if mime.startswith("audio/"):
+        return
+
+    mb = round((doc.file_size or 0) / 1024 / 1024, 1)
+    if doc.file_size and doc.file_size > _MAX_DOC_SIZE:
+        await message.answer(
+            f"⚠️ Файл слишком большой ({mb} МБ). "
+            f"Telegram позволяет скачивать файлы до 20 МБ.\n"
+            f"Попробуй сжать PDF или разбить на части."
+        )
+        return
+
+    stop = asyncio.Event()
+    typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+    try:
+        await message.answer(f"📄 Читаю «{filename}»…")
+        raw = await _download_doc(doc)
+        if raw is None:
+            await message.answer("Не удалось скачать файл.")
+            return
+
+        if ext == ".pdf" or "pdf" in mime:
+            result = await _analyze_pdf(raw, hint)
+        elif ext in (".docx", ".doc") or "word" in mime or "officedocument.word" in mime:
+            result = await _analyze_docx(raw, hint)
+        elif ext in (".xlsx", ".xls") or "excel" in mime or "spreadsheet" in mime:
+            result = await _analyze_xlsx(raw, hint)
+        elif ext == ".csv":
+            text = raw.decode("utf-8", errors="replace")[:8000]
+            prompt = hint or "Проанализируй CSV-данные. Выдели ключевые показатели."
+            resp = await ai_client.chat.completions.create(
+                model=config.MODEL,
+                messages=[{"role": "user", "content": f"{prompt}\n\n{text}"}],
+                max_tokens=1500,
+            )
+            result = _clean((resp.choices[0].message.content or "").strip())
+        elif mime.startswith("image/") or ext in (".jpg", ".jpeg", ".png", ".webp"):
+            result = await _analyze_image_as_doc(raw, mime or "image/jpeg", hint)
+        else:
+            await message.answer(
+                f"❓ Формат «{ext or mime}» не поддерживается.\n"
+                f"Поддерживаю: PDF, Word (.docx), Excel (.xlsx), CSV, JPEG/PNG."
+            )
+            return
+    except Exception as e:
+        logging.error(f"[doc] ошибка анализа {filename}: {e}")
+        result = f"Ошибка при анализе файла: {e}"
+    finally:
+        stop.set(); typing.cancel()
+        try: await typing
+        except asyncio.CancelledError: pass
+
+    # Добавляем в историю — можно задавать уточняющие вопросы без повторной отправки
+    history = histories.setdefault(user_id, [])
+    if not history:
+        history.append({"role": "system", "content": _system_prompt()})
+    history.append({"role": "user", "content": f"[Файл: {filename}]{chr(10) + hint if hint else ''}"})
+    history.append({"role": "assistant", "content": result})
+    _last_message_time[user_id] = datetime.now().timestamp()
+
+    for chunk in range(0, len(result), 4000):
+        await message.answer(result[chunk:chunk + 4000])
+
 
 # ── Управление правилами прямо в чате ────────────────────────
 
