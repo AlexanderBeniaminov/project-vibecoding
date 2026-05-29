@@ -1226,6 +1226,194 @@ async def handle_fact_deny(callback: CallbackQuery):
     await callback.answer("Отклонено")
 
 
+# ── Анализ документов (PDF, Word, Excel, изображения) ────────
+
+_MAX_DOC_SIZE = 20 * 1024 * 1024  # 20 МБ — лимит Telegram Bot API
+
+
+async def _download_doc(doc) -> bytes | None:
+    if doc.file_size and doc.file_size > _MAX_DOC_SIZE:
+        return None
+    tg_file = await bot.get_file(doc.file_id)
+    buf = await bot.download_file(tg_file.file_path)
+    return buf.read()
+
+
+async def _analyze_pdf(raw: bytes, hint: str) -> str:
+    import pdfplumber, io as _io
+    text = ""
+    with pdfplumber.open(_io.BytesIO(raw)) as pdf:
+        for page in pdf.pages[:15]:
+            text += (page.extract_text() or "") + "\n"
+    text = text.strip()
+
+    if len(text) > 200:
+        prompt = hint or "Проанализируй документ. Выдели: тип, стороны, ключевые условия, сроки, суммы."
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[
+                {"role": "system", "content": "Анализируй юридический/деловой документ. Отвечай структурированно по-русски."},
+                {"role": "user", "content": f"{prompt}\n\n---\n{text[:12000]}"},
+            ],
+            max_tokens=2000,
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    # Скан → конвертируем в картинки и отправляем в vision
+    import tempfile, os, base64, io as _io2
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(raw); tmp_path = tmp.name
+    try:
+        from pdf2image import convert_from_path
+        images = convert_from_path(tmp_path, dpi=150, first_page=1, last_page=3)
+        if not images:
+            return "Не удалось извлечь текст из PDF."
+        content: list = []
+        for img in images[:2]:
+            buf = _io2.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            content.append({"type": "image_url", "image_url": {
+                "url": f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
+            }})
+        content.append({"type": "text", "text": hint or "Проанализируй документ. Выдели: тип, стороны, ключевые условия, сроки, суммы."})
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[{"role": "user", "content": content}],
+            max_tokens=2000,
+        )
+        return (resp.choices[0].message.content or "").strip()
+    finally:
+        os.unlink(tmp_path)
+
+
+async def _analyze_docx(raw: bytes, hint: str) -> str:
+    import docx, io as _io
+    doc = docx.Document(_io.BytesIO(raw))
+    text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    if not text:
+        return "Документ Word пустой или не содержит текста."
+    prompt = hint or "Проанализируй документ. Выдели: тип, стороны, ключевые условия, сроки, суммы."
+    resp = await ai_client.chat.completions.create(
+        model=config.MODEL,
+        messages=[
+            {"role": "system", "content": "Анализируй документ. Отвечай структурированно по-русски."},
+            {"role": "user", "content": f"{prompt}\n\n---\n{text[:12000]}"},
+        ],
+        max_tokens=2000,
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+async def _analyze_xlsx(raw: bytes, hint: str) -> str:
+    import openpyxl, io as _io
+    wb = openpyxl.load_workbook(_io.BytesIO(raw), read_only=True, data_only=True)
+    parts = []
+    for name in wb.sheetnames[:3]:
+        ws = wb[name]
+        rows = []
+        for row in ws.iter_rows(max_row=60, values_only=True):
+            cells = [str(c) if c is not None else "" for c in row]
+            if any(c.strip() for c in cells):
+                rows.append(" | ".join(cells))
+        if rows:
+            parts.append(f"Лист «{name}»:\n" + "\n".join(rows[:60]))
+    text = "\n\n".join(parts)
+    if not text:
+        return "Excel-файл пустой или не содержит данных."
+    prompt = hint or "Проанализируй таблицу. Что здесь за данные? Выдели ключевые показатели."
+    resp = await ai_client.chat.completions.create(
+        model=config.MODEL,
+        messages=[
+            {"role": "system", "content": "Анализируй таблицу. Отвечай по-русски."},
+            {"role": "user", "content": f"{prompt}\n\n---\n{text[:8000]}"},
+        ],
+        max_tokens=1500,
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+async def _analyze_image_doc(raw: bytes, mime: str, hint: str) -> str:
+    import base64
+    content = [
+        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(raw).decode()}"}},
+        {"type": "text", "text": hint or "Проанализируй изображение. Опиши что видишь."},
+    ]
+    resp = await ai_client.chat.completions.create(
+        model=config.MODEL,
+        messages=[{"role": "user", "content": content}],
+        max_tokens=1500,
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+async def _handle_document_file(message: Message):
+    """Роутер для не-аудио документов: PDF, Word, Excel, изображения."""
+    user_id = message.from_user.id
+    doc = message.document
+    filename = doc.file_name or "document"
+    ext = Path(filename).suffix.lower()
+    mime = doc.mime_type or ""
+    hint = (message.caption or "").strip()
+
+    mb = round((doc.file_size or 0) / 1024 / 1024, 1)
+    if doc.file_size and doc.file_size > _MAX_DOC_SIZE:
+        await message.answer(
+            f"⚠️ Файл слишком большой ({mb} МБ). "
+            f"Telegram позволяет скачивать файлы до 20 МБ.\n"
+            f"Попробуй сжать PDF или разбить на части."
+        )
+        return
+
+    stop = asyncio.Event()
+    typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+    try:
+        await message.answer(f"📄 Читаю «{filename}»…")
+        raw = await _download_doc(doc)
+        if raw is None:
+            await message.answer("Не удалось скачать файл.")
+            return
+
+        if ext == ".pdf" or "pdf" in mime:
+            result = await _analyze_pdf(raw, hint)
+        elif ext in (".docx", ".doc") or "word" in mime or "officedocument.word" in mime:
+            result = await _analyze_docx(raw, hint)
+        elif ext in (".xlsx", ".xls") or "excel" in mime or "spreadsheet" in mime:
+            result = await _analyze_xlsx(raw, hint)
+        elif ext == ".csv":
+            text = raw.decode("utf-8", errors="replace")[:8000]
+            prompt = hint or "Проанализируй CSV-данные. Выдели ключевые показатели."
+            resp = await ai_client.chat.completions.create(
+                model=config.MODEL,
+                messages=[{"role": "user", "content": f"{prompt}\n\n{text}"}],
+                max_tokens=1500,
+            )
+            result = (resp.choices[0].message.content or "").strip()
+        elif mime.startswith("image/") or ext in (".jpg", ".jpeg", ".png", ".webp"):
+            result = await _analyze_image_doc(raw, mime or "image/jpeg", hint)
+        else:
+            await message.answer(
+                f"❓ Формат «{ext or mime}» не поддерживается.\n"
+                f"Поддерживаю: PDF, Word (.docx), Excel (.xlsx), CSV, JPEG/PNG."
+            )
+            return
+    except Exception as e:
+        logging.error(f"[doc] ошибка анализа {filename}: {e}")
+        result = f"Ошибка при анализе файла: {e}"
+    finally:
+        stop.set(); typing.cancel()
+        try: await typing
+        except asyncio.CancelledError: pass
+
+    # Добавляем в историю чтобы можно было задавать уточняющие вопросы
+    history = histories.setdefault(user_id, [])
+    history.append({"role": "user", "content": f"[Файл: {filename}]{chr(10) + hint if hint else ''}"})
+    history.append({"role": "assistant", "content": result})
+    _last_message_time[user_id] = datetime.now().timestamp()
+
+    for chunk in range(0, len(result), 4000):
+        await message.answer(result[chunk:chunk+4000])
+
+
 # ── Запись звонков → саммари ─────────────────────────────────
 @dp.message(F.audio | F.document)
 async def handle_audio_file(message: Message):
@@ -1234,7 +1422,10 @@ async def handle_audio_file(message: Message):
         return
     if message.document:
         mime = message.document.mime_type or ""
-        if not mime.startswith("audio/"):
+        ext = Path(message.document.file_name or "").suffix.lower()
+        # Не-аудио документы → отдельный обработчик
+        if not (mime.startswith("audio/") or ext in _WHISPER_SUPPORTED or ext in _NEEDS_CONVERT):
+            await _handle_document_file(message)
             return
         file_id = message.document.file_id
         filename = message.document.file_name or "audio.m4a"
