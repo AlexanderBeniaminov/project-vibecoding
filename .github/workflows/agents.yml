@@ -74,7 +74,7 @@ jobs:
         if: github.event_name == 'schedule' && github.event.schedule == '0 21 * * 1'
         run: python agents/agent1_analyst.py --attempt 3
 
-      - name: Агент 1 — попытка 4 финальная, 01:00 МСК (→ всем если пусто, анализ не стартует)
+      - name: Агент 1 — попытка 4 финальная, 01:00 МСК (→ email Виктору, анализ не стартует)
         if: github.event_name == 'schedule' && github.event.schedule == '0 22 * * 1'
         run: python agents/agent1_analyst.py --attempt 4
 
