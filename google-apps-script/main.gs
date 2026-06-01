@@ -32,17 +32,18 @@ var SEG_SHEET_ID   = '1CdeyCx0VlzqNpUSDhmIdJPZYuR_1nv33bHu5FLnHX_8';
 var SEG_SHEET_NAME = '2026 ✓';
 
 // Маппинг: [строка в «2026 ✓», строка в «2026» финансового отчёта]
+// Строки проверены по скриншоту листа «2026 ✓» (июнь 2026)
 var SEG_MAPPING = [
-  [5,  51],   // Физики: Бронь  ★
-  [8,  52],   // Физики: Сумма  ★
-  [12, 40],   // ДР: Бронь      ★
-  [14, 41],   // ДР: Проживания ★
-  [15, 42],   // ДР: Сумма      ★
-  [19, 44],   // Группы: Бронь  ★
-  [21, 45],   // Группы: Проживания ★
-  [22, 46],   // Группы: Сумма  ★
-  [26, 48],   // Корп: Бронь    ★
-  [29, 49],   // Корп: Сумма    ★
+  [6,  51],   // Физики: Бронь  ★
+  [9,  52],   // Физики: Сумма  ★
+  [14, 40],   // ДР: Бронь      ★
+  [16, 41],   // ДР: Проживания ★
+  [17, 42],   // ДР: Сумма      ★
+  [22, 44],   // Группы: Бронь  ★
+  [24, 45],   // Группы: Проживания ★
+  [25, 46],   // Группы: Сумма  ★
+  [30, 48],   // Корп: Бронь    ★
+  [33, 49],   // Корп: Сумма    ★
 ];
 
 var TL_AUTH_URL = 'https://partner.tlintegration.com/auth/token';
@@ -196,6 +197,44 @@ function installWeeklyTrigger() {
     .create();
 
   Logger.log('✅ Триггер установлен: понедельник ~10:00 МСК (07:00 UTC)');
+}
+
+/**
+ * Синхронизирует строки сегментов (★) из файла Евгении/Надежды
+ * в финансовый отчёт для прошедшей недели.
+ * Запускается отдельным триггером в 23:59 МСК — после того как команда заполнила данные.
+ */
+function syncSegmentsWeekly() {
+  var week = getPrevWeek_();
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var sh   = getSheetByGid_(ss, HOTEL_SHEET_GID);
+  var col  = findOrCreateWeekCol_(sh, week);
+
+  Logger.log('▶ Синхронизация сегментов: неделя ' + week.num + ' → столбец ' + columnToLetter_(col));
+  syncSegments_(sh, col, week.num);
+  SpreadsheetApp.flush();
+  Logger.log('✅ Готово');
+}
+
+/**
+ * Создаёт триггер для syncSegmentsWeekly: каждый понедельник в 23:59 МСК (20:59 UTC).
+ * Запускать один раз вручную.
+ */
+function installSegmentsTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'syncSegmentsWeekly') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  ScriptApp.newTrigger('syncSegmentsWeekly')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(20)       // 20:xx UTC = 23:xx МСК (UTC+3)
+    .nearMinute(59)   // ±15 мин вокруг 20:59 UTC = 23:59 МСК
+    .create();
+
+  Logger.log('✅ Триггер сегментов установлен: понедельник ~23:59 МСК (20:59 UTC)');
 }
 
 
