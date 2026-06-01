@@ -39,8 +39,8 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           MAX_BOT_TOKEN:               ${{ secrets.MAX_BOT_TOKEN }}
           MAX_OWNER_USER_ID:           ${{ secrets.MAX_OWNER_USER_ID }}
-          MAX_ADMIN_USER_ID:           ${{ secrets.MAX_ADMIN_USER_ID }}
-          MAX_DEV_USER_ID:             ${{ secrets.MAX_DEV_USER_ID }}
+          MAX_ADMIN_USER_ID:           ${{ secrets.MAX_OWNER_USER_ID }}
+          MAX_DEV_USER_ID:             ${{ secrets.MAX_OWNER_USER_ID }}
         run: |
           DATE_ARG="${{ github.event.inputs.date }}"
           if [ -n "$DATE_ARG" ]; then
