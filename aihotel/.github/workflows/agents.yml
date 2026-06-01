@@ -105,7 +105,7 @@ jobs:
 
       - name: Ручной — Агент 1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent1_analyst'
-        run: python agents/agent1_analyst.py 23
+        run: python agents/agent1_analyst.py
 
       - name: Ручной — Агент 1 (принудительный перезапуск)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent1_analyst_force'
