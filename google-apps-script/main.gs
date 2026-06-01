@@ -1397,15 +1397,20 @@ function onEditHotelSheet(e) {
 function sendMaxNotification_(text) {
   var props  = PropertiesService.getScriptProperties();
   var token  = props.getProperty('MAX_BOT_TOKEN');
-  var userId = props.getProperty('MAX_OWNER_USER_ID');
+  var chatId = props.getProperty('MAX_CHAT_ID');      // chat_id из getMyMaxChatId()
+  var userId = props.getProperty('MAX_OWNER_USER_ID'); // fallback
 
-  if (!token || !userId) {
-    Logger.log('MAX: нет MAX_BOT_TOKEN или MAX_OWNER_USER_ID в Script Properties');
+  if (!token) {
+    Logger.log('MAX: нет MAX_BOT_TOKEN');
     return;
   }
+
+  // Используем chat_id если есть, иначе user_id
+  var param = chatId ? ('chat_id=' + chatId) : ('user_id=' + userId);
+
   try {
     var resp = UrlFetchApp.fetch(
-      'https://platform-api.max.ru/messages?user_id=' + userId,
+      'https://platform-api.max.ru/messages?' + param,
       {
         method: 'post',
         headers: {'Authorization': token, 'Content-Type': 'application/json'},
@@ -1441,18 +1446,32 @@ function round2_(x) { return Math.round(x * 100) / 100; }
 /** Округление до 4 знаков (для хранения долей, напр. 0.8745) */
 function round4_(x) { return Math.round(x * 10000) / 10000; }
 
-/** Показывает твой MAX user_id — напиши боту любое сообщение, потом запусти эту функцию */
-function getMyMaxUserId() {
+/** Напиши боту сообщение, потом запусти — покажет chat_id для отправки сообщений */
+function getMyMaxChatId() {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('MAX_BOT_TOKEN');
   if (!token) { Logger.log('❌ Нет MAX_BOT_TOKEN'); return; }
 
-  var resp = UrlFetchApp.fetch('https://botapi.max.ru/updates?limit=5', {
+  var resp = UrlFetchApp.fetch('https://botapi.max.ru/updates?limit=10', {
     headers: {'Authorization': token},
     muteHttpExceptions: true,
   });
-  Logger.log('Ответ: ' + resp.getContentText().substring(0, 500));
-  // В логе ищи "user_id": ЧИСЛО — это твой ID
+
+  var data = JSON.parse(resp.getContentText());
+  var updates = data.updates || [];
+
+  if (updates.length === 0) {
+    Logger.log('⚠️ Нет сообщений. Напиши боту что-нибудь в MAX и запусти снова.');
+    return;
+  }
+
+  updates.forEach(function(u) {
+    var msg = u.message || {};
+    var sender = (msg.sender || {});
+    var chat   = (msg.recipient || {});
+    Logger.log('user_id: ' + sender.user_id + '  |  chat_id: ' + chat.chat_id + '  |  текст: ' + ((msg.body || {}).text || ''));
+  });
+  Logger.log('→ Скопируй chat_id и поставь в Script Properties как MAX_CHAT_ID');
 }
 
 /** Тест MAX-уведомления с подробным логом */
