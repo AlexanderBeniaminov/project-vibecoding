@@ -34,7 +34,9 @@ env:
   TL_PROPERTY_ID: ${{ secrets.TL_PROPERTY_ID }}
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
-  TELEGRAM_VIKTOR_ID: ${{ secrets.TELEGRAM_VIKTOR_ID }}
+  VIKTOR_EMAIL: ${{ secrets.VIKTOR_EMAIL }}
+  GMAIL_USER: ${{ secrets.GMAIL_USER }}
+  GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
 
 jobs:
   run-agents:

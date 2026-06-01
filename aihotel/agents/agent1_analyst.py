@@ -165,27 +165,42 @@ def check_manual_cells(ws, col_idx):
 
 
 def notify_missing(attempt, missing, week_num, date_label):
-    """Отправляет уведомление о незаполненных ячейках нужным адресатам."""
-    from utils.telegram import send as tg_send
-    bot   = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-    owner = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
-    viktor = os.environ.get('TELEGRAM_VIKTOR_ID', '0')
+    """Отправляет уведомление о незаполненных ячейках нужным адресатам.
 
-    text = (
+    Попытка 1 → Telegram Александру.
+    Попытки 2-4 → Email Виктору.
+    Попытка 4 → дополнительно Telegram Александру.
+    """
+    from utils.telegram import send as tg_send
+    from utils.email_notify import send as email_send
+
+    bot          = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    owner_tg     = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
+    viktor_email = os.environ.get('VIKTOR_EMAIL', '')
+
+    tg_text = (
         f'⚠️ Губаха — нед.{week_num} ({date_label})\n'
         f'Не заполнено {len(missing)} ячеек:\n' +
         '\n'.join(f'• {c}' for c in missing)
     )
+    email_subj = f'Губаха нед.{week_num} — не заполнено {len(missing)} ячеек'
+    email_body = (
+        f'Губаха, неделя {week_num} ({date_label})\n\n'
+        f'Не заполнено {len(missing)} ячеек:\n' +
+        '\n'.join(f'- {c}' for c in missing) +
+        '\n\nПожалуйста, внесите данные в лист «2026».'
+    )
+
     if attempt == 1:
-        tg_send(bot, owner, text)
+        tg_send(bot, owner_tg, tg_text)
         print(f'  Telegram → Александр: {len(missing)} незаполненных')
     elif attempt in (2, 3):
-        tg_send(bot, viktor, text)
-        print(f'  Telegram → Виктор: {len(missing)} незаполненных')
-    else:  # 4
-        tg_send(bot, viktor, text)
-        tg_send(bot, owner, text)
-        print(f'  Telegram → Виктор + Александр: {len(missing)} незаполненных')
+        email_send(viktor_email, email_subj, email_body)
+        print(f'  Email → Виктор: {len(missing)} незаполненных')
+    else:  # 4 — финальная
+        email_send(viktor_email, email_subj, email_body)
+        tg_send(bot, owner_tg, tg_text)
+        print(f'  Email → Виктор + Telegram → Александр: {len(missing)} незаполненных')
 
 
 def get_current_week():

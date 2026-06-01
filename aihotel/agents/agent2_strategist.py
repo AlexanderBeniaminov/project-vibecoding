@@ -226,19 +226,29 @@ def send_reminder_if_no_digest(finance_sheet_id, strategy_sheet_id, client_gs):
             if not str(val).strip():
                 missing.append(label)
 
-    bot    = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-    owner  = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
-    viktor = os.environ.get('TELEGRAM_VIKTOR_ID', '0')
+    from utils.email_notify import send as email_send
 
-    text = (
+    bot          = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    owner_tg     = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
+    viktor_email = os.environ.get('VIKTOR_EMAIL', '')
+
+    tg_text = (
         f'🚨 Губаха — {week_label}\n'
-        f'Агент 1 НЕ запустился — недостаточно данных.\n'
+        f'Агент 1 НЕ запустился — данные не внесены.\n'
         f'Не заполнено {len(missing)} ячеек:\n' +
         '\n'.join(f'• {c}' for c in missing)
     )
-    tg_send(bot, viktor, text)
-    tg_send(bot, owner, text)
-    print(f'Telegram → Виктор + Александр: напоминание отправлено ({len(missing)} ячеек)')
+    email_subj = f'🚨 Губаха {week_label} — дайджест не сформирован'
+    email_body = (
+        f'Губаха, {week_label}\n\n'
+        f'Агент 1 не сформировал дайджест — данные не были внесены до 01:00.\n\n'
+        f'Не заполнено {len(missing)} ячеек:\n' +
+        '\n'.join(f'- {c}' for c in missing) +
+        '\n\nПожалуйста, внесите данные в лист «2026».'
+    )
+    email_send(viktor_email, email_subj, email_body)
+    tg_send(bot, owner_tg, tg_text)
+    print(f'Email → Виктор + Telegram → Александр: напоминание отправлено ({len(missing)} ячеек)')
 
 
 def main():
