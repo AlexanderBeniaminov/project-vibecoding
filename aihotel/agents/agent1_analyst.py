@@ -24,6 +24,24 @@ ROW_REVENUE_CHECK = 5
 
 DYNAMICS_ROWS = {}  # В «2026» нет отдельных строк динамики — формулы в самом листе
 
+# Ячейки которые Виктор заполняет вручную — проверяются перед анализом
+MANUAL_ROWS_CHECK = {
+    54: 'NPS',
+    56: 'Отзывы коттеджи (кол-во)',
+    57: 'Отзывы коттеджи (негат. %)',
+    59: 'Отзывы хостелы (кол-во)',
+    60: 'Отзывы хостелы (негат. %)',
+    62: 'Остаток на счёте (руб.)',
+    63: 'Остаток в кассе (руб.)',
+    65: 'Кредит. задолж. (руб.)',
+    66: 'Дебит. задолж. (руб.)',
+    68: 'Ремонт: заявок',
+    76: 'Звонков входящих',
+    77: 'Неотвеченных звонков',
+    81: 'ФОТ горничные+техники (руб.)',
+    82: 'ФОТ F&B персонал (руб.)',
+}
+
 METRICS = [
     # ДОХОДЫ
     {'row': 5,  'label': 'Доход НФ за неделю (руб.)',      'yoy_row': 7,    'section': 'income'},
@@ -112,6 +130,62 @@ TITLE_BG    = {'red': 0.13, 'green': 0.29, 'blue': 0.53}
 EXEC_BG     = {'red': 0.18, 'green': 0.38, 'blue': 0.55}
 DYNAMICS_BG = {'red': 0.88, 'green': 0.91, 'blue': 0.96}
 WHITE_TEXT  = {'red': 1.0,  'green': 1.0,  'blue': 1.0}
+
+
+def get_attempt():
+    """Возвращает номер попытки из --attempt N, или None если не задан."""
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if arg == '--attempt' and i < len(sys.argv):
+            try:
+                return int(sys.argv[i + 1])
+            except (IndexError, ValueError):
+                pass
+        if arg.startswith('--attempt='):
+            try:
+                return int(arg.split('=', 1)[1])
+            except ValueError:
+                pass
+    return None
+
+
+def check_manual_cells(ws, col_idx):
+    """Возвращает список незаполненных ручных ячеек для текущей недели."""
+    all_data = ws.get_all_values()
+    missing = []
+    for row_num, label in sorted(MANUAL_ROWS_CHECK.items()):
+        row_idx = row_num - 1
+        if row_idx >= len(all_data):
+            missing.append(label)
+            continue
+        row = all_data[row_idx]
+        val = row[col_idx] if col_idx < len(row) else ''
+        if not str(val).strip():
+            missing.append(label)
+    return missing
+
+
+def notify_missing(attempt, missing, week_num, date_label):
+    """Отправляет уведомление о незаполненных ячейках нужным адресатам."""
+    from utils.telegram import send as tg_send
+    bot   = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    owner = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
+    viktor = os.environ.get('TELEGRAM_VIKTOR_ID', '0')
+
+    text = (
+        f'⚠️ Губаха — нед.{week_num} ({date_label})\n'
+        f'Не заполнено {len(missing)} ячеек:\n' +
+        '\n'.join(f'• {c}' for c in missing)
+    )
+    if attempt == 1:
+        tg_send(bot, owner, text)
+        print(f'  Telegram → Александр: {len(missing)} незаполненных')
+    elif attempt in (2, 3):
+        tg_send(bot, viktor, text)
+        print(f'  Telegram → Виктор: {len(missing)} незаполненных')
+    else:  # 4
+        tg_send(bot, viktor, text)
+        tg_send(bot, owner, text)
+        print(f'  Telegram → Виктор + Александр: {len(missing)} незаполненных')
 
 
 def get_current_week():
@@ -435,6 +509,9 @@ def write_digest_formatted(ws_digest, week_label, metric_results, task_stats, fa
 def main():
     print('=== Агент 1: Аналитик ===')
 
+    force = '--force' in sys.argv
+    attempt = get_attempt()   # 1-4 если запущен по расписанию, None если вручную
+
     # Выбор недели: python3 agent1_analyst.py 15  → анализ за неделю 15
     target_week = None
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
@@ -442,7 +519,7 @@ def main():
         print(f'Выбрана неделя: {target_week}')
 
     current_week = get_current_week()
-    print(f'Текущая неделя: {current_week}')
+    print(f'Текущая неделя: {current_week}' + (f' [попытка {attempt}]' if attempt else ''))
 
     finance_sheet_id  = os.environ['FINANCE_SHEET_ID']
     strategy_sheet_id = os.environ['STRATEGY_SHEET_ID']
@@ -454,7 +531,7 @@ def main():
 
     if target_week is None:
         reset_weekly_flags(ws_status, current_week)
-        if get_flag(ws_status, 'анализ_готов') == 'да':
+        if not force and get_flag(ws_status, 'анализ_готов') == 'да':
             print('Анализ уже выполнен на этой неделе. Выхожу.')
             return
 
@@ -479,6 +556,19 @@ def main():
 
     week_label = f'Неделя {week_num}  |  {date_label}'
     print(f'Анализирую: {week_label}')
+
+    # Проверка ручных ячеек при запуске по расписанию
+    if attempt is not None and target_week is None:
+        missing = check_manual_cells(ws_current, col_idx)
+        if missing:
+            notify_missing(attempt, missing, week_num, date_label)
+            if attempt == 4:
+                print('Попытка 4: данные не внесены — анализ не запускается.')
+                sys.exit(0)
+            print(f'Попытка {attempt}: ожидаем следующую попытку.')
+            sys.exit(0)
+        print(f'Попытка {attempt}: все ручные ячейки заполнены → запускаем анализ.')
+
     if target_week is None:
         set_flag(ws_status, 'данные_внесены', 'да')
 

@@ -15,20 +15,26 @@ on:
 
   schedule:
     # Все времена UTC. Москва = UTC+3, Губаха (Пермь) = UTC+5
-    # Агент 1 читает из листа «2026» (TravelLine, автоматически) — данные всегда актуальны
-    - cron: '0 23 * * 1'   # Пн 23:00 UTC = Вт 02:00 МСК → Агент 1 (анализ)
-    - cron: '0 2 * * 2'    # Вт 02:00 UTC = Вт 05:00 МСК → Агент 2 (задачи)
-    # TravelLine Collector (Python) — отключён, данные собирает GAS (пн 10:00 МСК)
-    # - cron: '0 20 * * 1'   # Пн 20:00 UTC = Пн 23:00 МСК → TravelLine Collector
+    # Агент 1: 4 попытки. При незаполненных ячейках — уведомления, без анализа.
+    - cron: '0 19 * * 1'   # Пн 19:00 UTC = 22:00 МСК → Агент 1 попытка 1 (→ Александру)
+    - cron: '0 20 * * 1'   # Пн 20:00 UTC = 23:00 МСК → Агент 1 попытка 2 (→ Виктору)
+    - cron: '0 21 * * 1'   # Пн 21:00 UTC = 00:00 МСК → Агент 1 попытка 3 (→ Виктору)
+    - cron: '0 22 * * 1'   # Пн 22:00 UTC = 01:00 МСК → Агент 1 попытка 4 финальная
+    - cron: '0 2 * * 2'    # Вт 02:00 UTC = 05:00 МСК → Агент 2 (задачи)
+    - cron: '0 6 * * 2'    # Вт 06:00 UTC = 09:00 МСК → напоминание если нет дайджеста
 
 env:
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  ROUTERAI_API_KEY: ${{ secrets.ROUTERAI_API_KEY }}
   GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
   FINANCE_SHEET_ID: ${{ secrets.FINANCE_SHEET_ID }}
   STRATEGY_SHEET_ID: ${{ secrets.STRATEGY_SHEET_ID }}
   TL_CLIENT_ID: ${{ secrets.TL_CLIENT_ID }}
   TL_CLIENT_SECRET: ${{ secrets.TL_CLIENT_SECRET }}
   TL_PROPERTY_ID: ${{ secrets.TL_PROPERTY_ID }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+  TELEGRAM_VIKTOR_ID: ${{ secrets.TELEGRAM_VIKTOR_ID }}
 
 jobs:
   run-agents:
@@ -52,19 +58,33 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # === Автоматические запуски по расписанию ===
+      # === Агент 1: 4 попытки по понедельникам ===
 
-      - name: TravelLine Collector — сбор данных недели (Пн 20:00 UTC)
+      - name: Агент 1 — попытка 1, 22:00 МСК (→ Александру если пусто)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 19 * * 1'
+        run: python agents/agent1_analyst.py --attempt 1
+
+      - name: Агент 1 — попытка 2, 23:00 МСК (→ Виктору если пусто)
         if: github.event_name == 'schedule' && github.event.schedule == '0 20 * * 1'
-        run: python travelline_collector.py
+        run: python agents/agent1_analyst.py --attempt 2
 
-      - name: Агент 1 — Аналитик (Пн 23:00 UTC)
-        if: github.event_name == 'schedule' && github.event.schedule == '0 23 * * 1'
-        run: python agents/agent1_analyst.py
+      - name: Агент 1 — попытка 3, 00:00 МСК (→ Виктору если пусто)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 21 * * 1'
+        run: python agents/agent1_analyst.py --attempt 3
 
-      - name: Агент 2 — Стратег (Вт 02:00 UTC)
+      - name: Агент 1 — попытка 4 финальная, 01:00 МСК (→ всем если пусто, анализ не стартует)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 22 * * 1'
+        run: python agents/agent1_analyst.py --attempt 4
+
+      # === Агент 2 ===
+
+      - name: Агент 2 — Стратег, 05:00 МСК
         if: github.event_name == 'schedule' && github.event.schedule == '0 2 * * 2'
         run: python agents/agent2_strategist.py
+
+      - name: Агент 2 — напоминание 09:00 МСК (если дайджест не записан)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 6 * * 2'
+        run: python agents/agent2_strategist.py --reminder-only
 
       # === Ручной запуск через workflow_dispatch ===
 

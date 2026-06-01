@@ -191,9 +191,67 @@ def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -
         print(f"  Предупреждение: не удалось отправить Telegram-уведомление: {e}")
 
 
+def send_reminder_if_no_digest(finance_sheet_id, strategy_sheet_id, client_gs):
+    """09:00 МСК вт — напоминание если Агент 1 не сформировал дайджест."""
+    from utils.telegram import send as tg_send
+    from utils.sheets import get_flag
+
+    ws_status = get_worksheet(client_gs, finance_sheet_id, 'Статус системы')
+    if get_flag(ws_status, 'дайджест_записан') == 'да':
+        print('Дайджест уже записан — напоминание не нужно.')
+        return
+
+    # Читаем какие ячейки пустые (повторяем логику агента 1)
+    ws_2026 = get_worksheet(client_gs, finance_sheet_id, '2026')
+    row1 = ws_2026.row_values(1)
+    all_data = ws_2026.get_all_values()
+    # Берём последнюю колонку с номером недели
+    col_idx = None
+    for i, v in enumerate(row1):
+        if str(v).strip().isdigit():
+            col_idx = i
+    if col_idx is None:
+        print('Не найдена колонка недели — отправляем общее напоминание.')
+        week_label = 'текущей недели'
+        missing = ['данные недоступны']
+    else:
+        week_num = row1[col_idx]
+        date_label = all_data[1][col_idx] if len(all_data) > 1 and col_idx < len(all_data[1]) else ''
+        week_label = f'нед.{week_num} ({date_label})'
+        from agents.agent1_analyst import MANUAL_ROWS_CHECK
+        missing = []
+        for row_num, label in sorted(MANUAL_ROWS_CHECK.items()):
+            row_data = all_data[row_num - 1] if row_num <= len(all_data) else []
+            val = row_data[col_idx] if col_idx < len(row_data) else ''
+            if not str(val).strip():
+                missing.append(label)
+
+    bot    = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    owner  = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
+    viktor = os.environ.get('TELEGRAM_VIKTOR_ID', '0')
+
+    text = (
+        f'🚨 Губаха — {week_label}\n'
+        f'Агент 1 НЕ запустился — недостаточно данных.\n'
+        f'Не заполнено {len(missing)} ячеек:\n' +
+        '\n'.join(f'• {c}' for c in missing)
+    )
+    tg_send(bot, viktor, text)
+    tg_send(bot, owner, text)
+    print(f'Telegram → Виктор + Александр: напоминание отправлено ({len(missing)} ячеек)')
+
+
 def main():
     print("=== Агент 2: Стратег ===")
     force = '--force' in sys.argv
+
+    if '--reminder-only' in sys.argv:
+        finance_sheet_id  = os.environ['FINANCE_SHEET_ID']
+        strategy_sheet_id = os.environ['STRATEGY_SHEET_ID']
+        client_gs = get_client()
+        send_reminder_if_no_digest(finance_sheet_id, strategy_sheet_id, client_gs)
+        return
+
     current_week = get_current_week()
     print(f"Текущая неделя: {current_week}" + (" [FORCE]" if force else ""))
 
