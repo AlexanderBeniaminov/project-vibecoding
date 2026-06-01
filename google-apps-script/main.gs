@@ -1441,7 +1441,45 @@ function round2_(x) { return Math.round(x * 100) / 100; }
 /** Округление до 4 знаков (для хранения долей, напр. 0.8745) */
 function round4_(x) { return Math.round(x * 10000) / 10000; }
 
-/** Тест MAX-уведомления — запустить вручную из редактора */
+/** Показывает твой MAX user_id — напиши боту любое сообщение, потом запусти эту функцию */
+function getMyMaxUserId() {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty('MAX_BOT_TOKEN');
+  if (!token) { Logger.log('❌ Нет MAX_BOT_TOKEN'); return; }
+
+  var resp = UrlFetchApp.fetch('https://botapi.max.ru/updates?limit=5', {
+    headers: {'Authorization': token},
+    muteHttpExceptions: true,
+  });
+  Logger.log('Ответ: ' + resp.getContentText().substring(0, 500));
+  // В логе ищи "user_id": ЧИСЛО — это твой ID
+}
+
+/** Тест MAX-уведомления с подробным логом */
 function testMax() {
-  sendMaxNotification_('🧪 Тест: уведомление работает');
+  var props  = PropertiesService.getScriptProperties();
+  var token  = props.getProperty('MAX_BOT_TOKEN');
+  var userId = props.getProperty('MAX_OWNER_USER_ID');
+
+  Logger.log('=== Диагностика MAX ===');
+  Logger.log('MAX_BOT_TOKEN:    ' + (token  ? 'есть (' + token.length  + ' символов)' : '❌ НЕТ'));
+  Logger.log('MAX_OWNER_USER_ID:' + (userId ? 'есть (' + userId + ')'  : '❌ НЕТ'));
+
+  if (!token || !userId) {
+    Logger.log('❌ Не заданы Script Properties — проверь настройки');
+    return;
+  }
+
+  var url = 'https://platform-api.max.ru/messages?user_id=' + userId;
+  Logger.log('URL: ' + url);
+
+  var resp = UrlFetchApp.fetch(url, {
+    method: 'post',
+    headers: {'Authorization': token, 'Content-Type': 'application/json'},
+    payload: JSON.stringify({text: '🧪 Тест: уведомление работает'}),
+    muteHttpExceptions: true,
+  });
+
+  Logger.log('Код ответа: ' + resp.getResponseCode());
+  Logger.log('Тело ответа: ' + resp.getContentText().substring(0, 300));
 }
