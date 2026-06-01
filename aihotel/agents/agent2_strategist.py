@@ -156,9 +156,8 @@ def parse_tasks_json(raw: str) -> list:
 
 
 def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -> None:
-    from utils.telegram import send as tg_send
-    bot_token = os.environ.get('MAX_BOT_TOKEN', '')
-    owner_id  = os.environ.get('MAX_OWNER_ID', '')
+    from utils.max_notify import send as max_send
+    owner_id = os.environ.get('MAX_OWNER_ID', '')
 
     by_person = {}
     for t in tasks:
@@ -174,9 +173,9 @@ def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -
         f"Задач всего: {len(tasks)}\n{task_lines}"
     )
 
-    sent = tg_send(bot_token, owner_id, text)
+    sent = max_send(owner_id, text)
     if sent:
-        print("  Telegram-уведомление отправлено")
+        print("  MAX-уведомление отправлено")
 
 
 def main():

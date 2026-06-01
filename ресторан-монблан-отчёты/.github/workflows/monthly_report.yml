@@ -1,9 +1,9 @@
 name: Monthly Report
 
 on:
-  # 1-го числа каждого месяца в 15:00 МСК = 12:00 UTC (отчёт за предыдущий месяц)
+  # 1-го числа каждого месяца в 10:00 МСК = 07:00 UTC (отчёт за предыдущий месяц)
   schedule:
-    - cron: "0 12 1 * *"
+    - cron: "0 7 1 * *"
   # Ручной запуск с возможностью указать месяц
   workflow_dispatch:
     inputs:
@@ -37,8 +37,8 @@ jobs:
           IIKO_WEB_LOGIN:    "buh"
           IIKO_WEB_PASSWORD: ${{ secrets.IIKO_WEB_PASSWORD }}
           IIKO_STORE_ID:     "82455"
-          MAX_BOT_TOKEN:     ${{ secrets.MAX_BOT_TOKEN }}
-          MAX_DEV_USER_ID:   ${{ secrets.MAX_DEV_USER_ID }}
+          MAX_BOT_TOKEN:        ${{ secrets.MAX_BOT_TOKEN }}
+          MAX_OWNER_USER_ID:    ${{ secrets.MAX_OWNER_USER_ID }}
         run: |
           DATE_ARG="${{ github.event.inputs.month_date }}"
           if [ -n "$DATE_ARG" ]; then
@@ -46,3 +46,28 @@ jobs:
           else
             python3 scripts/main.py monthly
           fi
+
+      - name: Уведомление в MAX — отчёт готов
+        if: success()
+        env:
+          MAX_BOT_TOKEN:     ${{ secrets.MAX_BOT_TOKEN }}
+          MAX_OWNER_USER_ID: ${{ secrets.MAX_OWNER_USER_ID }}
+        run: |
+          python3 - <<'EOF'
+          import os, urllib.request, json, datetime
+          token   = os.environ.get('MAX_BOT_TOKEN', '')
+          user_id = os.environ.get('MAX_OWNER_USER_ID', '')
+          if not token or not user_id:
+              print('MAX: нет токена или user_id')
+              exit(0)
+          month = (datetime.date.today().replace(day=1) - datetime.timedelta(days=1)).strftime('%B %Y')
+          text = f'✅ Монблан — ежемесячный отчёт за {month} записан в «ЕжеМесячный» стр.1–29, 42–100.'
+          data = json.dumps({'text': text}).encode()
+          req  = urllib.request.Request(
+              f'https://platform-api.max.ru/messages?user_id={int(user_id)}',
+              data=data,
+              headers={'Authorization': token, 'Content-Type': 'application/json'},
+          )
+          urllib.request.urlopen(req, timeout=10)
+          print('MAX: уведомление отправлено')
+          EOF

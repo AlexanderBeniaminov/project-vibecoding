@@ -115,6 +115,34 @@ function fillMonblanWeek(dateFrom, dateTo) {
 
   writeWeekData_(sh, col, data);
   Logger.log('✅ Данные за неделю ' + dateFrom + ' — ' + dateTo + ' записаны.');
+  sendMaxNotificationMonblan_('✅ Монблан — данные за неделю ' + isoWeek + ' (' + dateFrom + ' — ' + dateTo + ') записаны в «ЕженедельноО».');
+}
+
+/**
+ * Отправляет MAX-уведомление собственнику.
+ * MAX_BOT_TOKEN и MAX_OWNER_USER_ID задаются в Script Properties проекта.
+ */
+function sendMaxNotificationMonblan_(text) {
+  var props  = PropertiesService.getScriptProperties();
+  var token  = props.getProperty('MAX_BOT_TOKEN');
+  var chatId = props.getProperty('MAX_CHAT_ID');
+  var userId = props.getProperty('MAX_OWNER_USER_ID');
+  if (!token) { Logger.log('MAX: нет MAX_BOT_TOKEN'); return; }
+  var param  = chatId ? ('chat_id=' + chatId) : ('user_id=' + userId);
+  try {
+    var resp = UrlFetchApp.fetch(
+      'https://platform-api.max.ru/messages?' + param,
+      {
+        method: 'post',
+        headers: {'Authorization': token, 'Content-Type': 'application/json'},
+        payload: JSON.stringify({text: text}),
+        muteHttpExceptions: true,
+      }
+    );
+    Logger.log('MAX: ' + resp.getResponseCode());
+  } catch(e) {
+    Logger.log('MAX ошибка: ' + e.message);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

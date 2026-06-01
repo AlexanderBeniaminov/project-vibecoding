@@ -1385,7 +1385,7 @@ function onEditHotelSheet(e) {
   var weekNum = row1[weekCol - 1];
   var dateLabel = sheet.getRange(2, weekCol).getValue();
   var text = '✅ Губаха нед.' + weekNum + ' (' + dateLabel + ')\n' +
-             'Все данные внесены. Агент 1 запустится в 22:00.';
+             'Все данные внесены. Агент 1 запустится в 02:00 МСК (вторник).';
   sendMaxNotification_(text);
   Logger.log('Уведомление MAX отправлено: неделя ' + weekNum + ', все ' + ALL_REQUIRED_ROWS.length + ' строк заполнены');
 }

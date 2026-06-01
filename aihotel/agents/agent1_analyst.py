@@ -174,11 +174,11 @@ def notify_missing(attempt, missing, week_num, date_label):
     from utils.telegram import send as tg_send
     from utils.email_notify import send as email_send
 
-    bot          = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-    owner_tg     = os.environ.get('TELEGRAM_OWNER_ID', '')
+    from utils.max_notify import send as max_send
+    owner_max    = os.environ.get('MAX_OWNER_ID', '')
     viktor_email = os.environ.get('VIKTOR_EMAIL', '')
 
-    tg_text = (
+    max_text = (
         f'⚠️ Губаха — нед.{week_num} ({date_label})\n'
         f'Не заполнено {len(missing)} ячеек:\n' +
         '\n'.join(f'• {c}' for c in missing)
@@ -192,12 +192,14 @@ def notify_missing(attempt, missing, week_num, date_label):
     )
 
     if attempt == 1:
-        tg_send(bot, owner_tg, tg_text)
-        print(f'  Telegram → Александр: {len(missing)} незаполненных')
+        # Попытка 1: MAX Александру + email Виктору одновременно
+        max_send(owner_max, max_text)
+        email_send(viktor_email, email_subj, email_body)
+        print(f'  MAX → Александр + Email → Виктор: {len(missing)} незаполненных')
     elif attempt in (2, 3):
         email_send(viktor_email, email_subj, email_body)
-        print(f'  Email → Виктор: {len(missing)} незаполненных')
-    else:  # 4 — финальная: только email Виктору
+        print(f'  Email → Виктор: {len(missing)} незаполненных (попытка {attempt})')
+    else:  # 4 — финальная
         email_send(viktor_email, email_subj, email_body)
         print(f'  Email → Виктор: {len(missing)} незаполненных (финальная попытка)')
 
