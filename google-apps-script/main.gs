@@ -200,6 +200,48 @@ function installWeeklyTrigger() {
 }
 
 /**
+ * Одноразовая функция: очищает строки 40–52 для недель START–END
+ * и переписывает данные из «2026 ✓» с нуля.
+ * Запускать вручную для исправления ошибок от старого маппинга.
+ */
+function resyncSegmentsWeeks() {
+  var START_WEEK = 19;  // ← изменить при необходимости
+  var END_WEEK   = 22;
+  var year       = 2026;
+
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var sh   = getSheetByGid_(ss, HOTEL_SHEET_GID);
+  var row1 = sh.getRange(1, 1, 1, 300).getValues()[0];
+
+  Logger.log('▶ Пересинхронизация сегментов: недели ' + START_WEEK + '–' + END_WEEK);
+
+  for (var weekNum = START_WEEK; weekNum <= END_WEEK; weekNum++) {
+    // Ищем столбец недели
+    var col = -1;
+    for (var i = 2; i < row1.length; i++) {
+      if (Number(row1[i]) === weekNum) { col = i + 1; break; }
+    }
+    if (col === -1) {
+      Logger.log('  ⚠️ Неделя ' + weekNum + ' не найдена в строке 1, пропускаем');
+      continue;
+    }
+
+    // Очищаем строки 40–52 для этой недели
+    var TARGET_ROWS = [40, 41, 42, 44, 45, 46, 48, 49, 51, 52];
+    TARGET_ROWS.forEach(function(r) {
+      sh.getRange(r, col).setValue('');
+    });
+    Logger.log('  Неделя ' + weekNum + ': очищены строки ' + TARGET_ROWS.join(', '));
+
+    // Перезаписываем из источника
+    syncSegments_(sh, col, weekNum);
+  }
+
+  SpreadsheetApp.flush();
+  Logger.log('✅ Пересинхронизация завершена');
+}
+
+/**
  * Синхронизирует строки сегментов (★) из файла Евгении/Надежды
  * в финансовый отчёт для прошедшей недели.
  * Запускается отдельным триггером в 23:59 МСК — после того как команда заполнила данные.
@@ -1031,11 +1073,10 @@ function syncSegments_(sh2026, col, weekNum) {
       var segRow  = m[0];  // строка в «2026 ✓»
       var finRow  = m[1];  // строка в финансовом отчёте
       var v = segSh.getRange(segRow, segCol).getValue();
-      // Записываем только если в источнике есть значение (не пусто и не 0)
-      if (v !== '' && v !== null && v !== undefined && v !== 0) {
-        sh2026.getRange(finRow, col).setValue(v);
-        written++;
-      }
+      // Всегда перезаписываем — в том числе 0 (иначе не затереть старые ошибочные данные)
+      var writeVal = (v === '' || v === null || v === undefined) ? 0 : v;
+      sh2026.getRange(finRow, col).setValue(writeVal);
+      written++;
     });
 
     Logger.log('  ✅ Сегменты нед.' + weekNum + ': ' + written + '/' + SEG_MAPPING.length + ' значений');
