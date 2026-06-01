@@ -704,3 +704,6 @@ function loadGradationWeek17_2026() { loadGradationOnly_('2026-04-20', '2026-04-
 
 // Публичная обёртка — видна в списке функций Apps Script
 function diagnoseOrderFields() { diagnoseOrderGroupField_(); }
+
+// Тест MAX-уведомления — запускать вручную из GAS-редактора
+function testMaxMonblan() { sendMaxNotificationMonblan_('Тест MAX из Монблан GAS ✅'); }
