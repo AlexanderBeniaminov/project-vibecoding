@@ -43,6 +43,9 @@ env:
   MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
   MAX_OWNER_ID: ${{ secrets.MAX_OWNER_USER_ID }}
   MAX_TEAM_IDS: ${{ secrets.MAX_TEAM_IDS }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+  TELEGRAM_VIKTOR_ID: ${{ secrets.TELEGRAM_VIKTOR_ID }}
   VIKTOR_EMAIL: ${{ secrets.VIKTOR_EMAIL }}
   GMAIL_USER: ${{ secrets.GMAIL_USER }}
   GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}

@@ -174,8 +174,8 @@ def notify_missing(attempt, missing, week_num, date_label):
     from utils.telegram import send as tg_send
     from utils.email_notify import send as email_send
 
-    bot          = os.environ.get('MAX_BOT_TOKEN', '')
-    owner_tg     = os.environ.get('MAX_OWNER_ID', '')
+    bot          = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    owner_tg     = os.environ.get('TELEGRAM_OWNER_ID', '')
     viktor_email = os.environ.get('VIKTOR_EMAIL', '')
 
     tg_text = (

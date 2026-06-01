@@ -10,13 +10,11 @@ from utils.email_notify import send as email_send
 
 load_dotenv()
 
-FINANCE_SHEET_ID  = os.environ.get('FINANCE_SHEET_ID', '')
-STRATEGY_SHEET_ID = os.environ.get('STRATEGY_SHEET_ID', '')
-MAX_BOT_TOKEN     = os.environ.get('MAX_BOT_TOKEN', '')
-MAX_OWNER_ID      = os.environ.get('MAX_OWNER_ID', '')
-VIKTOR_EMAIL      = os.environ.get('VIKTOR_EMAIL', '')
-GMAIL_USER        = os.environ.get('GMAIL_USER', '')
-GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD', '')
+FINANCE_SHEET_ID    = os.environ.get('FINANCE_SHEET_ID', '')
+STRATEGY_SHEET_ID   = os.environ.get('STRATEGY_SHEET_ID', '')
+MAX_BOT_TOKEN       = os.environ.get('MAX_BOT_TOKEN', '')
+MAX_OWNER_ID        = os.environ.get('MAX_OWNER_ID', '')
+VIKTOR_EMAIL        = os.environ.get('VIKTOR_EMAIL', '')
 
 
 def get_current_week() -> str:
@@ -26,7 +24,7 @@ def get_current_week() -> str:
 
 
 def notify_owner():
-    """Вт 04:00 UTC — уведомить собственника что задачи на неделю готовы."""
+    """Вт 04:00 UTC — уведомить собственника (MAX) что задачи на неделю готовы."""
     client_gs = get_client()
     ws_status = get_worksheet(client_gs, FINANCE_SHEET_ID, 'Статус системы')
 
@@ -57,12 +55,12 @@ def notify_owner():
         f"Откройте таблицу для проверки."
     )
     tg_send(MAX_BOT_TOKEN, MAX_OWNER_ID, msg)
-    print(f"Уведомление собственнику: {sum(by_person.values())} задач по {len(by_person)} исполнителям")
+    print(f"Уведомление собственнику (MAX): {sum(by_person.values())} задач по {len(by_person)} исполнителям")
 
 
 def send_tasks():
     """Вт 06:00-14:00 UTC (5 попыток) — проверить что задачи сформированы.
-    Если нет — предупредить собственника.
+    Если нет — предупредить собственника через MAX.
     """
     client_gs = get_client()
     ws_status = get_worksheet(client_gs, FINANCE_SHEET_ID, 'Статус системы')
@@ -77,13 +75,13 @@ def send_tasks():
         f"Проверьте запуск Агента 2."
     )
     tg_send(MAX_BOT_TOKEN, MAX_OWNER_ID, msg)
-    print("Задачи не сформированы — напоминание отправлено")
+    print("Задачи не сформированы — напоминание отправлено через MAX")
 
 
 def remind():
     """Напоминания в зависимости от дня недели.
-    Пн 12:00 UTC → Виктору: внести данные до дедлайна.
-    Чт 09:00 UTC → команде: обновить статусы задач.
+    Пн 12:00 UTC → Виктору (Telegram + email): внести данные до дедлайна.
+    Чт 09:00 UTC → собственнику (MAX): обновить статусы задач.
     """
     today = datetime.date.today()
     weekday = today.weekday()  # 0=пн, 3=чт
@@ -97,15 +95,15 @@ def remind():
 
 
 def _remind_data_missing():
-    """Понедельник — напомнить Виктору внести данные и Александру что дедлайн сегодня."""
+    """Понедельник — напомнить Виктору (Telegram) и Александру (MAX) о дедлайне."""
     current_week = get_current_week()
 
-    tg_text = (
-        f"📋 Губаха {current_week} — сегодня понедельник.\n"
-        f"Виктор, внесите данные прошедшей недели в лист «2026» до 23:00 МСК."
+    # Александр узнаёт что дедлайн сегодня — через MAX
+    tg_send(MAX_BOT_TOKEN, MAX_OWNER_ID,
+        f"📋 Губаха {current_week} — сегодня дедлайн внесения данных (до 23:00 МСК)."
     )
-    tg_send(MAX_BOT_TOKEN, MAX_OWNER_ID, tg_text)
 
+    # Виктор — только email (karpenko@entens.ru)
     if VIKTOR_EMAIL:
         email_send(
             VIKTOR_EMAIL,
@@ -115,11 +113,11 @@ def _remind_data_missing():
             f"в лист «2026» финансовой таблицы до 23:00 МСК.\n\n"
             f"После этого Агент 1 автоматически проведёт анализ.",
         )
-    print("Напоминание Пн (данные): отправлено")
+    print("Напоминание Пн: Виктор (email), Александр (MAX)")
 
 
 def _remind_update_statuses():
-    """Четверг — напомнить команде обновить статусы задач."""
+    """Четверг — напомнить Александру (MAX) обновить статусы задач."""
     try:
         client_gs = get_client()
         ws_tasks = get_worksheet(client_gs, STRATEGY_SHEET_ID, 'Задачи недели')
@@ -143,11 +141,11 @@ def _remind_update_statuses():
 
     msg = (
         f"🔔 Губаха — середина недели.\n"
-        f"Пожалуйста обновите статусы задач в таблице.\n"
+        f"Попросите команду обновить статусы задач в таблице.\n"
         f"Без статуса: {empty_status} из {total} задач."
     )
     tg_send(MAX_BOT_TOKEN, MAX_OWNER_ID, msg)
-    print(f"Напоминание Чт (статусы): {empty_status}/{total} без статуса")
+    print(f"Напоминание Чт: {empty_status}/{total} без статуса")
 
 
 def main():
