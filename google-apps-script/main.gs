@@ -1319,6 +1319,122 @@ function columnToLetter_(col) {
   return result;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// УВЕДОМЛЕНИЕ В MAX — когда все ячейки недели заполнены
+// ═══════════════════════════════════════════════════════════════
+
+// Все строки листа «2026», которые должны быть заполнены (авто + ручные)
+var ALL_REQUIRED_ROWS = [
+  5,              // Доход НФ (TravelLine)
+  11, 12,         // Монблан выручка, чеки
+  14,             // Завтраки
+  17, 18, 19,     // Фурако, беседки, прочее
+  21, 22, 23,     // Гости, % повторных, ADR
+  27, 28, 29, 30, // Ср.пребывание, загрузка кот/Дан/Ален
+  32,             // Доля отмен
+  36,             // Забронировано след.месяц
+  40, 41, 42,     // ДР: броней, проживаний, сумма
+  44, 45, 46,     // Группы: броней, проживаний, сумма
+  48, 49,         // Корп: броней, сумма
+  51, 52,         // Физики: броней, сумма
+  54,             // NPS
+  56, 57,         // Отзывы коттеджи
+  59, 60,         // Отзывы хостелы
+  62, 63,         // Остаток на счёте/кассе
+  65, 66,         // Кредит/дебит задолж.
+  68,             // Ремонт: заявок
+  72, 74,         // Уборки коттеджи, хостелы
+  76, 77,         // Звонков, неотвеченных
+  81, 82          // ФОТ горничные, F&B
+];
+
+/**
+ * Installable onEdit триггер: проверяет заполненность текущей недели в «2026».
+ * Когда все строки заполнены → отправляет уведомление в MAX.
+ * Установить один раз через installOnEditTrigger().
+ */
+function onEditHotelSheet(e) {
+  var sheet = e.range.getSheet();
+  if (sheet.getName() !== '2026') return;
+
+  var editedCol = e.range.getColumn();
+
+  // Определяем последнюю колонку с номером недели (строка 1)
+  var row1 = sheet.getRange(1, 1, 1, 300).getValues()[0];
+  var weekCol = 0;
+  for (var i = row1.length - 1; i >= 2; i--) {
+    if (row1[i] !== '' && row1[i] !== null) {
+      weekCol = i + 1; // 1-based
+      break;
+    }
+  }
+  if (weekCol === 0 || editedCol !== weekCol) return;
+
+  // Проверяем все обязательные строки
+  var missing = [];
+  for (var r = 0; r < ALL_REQUIRED_ROWS.length; r++) {
+    var val = sheet.getRange(ALL_REQUIRED_ROWS[r], weekCol).getValue();
+    if (val === '' || val === null || val === undefined) {
+      missing.push(ALL_REQUIRED_ROWS[r]);
+    }
+  }
+
+  if (missing.length > 0) return; // ещё есть пустые — ждём
+
+  // Все заполнено — отправляем уведомление
+  var weekNum = row1[weekCol - 1];
+  var dateLabel = sheet.getRange(2, weekCol).getValue();
+  var text = '✅ Губаха нед.' + weekNum + ' (' + dateLabel + ')\n' +
+             'Все данные внесены. Агент 1 запустится в 22:00.';
+  sendMaxNotification_(text);
+  Logger.log('Уведомление MAX отправлено: неделя ' + weekNum + ', все ' + ALL_REQUIRED_ROWS.length + ' строк заполнены');
+}
+
+/**
+ * Отправляет сообщение в MAX мессенджер собственнику.
+ * Токен и user_id берутся из Script Properties.
+ */
+function sendMaxNotification_(text) {
+  var props  = PropertiesService.getScriptProperties();
+  var token  = props.getProperty('MAX_BOT_TOKEN');
+  var userId = props.getProperty('MAX_OWNER_USER_ID');
+
+  if (!token || !userId) {
+    Logger.log('MAX: нет MAX_BOT_TOKEN или MAX_OWNER_USER_ID в Script Properties');
+    return;
+  }
+  try {
+    var resp = UrlFetchApp.fetch(
+      'https://platform-api.max.ru/messages?user_id=' + userId,
+      {
+        method: 'post',
+        headers: {'Authorization': token, 'Content-Type': 'application/json'},
+        payload: JSON.stringify({text: text}),
+        muteHttpExceptions: true,
+      }
+    );
+    Logger.log('MAX: ' + resp.getResponseCode() + ' ' + resp.getContentText().substring(0, 100));
+  } catch(e) {
+    Logger.log('MAX: ошибка: ' + e.message);
+  }
+}
+
+/**
+ * Установить installable onEdit триггер для листа «2026».
+ * Запускать один раз вручную из GAS-редактора.
+ */
+function installOnEditTrigger() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'onEditHotelSheet') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('onEditHotelSheet')
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+  Logger.log('✅ onEdit триггер установлен для листа «2026»');
+}
+
 /** Округление до 2 знаков */
 function round2_(x) { return Math.round(x * 100) / 100; }
 
