@@ -156,11 +156,9 @@ def parse_tasks_json(raw: str) -> list:
 
 
 def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -> None:
+    from utils.telegram import send as tg_send
     bot_token = os.environ.get('MAX_BOT_TOKEN', '')
     owner_id  = os.environ.get('MAX_OWNER_ID', '')
-    if not bot_token or not owner_id:
-        print("  Telegram-уведомление пропущено: нет MAX_BOT_TOKEN или MAX_OWNER_ID")
-        return
 
     by_person = {}
     for t in tasks:
@@ -168,7 +166,6 @@ def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -
         by_person[name] = by_person.get(name, 0) + 1
 
     task_lines = "\n".join(f"  {name}: {cnt} задач(и)" for name, cnt in by_person.items())
-    # Берём только первые 3 строки KPI для краткости
     kpi_summary = "\n".join(kpi_block.split("\n")[:8])
 
     text = (
@@ -177,90 +174,14 @@ def send_telegram_notification(current_week: str, tasks: list, kpi_block: str) -
         f"Задач всего: {len(tasks)}\n{task_lines}"
     )
 
-    try:
-        import urllib.request
-        data = json.dumps({'chat_id': int(owner_id), 'text': text}).encode()
-        req = urllib.request.Request(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            data=data,
-            headers={'Content-Type': 'application/json'},
-        )
-        urllib.request.urlopen(req, timeout=10)
+    sent = tg_send(bot_token, owner_id, text)
+    if sent:
         print("  Telegram-уведомление отправлено")
-    except Exception as e:
-        print(f"  Предупреждение: не удалось отправить Telegram-уведомление: {e}")
-
-
-def send_reminder_if_no_digest(finance_sheet_id, strategy_sheet_id, client_gs):
-    """09:00 МСК вт — напоминание если Агент 1 не сформировал дайджест."""
-    from utils.telegram import send as tg_send
-    from utils.sheets import get_flag
-
-    ws_status = get_worksheet(client_gs, finance_sheet_id, 'Статус системы')
-    if get_flag(ws_status, 'дайджест_записан') == 'да':
-        print('Дайджест уже записан — напоминание не нужно.')
-        return
-
-    # Читаем какие ячейки пустые (повторяем логику агента 1)
-    ws_2026 = get_worksheet(client_gs, finance_sheet_id, '2026')
-    row1 = ws_2026.row_values(1)
-    all_data = ws_2026.get_all_values()
-    # Берём последнюю колонку с номером недели
-    col_idx = None
-    for i, v in enumerate(row1):
-        if str(v).strip().isdigit():
-            col_idx = i
-    if col_idx is None:
-        print('Не найдена колонка недели — отправляем общее напоминание.')
-        week_label = 'текущей недели'
-        missing = ['данные недоступны']
-    else:
-        week_num = row1[col_idx]
-        date_label = all_data[1][col_idx] if len(all_data) > 1 and col_idx < len(all_data[1]) else ''
-        week_label = f'нед.{week_num} ({date_label})'
-        from agents.agent1_analyst import MANUAL_ROWS_CHECK
-        missing = []
-        for row_num, label in sorted(MANUAL_ROWS_CHECK.items()):
-            row_data = all_data[row_num - 1] if row_num <= len(all_data) else []
-            val = row_data[col_idx] if col_idx < len(row_data) else ''
-            if not str(val).strip():
-                missing.append(label)
-
-    from utils.email_notify import send as email_send
-
-    bot          = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-    owner_tg     = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
-    viktor_email = os.environ.get('VIKTOR_EMAIL', '')
-
-    tg_text = (
-        f'🚨 Губаха — {week_label}\n'
-        f'Агент 1 НЕ запустился — данные не внесены.\n'
-        f'Не заполнено {len(missing)} ячеек:\n' +
-        '\n'.join(f'• {c}' for c in missing)
-    )
-    email_subj = f'🚨 Губаха {week_label} — дайджест не сформирован'
-    email_body = (
-        f'Губаха, {week_label}\n\n'
-        f'Агент 1 не сформировал дайджест — данные не были внесены до 01:00.\n\n'
-        f'Не заполнено {len(missing)} ячеек:\n' +
-        '\n'.join(f'- {c}' for c in missing) +
-        '\n\nПожалуйста, внесите данные в лист «2026».'
-    )
-    email_send(viktor_email, email_subj, email_body)
-    tg_send(bot, owner_tg, tg_text)
-    print(f'Email → Виктор + Telegram → Александр: напоминание отправлено ({len(missing)} ячеек)')
 
 
 def main():
     print("=== Агент 2: Стратег ===")
     force = '--force' in sys.argv
-
-    if '--reminder-only' in sys.argv:
-        finance_sheet_id  = os.environ['FINANCE_SHEET_ID']
-        strategy_sheet_id = os.environ['STRATEGY_SHEET_ID']
-        client_gs = get_client()
-        send_reminder_if_no_digest(finance_sheet_id, strategy_sheet_id, client_gs)
-        return
 
     current_week = get_current_week()
     print(f"Текущая неделя: {current_week}" + (" [FORCE]" if force else ""))

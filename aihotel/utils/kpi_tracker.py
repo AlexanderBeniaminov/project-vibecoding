@@ -16,12 +16,12 @@ KPI_TARGETS = {
     'travelline_rating': 4.4,     # KPI-7
 }
 
-ROW_WEEK_NUMBERS = 2
-ROW_REVENUE_CHECK = 6
-ROW_REVENUE   = 6
-ROW_LOADING   = 47
-ROW_DR        = 67
-ROW_GROUPS    = 77
+ROW_WEEK_NUMBERS  = 1   # лист «2026»: строка 1 = номера недель
+ROW_REVENUE_CHECK = 5   # строка 5 = Доход НФ (используется для поиска заполненных колонок)
+ROW_REVENUE       = 5   # строка 5 = Доход НФ за неделю
+ROW_LOADING       = 28  # строка 28 = Загрузка коттеджей (%)
+ROW_DR            = 40  # строка 40 = ДР: броней
+ROW_GROUPS        = 44  # строка 44 = Группы: броней
 
 
 def _parse_num(value):
@@ -50,7 +50,7 @@ def build_kpi_progress_block(sheets_client) -> str:
     finance_sheet_id = os.environ['FINANCE_SHEET_ID']
 
     try:
-        ws = sheets_client.open_by_key(finance_sheet_id).worksheet('2026 старый')
+        ws = sheets_client.open_by_key(finance_sheet_id).worksheet('2026')
         all_values = ws.get_all_values()
     except Exception as e:
         return f"⚠️ KPI-данные недоступны: {e}"

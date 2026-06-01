@@ -84,17 +84,22 @@ TOTAL_ALEN     = 58   # 82xxx(6)+220392(48)+220405(4) — уточнить
 
 
 # ============================================================
-# Загрузка ключей из .env
+# Загрузка ключей — из os.environ (GitHub Actions) или .env (локально)
 # ============================================================
-with open(".env") as f:
-    env = f.read()
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+except ImportError:
+    pass
 
 def _env(key):
-    return re.search(rf"{key}=(.+)", env).group(1).strip()
+    val = os.environ.get(key, '').strip()
+    if not val:
+        raise RuntimeError(f"Переменная окружения {key} не задана")
+    return val
 
 def _env_json(key):
-    m = re.search(rf"{key}=(.*?)(?=\n[A-Z_]+=|\Z)", env, re.DOTALL)
-    return json.loads(m.group(1).strip())
+    return json.loads(_env(key))
 
 CLIENT_ID        = _env("TL_CLIENT_ID")
 CLIENT_SECRET    = _env("TL_CLIENT_SECRET")

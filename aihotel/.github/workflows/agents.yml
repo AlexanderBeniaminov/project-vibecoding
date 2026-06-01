@@ -19,7 +19,10 @@ on:
   schedule:
     # Все времена UTC. Москва = UTC+3, Губаха (Пермь) = UTC+5
     - cron: '0 20 * * 1'   # Пн 20:00 UTC = Пн 23:00 МСК → TravelLine Collector (ДО Агента 1)
-    - cron: '0 23 * * 1'   # Пн 23:00 UTC = Вт 04:00 UTC+5 → Агент 1 (анализ)
+    - cron: '0 23 * * 1'   # Пн 23:00 UTC → Агент 1, попытка 1 (TG Александру если нет данных)
+    - cron: '0 0 * * 2'    # Вт 00:00 UTC → Агент 1, попытка 2 (email Виктору)
+    - cron: '0 1 * * 2'    # Вт 01:00 UTC → Агент 1, попытка 3 (email Виктору повторно)
+    - cron: '30 1 * * 2'   # Вт 01:30 UTC → Агент 1, попытка 4 (финальный email Виктору)
     - cron: '0 2 * * 2'    # Вт 02:00 UTC = Вт 07:00 UTC+5 → Агент 2 (задачи)
     - cron: '0 4 * * 2'    # Вт 04:00 UTC = Вт 09:00 UTC+5 → Агент 3 notify_owner
     - cron: '0 6 * * 2'    # Вт 06:00 UTC = Вт 11:00 UTC+5 → send_tasks (проверка 1)
@@ -40,6 +43,9 @@ env:
   MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
   MAX_OWNER_ID: ${{ secrets.MAX_OWNER_USER_ID }}
   MAX_TEAM_IDS: ${{ secrets.MAX_TEAM_IDS }}
+  VIKTOR_EMAIL: ${{ secrets.VIKTOR_EMAIL }}
+  GMAIL_USER: ${{ secrets.GMAIL_USER }}
+  GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
   TL_CLIENT_ID: ${{ secrets.TL_CLIENT_ID }}
   TL_CLIENT_SECRET: ${{ secrets.TL_CLIENT_SECRET }}
   TL_PROPERTY_ID: ${{ secrets.TL_PROPERTY_ID }}
@@ -67,9 +73,21 @@ jobs:
         if: github.event_name == 'schedule' && github.event.schedule == '0 20 * * 1'
         run: python travelline_collector.py
 
-      - name: Агент 1 — Аналитик (Пн 23:00 UTC)
+      - name: Агент 1 — попытка 1 (Пн 23:00 UTC)
         if: github.event_name == 'schedule' && github.event.schedule == '0 23 * * 1'
-        run: python agents/agent1_analyst.py
+        run: python agents/agent1_analyst.py --attempt 1
+
+      - name: Агент 1 — попытка 2 (Вт 00:00 UTC)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * 2'
+        run: python agents/agent1_analyst.py --attempt 2
+
+      - name: Агент 1 — попытка 3 (Вт 01:00 UTC)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 1 * * 2'
+        run: python agents/agent1_analyst.py --attempt 3
+
+      - name: Агент 1 — попытка 4 финальная (Вт 01:30 UTC)
+        if: github.event_name == 'schedule' && github.event.schedule == '30 1 * * 2'
+        run: python agents/agent1_analyst.py --attempt 4
 
       - name: Агент 2 — Стратег (Вт 02:00 UTC)
         if: github.event_name == 'schedule' && github.event.schedule == '0 2 * * 2'

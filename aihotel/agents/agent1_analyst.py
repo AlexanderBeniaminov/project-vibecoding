@@ -168,14 +168,14 @@ def notify_missing(attempt, missing, week_num, date_label):
     """Отправляет уведомление о незаполненных ячейках нужным адресатам.
 
     Попытка 1 → Telegram Александру.
-    Попытки 2-4 → Email Виктору.
-    Попытка 4 → дополнительно Telegram Александру.
+    Попытки 2-3 → Email Виктору.
+    Попытка 4 → Email Виктору (финальная).
     """
     from utils.telegram import send as tg_send
     from utils.email_notify import send as email_send
 
-    bot          = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-    owner_tg     = os.environ.get('TELEGRAM_OWNER_ID', '994743403')
+    bot          = os.environ.get('MAX_BOT_TOKEN', '')
+    owner_tg     = os.environ.get('MAX_OWNER_ID', '')
     viktor_email = os.environ.get('VIKTOR_EMAIL', '')
 
     tg_text = (
@@ -346,13 +346,20 @@ def get_failed_tasks(strategy_sheet_id, client_gs):
 
     repeated = []
     if archive and len(archive) > 2:
+        NOT_DONE_ARCHIVE = {'нет', 'не выполнено', 'не выполнена', ''}
         archive_tasks, failed_keys = [], {(t['исполнитель'], t['задача']) for t in failed}
         for row in reversed(archive):
             if row and row[0].startswith('Неделя'):
                 break
             if any(row):
                 archive_tasks.append(row)
-        repeated = [{'исполнитель': r[0], 'задача': r[2]} for r in archive_tasks if len(r) >= 3 and (r[0], r[2]) in failed_keys]
+        # Только задачи которые провалились и в архиве (прошлая неделя) тоже были провалены
+        repeated = [
+            {'исполнитель': r[0], 'задача': r[2]}
+            for r in archive_tasks
+            if len(r) >= 3 and (r[0], r[2]) in failed_keys
+            and (len(r) <= 7 or str(r[7]).lower().strip() in NOT_DONE_ARCHIVE)
+        ]
 
     return failed, repeated, task_stats
 
