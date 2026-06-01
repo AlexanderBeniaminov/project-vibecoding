@@ -191,11 +191,11 @@ function installWeeklyTrigger() {
   ScriptApp.newTrigger('collectWeeklyHotelReport')
     .timeBased()
     .onWeekDay(ScriptApp.WeekDay.MONDAY)
-    .atHour(18)       // 18:xx UTC = 23:xx UTC+5
-    .nearMinute(59)   // ±15 мин вокруг 18:59 UTC = 23:59 UTC+5
+    .atHour(7)        // 07:xx UTC = 10:xx МСК (UTC+3)
+    .nearMinute(0)    // ±15 мин вокруг 07:00 UTC = 10:00 МСК
     .create();
 
-  Logger.log('✅ Триггер установлен: понедельник ~23:59 UTC+5 (18:59 UTC)');
+  Logger.log('✅ Триггер установлен: понедельник ~10:00 МСК (07:00 UTC)');
 }
 
 
