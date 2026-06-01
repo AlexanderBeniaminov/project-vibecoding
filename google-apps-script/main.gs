@@ -1440,3 +1440,8 @@ function round2_(x) { return Math.round(x * 100) / 100; }
 
 /** Округление до 4 знаков (для хранения долей, напр. 0.8745) */
 function round4_(x) { return Math.round(x * 10000) / 10000; }
+
+/** Тест MAX-уведомления — запустить вручную из редактора */
+function testMax() {
+  sendMaxNotification_('🧪 Тест: уведомление работает');
+}
