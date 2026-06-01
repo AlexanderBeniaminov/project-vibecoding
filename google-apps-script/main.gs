@@ -562,16 +562,29 @@ function readMonblan_(weekNum, year) {
     var yearRow = mbSh.getRange(1, 2, 1, 200).getValues()[0];
     var weekRow = mbSh.getRange(2, 2, 1, 200).getValues()[0];
 
+    // Попытка 1: точное совпадение год + номер недели (ISO)
     var mbCol = -1;
     for (var i = 0; i < weekRow.length; i++) {
       if (Number(weekRow[i]) === weekNum && Number(yearRow[i]) === year) {
-        mbCol = i + 2; // +2: начинаем с col B (1-based = 2)
+        mbCol = i + 2;
         break;
       }
     }
 
+    // Попытка 2: «ЕжеНедельно» хранит порядковые недели, не ISO — берём последнюю колонку года
     if (mbCol === -1) {
-      Logger.log('  ⚠️ Монблан: неделя ' + weekNum + '/' + year + ' не найдена');
+      Logger.log('  ⚠️ Монблан: ISO-неделя ' + weekNum + '/' + year + ' не найдена, берём последнюю за ' + year);
+      for (var j = yearRow.length - 1; j >= 0; j--) {
+        if (Number(yearRow[j]) === year) {
+          mbCol = j + 2;
+          Logger.log('  ℹ️ Монблан: используем кол.' + mbCol + ' (порядк.нед.' + weekRow[j] + ')');
+          break;
+        }
+      }
+    }
+
+    if (mbCol === -1) {
+      Logger.log('  ⚠️ Монблан: данные за ' + year + ' не найдены');
       return {revenue: 0, checks: 0};
     }
 
