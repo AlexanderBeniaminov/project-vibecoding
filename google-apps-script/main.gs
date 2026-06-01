@@ -1446,32 +1446,65 @@ function round2_(x) { return Math.round(x * 100) / 100; }
 /** Округление до 4 знаков (для хранения долей, напр. 0.8745) */
 function round4_(x) { return Math.round(x * 10000) / 10000; }
 
-/** Напиши боту сообщение, потом запусти — покажет chat_id для отправки сообщений */
-function getMyMaxChatId() {
+/**
+ * Напиши боту любое сообщение в MAX, потом запусти эту функцию.
+ * Она сама найдёт chat_id, сохранит в Script Properties и отправит тест.
+ */
+function setupAndTestMax() {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty('MAX_BOT_TOKEN');
-  if (!token) { Logger.log('❌ Нет MAX_BOT_TOKEN'); return; }
+  if (!token) { Logger.log('❌ Нет MAX_BOT_TOKEN в Script Properties'); return; }
 
-  var resp = UrlFetchApp.fetch('https://botapi.max.ru/updates?limit=10', {
+  // Читаем последние обновления от бота
+  var resp = UrlFetchApp.fetch('https://botapi.max.ru/updates?limit=20', {
     headers: {'Authorization': token},
     muteHttpExceptions: true,
   });
 
-  var data = JSON.parse(resp.getContentText());
+  var data;
+  try { data = JSON.parse(resp.getContentText()); }
+  catch(e) { Logger.log('❌ Ошибка парсинга: ' + resp.getContentText()); return; }
+
   var updates = data.updates || [];
+  Logger.log('Получено обновлений: ' + updates.length);
 
   if (updates.length === 0) {
-    Logger.log('⚠️ Нет сообщений. Напиши боту что-нибудь в MAX и запусти снова.');
+    Logger.log('⚠️ Обновлений нет. Напиши боту любое сообщение в MAX и запусти снова.');
     return;
   }
 
-  updates.forEach(function(u) {
-    var msg = u.message || {};
-    var sender = (msg.sender || {});
-    var chat   = (msg.recipient || {});
-    Logger.log('user_id: ' + sender.user_id + '  |  chat_id: ' + chat.chat_id + '  |  текст: ' + ((msg.body || {}).text || ''));
-  });
-  Logger.log('→ Скопируй chat_id и поставь в Script Properties как MAX_CHAT_ID');
+  // Ищем chat_id в любом обновлении
+  var chatId = null;
+  for (var i = 0; i < updates.length; i++) {
+    Logger.log('Обновление ' + i + ': ' + JSON.stringify(updates[i]).substring(0, 200));
+    // Пробуем разные пути к chat_id
+    var u = updates[i];
+    chatId = chatId
+      || (u.message && u.message.recipient && u.message.recipient.chat_id)
+      || (u.message && u.message.sender   && u.message.sender.user_id)
+      || (u.chat_id)
+      || (u.message && u.message.chat_id);
+  }
+
+  if (!chatId) {
+    Logger.log('❌ Не удалось найти chat_id. Полный ответ: ' + JSON.stringify(data).substring(0, 500));
+    return;
+  }
+
+  Logger.log('✅ Найден ID: ' + chatId + '. Сохраняю в MAX_CHAT_ID...');
+  props.setProperty('MAX_CHAT_ID', String(chatId));
+
+  // Пробуем отправить тест
+  var testResp = UrlFetchApp.fetch(
+    'https://platform-api.max.ru/messages?chat_id=' + chatId,
+    {
+      method: 'post',
+      headers: {'Authorization': token, 'Content-Type': 'application/json'},
+      payload: JSON.stringify({text: '🧪 Тест: уведомление работает'}),
+      muteHttpExceptions: true,
+    }
+  );
+  Logger.log('Отправка: код=' + testResp.getResponseCode() + '  ' + testResp.getContentText().substring(0, 200));
 }
 
 /** Тест MAX-уведомления с подробным логом */
