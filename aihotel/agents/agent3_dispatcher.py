@@ -58,6 +58,38 @@ def notify_owner():
     print(f"Уведомление собственнику (MAX): {sum(by_person.values())} задач по {len(by_person)} исполнителям")
 
 
+def check_digest():
+    """Вт 09:00 МСК — проверить что дайджест сформирован.
+    Если нет — email Виктору + Telegram Александру.
+    """
+    client_gs = get_client()
+    ws_status = get_worksheet(client_gs, FINANCE_SHEET_ID, 'Статус системы')
+    current_week = get_current_week()
+
+    if get_flag(ws_status, 'дайджест_записан') == 'да':
+        print("Дайджест записан — всё в порядке.")
+        return
+
+    msg_tg = (
+        f"🚨 Губаха {current_week} — дайджест не сформирован!\n"
+        f"Агент 1 не отработал (данные не внесены или ошибка).\n"
+        f"Агент 2 не запустится — задачи не будут сформированы."
+    )
+    tg_send(MAX_BOT_TOKEN, MAX_OWNER_ID, msg_tg)
+
+    if VIKTOR_EMAIL:
+        email_send(
+            VIKTOR_EMAIL,
+            f"Губаха {current_week} — дайджест не сформирован",
+            f"Губаха, {current_week}\n\n"
+            f"Агент 1 не смог сформировать дайджест — данные не были внесены "
+            f"в лист «2026» до 22:00 МСК.\n\n"
+            f"Пожалуйста, внесите данные вручную. "
+            f"После этого запустите Агента 1 вручную через GitHub Actions.",
+        )
+    print(f"Дайджест не сформирован — MAX Александру + email Виктору")
+
+
 def send_tasks():
     """Вт 06:00-14:00 UTC (5 попыток) — проверить что задачи сформированы.
     Если нет — предупредить собственника через MAX.
@@ -100,17 +132,17 @@ def _remind_data_missing():
 
     # Александр узнаёт что дедлайн сегодня — через MAX
     tg_send(MAX_BOT_TOKEN, MAX_OWNER_ID,
-        f"📋 Губаха {current_week} — сегодня дедлайн внесения данных (до 23:00 МСК)."
+        f"📋 Губаха {current_week} — сегодня дедлайн внесения данных (до 22:00 МСК)."
     )
 
     # Виктор — только email (karpenko@entens.ru)
     if VIKTOR_EMAIL:
         email_send(
             VIKTOR_EMAIL,
-            f"Губаха {current_week} — внесите данные сегодня до 23:00",
+            f"Губаха {current_week} — внесите данные сегодня до 22:00",
             f"Губаха, {current_week}\n\n"
             f"Напоминание: пожалуйста внесите данные прошедшей недели "
-            f"в лист «2026» финансовой таблицы до 23:00 МСК.\n\n"
+            f"в лист «2026» финансовой таблицы до 22:00 МСК.\n\n"
             f"После этого Агент 1 автоматически проведёт анализ.",
         )
     print("Напоминание Пн: Виктор (email), Александр (MAX)")
@@ -163,6 +195,8 @@ def main():
 
     if mode == 'notify_owner':
         notify_owner()
+    elif mode == 'check_digest':
+        check_digest()
     elif mode == 'send_tasks':
         send_tasks()
     elif mode == 'remind':
