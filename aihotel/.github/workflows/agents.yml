@@ -10,6 +10,7 @@ on:
         options:
           - travelline_collector
           - agent1_analyst
+          - agent1_analyst_force
           - agent2_strategist
           - agent3_check_digest
           - agent3_remind
@@ -105,6 +106,10 @@ jobs:
       - name: Ручной — Агент 1
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent1_analyst'
         run: python agents/agent1_analyst.py
+
+      - name: Ручной — Агент 1 (принудительный перезапуск)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent1_analyst_force'
+        run: python agents/agent1_analyst.py --force
 
       - name: Ручной — Агент 2
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.agent == 'agent2_strategist'
