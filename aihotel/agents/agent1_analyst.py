@@ -15,83 +15,75 @@ load_dotenv()
 
 # === КОНФИГУРАЦИЯ ===
 
-CURRENT_YEAR_SHEET = '2026 старый'
-ROW_WEEK_NUMBERS  = 2
-ROW_DATE_LABELS   = 3
-ROW_REVENUE_CHECK = 6
+# Лист «2026» заполняется автоматически из TravelLine (GAS) + сегменты (Евгения).
+# Строка 1 = номера недель, строка 2 = даты, строка 5 = выручка.
+CURRENT_YEAR_SHEET = '2026'
+ROW_WEEK_NUMBERS  = 1
+ROW_DATE_LABELS   = 2
+ROW_REVENUE_CHECK = 5
 
-# Строки с динамикой к предыдущему периоду (executive summary)
-DYNAMICS_ROWS = {
-    36: 'Выручка к пред. пер.',
-    37: 'Гости к пред. пер.',
-    38: 'Ср. чек к пред. пер.',
-}
+DYNAMICS_ROWS = {}  # В «2026» нет отдельных строк динамики — формулы в самом листе
 
 METRICS = [
     # ДОХОДЫ
-    {'row': 6,  'label': 'Доход НФ за неделю (руб.)',      'yoy_row': 11,   'section': 'income'},
-    {'row': 7,  'label': 'Выручка % к плану',               'yoy_row': None, 'section': 'income'},
-    {'row': 8,  'label': 'Выполнение плана месяца (%)',      'yoy_row': None, 'section': 'income'},
-    {'row': 10, 'label': 'Прогноз выручки месяца (руб.)',   'yoy_row': None, 'section': 'income'},
-    {'row': 13, 'label': 'Выручка Монблан (руб.)',          'yoy_row': 21,   'section': 'income'},
-    {'row': 14, 'label': 'Чеков Монблан',                   'yoy_row': None, 'section': 'income'},
-    {'row': 17, 'label': 'F&B % от оборота',                'yoy_row': None, 'section': 'income'},
-    {'row': 23, 'label': 'Фурако/бани (руб.)',              'yoy_row': None, 'section': 'income'},
-    {'row': 24, 'label': 'Беседки/мангалы (руб.)',          'yoy_row': None, 'section': 'income'},
-    {'row': 25, 'label': 'Прочее (руб.)',                   'yoy_row': None, 'section': 'income'},
-    {'row': 27, 'label': 'Кол-во завтраков',                'yoy_row': None, 'section': 'income'},
-    {'row': 29, 'label': 'Конверсия завтраков (%)',         'yoy_row': None, 'section': 'income'},
+    {'row': 5,  'label': 'Доход НФ за неделю (руб.)',      'yoy_row': 7,    'section': 'income'},
+    {'row': 11, 'label': 'Выручка Монблан (руб.)',          'yoy_row': None, 'section': 'income'},
+    {'row': 12, 'label': 'Чеков Монблан',                   'yoy_row': None, 'section': 'income'},
+    {'row': 13, 'label': 'F&B % от оборота',                'yoy_row': None, 'section': 'income'},
+    {'row': 14, 'label': 'Кол-во завтраков',                'yoy_row': None, 'section': 'income'},
+    {'row': 17, 'label': 'Фурако/бани (руб.)',              'yoy_row': None, 'section': 'income'},
+    {'row': 18, 'label': 'Беседки/мангалы (руб.)',          'yoy_row': None, 'section': 'income'},
+    {'row': 19, 'label': 'Прочее (руб.)',                   'yoy_row': None, 'section': 'income'},
+    {'row': 36, 'label': 'Забронировано след. мес. (руб.)', 'yoy_row': None, 'section': 'income'},
+    {'row': 38, 'label': '% выполн. плана след. мес.',      'yoy_row': None, 'section': 'income'},
 
     # ЗАГРУЗКА И ПРОДАЖИ
-    {'row': 45, 'label': 'ADR (руб.)',                      'yoy_row': None, 'section': 'sales'},
-    {'row': 47, 'label': 'Загрузка коттеджей (%)',          'yoy_row': None, 'section': 'sales', 'target': '12% / 19.8%'},
-    {'row': 48, 'label': 'Ср. пребывание кот. (дней)',      'yoy_row': None, 'section': 'sales'},
-    {'row': 49, 'label': 'Загрузка Даниэль (%)',            'yoy_row': None, 'section': 'sales'},
-    {'row': 51, 'label': 'Загрузка Ален (%)',               'yoy_row': None, 'section': 'sales'},
-    {'row': 53, 'label': 'Доля отмен (%)',                  'yoy_row': None, 'section': 'sales'},
-    {'row': 64, 'label': 'Прямые продажи vs OTA (%)',       'yoy_row': None, 'section': 'sales'},
-    {'row': 40, 'label': 'План выручки след. мес. (руб.)',  'yoy_row': None, 'section': 'sales'},
-    {'row': 41, 'label': 'Забронировано след. мес. (руб.)', 'yoy_row': None, 'section': 'sales'},
-    {'row': 43, 'label': '% выполн. плана след. мес.',      'yoy_row': None, 'section': 'sales'},
+    {'row': 23, 'label': 'ADR (руб.)',                      'yoy_row': None, 'section': 'sales'},
+    {'row': 28, 'label': 'Загрузка коттеджей (%)',          'yoy_row': None, 'section': 'sales', 'target': '12% / 19.8%'},
+    {'row': 27, 'label': 'Ср. пребывание кот. (дней)',      'yoy_row': None, 'section': 'sales'},
+    {'row': 29, 'label': 'Загрузка Даниэль (%)',            'yoy_row': None, 'section': 'sales'},
+    {'row': 30, 'label': 'Загрузка Ален (%)',               'yoy_row': None, 'section': 'sales'},
+    {'row': 32, 'label': 'Доля отмен (%)',                  'yoy_row': None, 'section': 'sales'},
+    {'row': 33, 'label': 'Прямые продажи vs OTA (%)',       'yoy_row': None, 'section': 'sales'},
 
     # СЕГМЕНТЫ
-    {'row': 67, 'label': 'ДР: броней',                      'yoy_row': None, 'section': 'segments', 'target': '125 к июню'},
-    {'row': 69, 'label': 'ДР: проживаний',                  'yoy_row': None, 'section': 'segments'},
-    {'row': 70, 'label': 'ДР: сумма (руб.)',                'yoy_row': None, 'section': 'segments'},
-    {'row': 77, 'label': 'Группы: броней',                  'yoy_row': None, 'section': 'segments', 'target': '6 к июню'},
-    {'row': 79, 'label': 'Группы: проживаний',              'yoy_row': None, 'section': 'segments'},
-    {'row': 80, 'label': 'Группы: сумма (руб.)',            'yoy_row': None, 'section': 'segments'},
-    {'row': 72, 'label': 'Корпоративы: броней',             'yoy_row': None, 'section': 'segments'},
-    {'row': 75, 'label': 'Корпоративы: сумма (руб.)',       'yoy_row': None, 'section': 'segments'},
-    {'row': 82, 'label': 'Физики: броней',                  'yoy_row': None, 'section': 'segments'},
-    {'row': 85, 'label': 'Физики: сумма (руб.)',            'yoy_row': None, 'section': 'segments'},
-    {'row': 56, 'label': '% повторных гостей',              'yoy_row': None, 'section': 'segments'},
+    {'row': 40, 'label': 'ДР: броней',                      'yoy_row': None, 'section': 'segments', 'target': '125 к июню'},
+    {'row': 41, 'label': 'ДР: проживаний',                  'yoy_row': None, 'section': 'segments'},
+    {'row': 42, 'label': 'ДР: сумма (руб.)',                'yoy_row': None, 'section': 'segments'},
+    {'row': 44, 'label': 'Группы: броней',                  'yoy_row': None, 'section': 'segments', 'target': '6 к июню'},
+    {'row': 45, 'label': 'Группы: проживаний',              'yoy_row': None, 'section': 'segments'},
+    {'row': 46, 'label': 'Группы: сумма (руб.)',            'yoy_row': None, 'section': 'segments'},
+    {'row': 48, 'label': 'Корпоративы: броней',             'yoy_row': None, 'section': 'segments'},
+    {'row': 49, 'label': 'Корпоративы: сумма (руб.)',       'yoy_row': None, 'section': 'segments'},
+    {'row': 51, 'label': 'Физики: броней',                  'yoy_row': None, 'section': 'segments'},
+    {'row': 52, 'label': 'Физики: сумма (руб.)',            'yoy_row': None, 'section': 'segments'},
+    {'row': 22, 'label': '% повторных гостей',              'yoy_row': None, 'section': 'segments'},
 
     # КАЧЕСТВО
-    {'row': 55, 'label': 'Гостей всего',                    'yoy_row': None, 'section': 'quality'},
-    {'row': 58, 'label': 'NPS',                             'yoy_row': None, 'section': 'quality'},
-    {'row': 59, 'label': 'Отзывы кот. (кол-во)',            'yoy_row': None, 'section': 'quality'},
-    {'row': 60, 'label': 'Отзывы кот. (негат. %)',          'yoy_row': None, 'section': 'quality'},
-    {'row': 61, 'label': 'Отзывы хостелы (кол-во)',         'yoy_row': None, 'section': 'quality'},
-    {'row': 62, 'label': 'Отзывы хостелы (негат. %)',       'yoy_row': None, 'section': 'quality'},
+    {'row': 21, 'label': 'Гостей всего',                    'yoy_row': None, 'section': 'quality'},
+    {'row': 54, 'label': 'NPS',                             'yoy_row': None, 'section': 'quality'},
+    {'row': 56, 'label': 'Отзывы кот. (кол-во)',            'yoy_row': None, 'section': 'quality'},
+    {'row': 57, 'label': 'Отзывы кот. (негат. %)',          'yoy_row': None, 'section': 'quality'},
+    {'row': 59, 'label': 'Отзывы хостелы (кол-во)',         'yoy_row': None, 'section': 'quality'},
+    {'row': 60, 'label': 'Отзывы хостелы (негат. %)',       'yoy_row': None, 'section': 'quality'},
 
     # ОПЕРАЦИИ И ДЕНЬГИ
-    {'row': 33, 'label': 'Остаток на счёте (руб.)',         'yoy_row': None, 'section': 'ops'},
-    {'row': 34, 'label': 'Остаток в кассе (руб.)',          'yoy_row': None, 'section': 'ops'},
-    {'row': 31, 'label': 'Кредит. задолж. (руб.)',          'yoy_row': None, 'section': 'ops'},
-    {'row': 32, 'label': 'Дебит. задолж. (руб.)',           'yoy_row': None, 'section': 'ops'},
-    {'row': 88, 'label': 'Ремонт: заявок',                  'yoy_row': None, 'section': 'ops'},
-    {'row': 89, 'label': 'Ремонт: выполнено',               'yoy_row': None, 'section': 'ops'},
-    {'row': 90, 'label': 'Ремонт: не выполнено',            'yoy_row': None, 'section': 'ops'},
-    {'row': 92, 'label': 'Уборки коттеджи',                 'yoy_row': None, 'section': 'ops'},
-    {'row': 93, 'label': 'Из них стыковочных (кот.)',       'yoy_row': None, 'section': 'ops'},
-    {'row': 94, 'label': 'Уборки хостелы',                  'yoy_row': None, 'section': 'ops'},
-    {'row': 97, 'label': 'Звонков входящих',                'yoy_row': None, 'section': 'ops'},
-    {'row': 98, 'label': 'Неотвеченных звонков',            'yoy_row': None, 'section': 'ops'},
-    {'row': 99, 'label': 'Доля без ответа (%)',             'yoy_row': None, 'section': 'ops'},
-    {'row': 101,'label': 'Проверок стандартов',             'yoy_row': None, 'section': 'ops'},
-    {'row': 102,'label': 'ФОТ горничные+техники (руб.)',    'yoy_row': None, 'section': 'ops'},
-    {'row': 103,'label': 'ФОТ F&B персонал (руб.)',         'yoy_row': None, 'section': 'ops'},
+    {'row': 62, 'label': 'Остаток на счёте (руб.)',         'yoy_row': None, 'section': 'ops'},
+    {'row': 63, 'label': 'Остаток в кассе (руб.)',          'yoy_row': None, 'section': 'ops'},
+    {'row': 65, 'label': 'Кредит. задолж. (руб.)',          'yoy_row': None, 'section': 'ops'},
+    {'row': 66, 'label': 'Дебит. задолж. (руб.)',           'yoy_row': None, 'section': 'ops'},
+    {'row': 68, 'label': 'Ремонт: заявок',                  'yoy_row': None, 'section': 'ops'},
+    {'row': 69, 'label': 'Ремонт: выполнено',               'yoy_row': None, 'section': 'ops'},
+    {'row': 70, 'label': 'Ремонт: не выполнено',            'yoy_row': None, 'section': 'ops'},
+    {'row': 72, 'label': 'Уборки коттеджи',                 'yoy_row': None, 'section': 'ops'},
+    {'row': 73, 'label': 'Из них стыковочных (кот.)',       'yoy_row': None, 'section': 'ops'},
+    {'row': 74, 'label': 'Уборки хостелы',                  'yoy_row': None, 'section': 'ops'},
+    {'row': 76, 'label': 'Звонков входящих',                'yoy_row': None, 'section': 'ops'},
+    {'row': 77, 'label': 'Неотвеченных звонков',            'yoy_row': None, 'section': 'ops'},
+    {'row': 78, 'label': 'Доля без ответа (%)',             'yoy_row': None, 'section': 'ops'},
+    {'row': 80, 'label': 'Проверок стандартов',             'yoy_row': None, 'section': 'ops'},
+    {'row': 81, 'label': 'ФОТ горничные+техники (руб.)',    'yoy_row': None, 'section': 'ops'},
+    {'row': 82, 'label': 'ФОТ F&B персонал (руб.)',         'yoy_row': None, 'section': 'ops'},
 ]
 
 SECTION_LABELS = {
