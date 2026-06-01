@@ -75,15 +75,18 @@ def call_claude(system_prompt: str, user_message: str) -> str:
 
 def archive_current_tasks(ws_tasks: object, ws_archive: object, current_week: str) -> None:
     all_rows = ws_tasks.get_all_values()
-    if len(all_rows) <= 1:
+    # all_rows[0] — заголовки колонок, all_rows[1] — метка недели, all_rows[2+] — задачи
+    if len(all_rows) <= 2:
         print("  Нет задач для архивирования")
         return
 
-    week_label = [f"Неделя {current_week}"] + [""] * (len(all_rows[0]) - 1)
-    task_rows = all_rows[1:]
-    rows_to_add = [week_label] + task_rows
+    headers  = all_rows[0]   # ['Исполнитель', 'Блок', 'Задача', ...]
+    data_rows = all_rows[1:]  # метка недели + строки задач
+
+    # Сохраняем заголовки + метку недели (с датами) + задачи
+    rows_to_add = [headers] + data_rows
     ws_archive.append_rows(rows_to_add)
-    print(f"  Архивировано {len(task_rows)} задач")
+    print(f"  Архивировано {len(data_rows) - 1} задач (с заголовками и меткой недели)")
 
 
 def get_recent_archive(ws_archive: object, weeks: int = 4) -> str:
@@ -308,7 +311,7 @@ def main():
         ])
 
     if rows_to_write:
-        week_label = f"Неделя {data_week}  |  {data_dates}"
+        week_label = f"Неделя {data_week}  |  {get_week_dates(data_week)}"
         if not header:
             ws_tasks.update(
                 values=[['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'KPI', 'Статус', 'Комментарий']],
