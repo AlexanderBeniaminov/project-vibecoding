@@ -197,10 +197,9 @@ def notify_missing(attempt, missing, week_num, date_label):
     elif attempt in (2, 3):
         email_send(viktor_email, email_subj, email_body)
         print(f'  Email → Виктор: {len(missing)} незаполненных')
-    else:  # 4 — финальная
+    else:  # 4 — финальная: только email Виктору
         email_send(viktor_email, email_subj, email_body)
-        tg_send(bot, owner_tg, tg_text)
-        print(f'  Email → Виктор + Telegram → Александр: {len(missing)} незаполненных')
+        print(f'  Email → Виктор: {len(missing)} незаполненных (финальная попытка)')
 
 
 def get_current_week():
