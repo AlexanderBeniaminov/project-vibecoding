@@ -1012,18 +1012,21 @@ function syncSegments_(sh2026, col, weekNum) {
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Заполняет данные для недель 17–21 (2026).
- * Запускать один раз вручную из GAS-редактора.
+ * Бэкфилл нескольких недель: TravelLine + Монблан + Сегменты + Формулы.
  * Строка 36 (забронировано) НЕ перезаписывается — там могут быть ручные данные.
+ *
+ * Для заполнения конкретных недель — меняй START_WEEK / END_WEEK.
+ * Запускать вручную из GAS-редактора.
  */
-function backfillFromWeek17() {
+function backfillWeeks() {
+  var START_WEEK = 19;  // ← изменить при необходимости
+  var END_WEEK   = 22;  // ← изменить при необходимости
+  var year       = 2026;
+
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sh    = getSheetByGid_(ss, HOTEL_SHEET_GID);
   var prevSheetName = findPrevYearSheetName_(ss);
   var token = getTLToken_();
-  var year  = 2026;
-  var START_WEEK = 17;
-  var END_WEEK   = 21;
 
   Logger.log('▶ Бэкфилл недель ' + START_WEEK + '–' + END_WEEK + ' (' + year + ')');
 
@@ -1055,12 +1058,21 @@ function backfillFromWeek17() {
     writeData_(sh, col, tl, mb, 0);
     setFormulas_(sh, col, prevSheetName);
 
+    // Сегменты (ДР, группы, корп, физики) из файла Евгении/Надежды
+    syncSegments_(sh, col, weekNum);
+
     Logger.log('  ✅ Неделя ' + weekNum + ' записана → ' + columnToLetter_(col));
-    Utilities.sleep(1500); // пауза между неделями
+    Utilities.sleep(2000); // пауза между неделями
   }
 
   SpreadsheetApp.flush();
   Logger.log('✅ Бэкфилл завершён: недели ' + START_WEEK + '–' + END_WEEK);
+}
+
+/** @deprecated Используй backfillWeeks() с настройкой START_WEEK/END_WEEK */
+function backfillFromWeek17() {
+  Logger.log('⚠️ backfillFromWeek17 устарела. Используй backfillWeeks()');
+  backfillWeeks();
 }
 
 
