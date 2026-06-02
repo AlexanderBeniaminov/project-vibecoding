@@ -299,7 +299,8 @@ def main():
         ])
 
     if rows_to_write:
-        week_label = f"Неделя {data_week}  |  {get_week_dates(data_week)}"
+        # Метка = текущая неделя (когда задачи выполняются), не неделя данных
+        week_label = f"Неделя {current_week}  |  {get_week_dates(current_week)}"
         if not header:
             ws_tasks.update(
                 values=[['Исполнитель', 'Блок', 'Задача', 'Результат', 'Как проверить', 'Срок', 'KPI', 'Статус', 'Комментарий']],
