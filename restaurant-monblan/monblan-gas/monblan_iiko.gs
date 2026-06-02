@@ -565,7 +565,10 @@ function findWeekColumn_(sh, year, week) {
   var weekRow = sh.getRange(2, firstDataCol, 1, weeksCount).getValues()[0];
 
   for (var i = 0; i < weeksCount; i++) {
-    if (yearRow[i] === year && weekRow[i] === week) {
+    // Убираем пробел-разделитель тысяч («2 025» → «2025») перед сравнением
+    var yr = parseInt(String(yearRow[i]).replace(/[\s ]/g, ''));
+    var wk = parseInt(String(weekRow[i]).replace(/[\s ]/g, ''));
+    if (yr === year && wk === week) {
       return firstDataCol + i;
     }
   }

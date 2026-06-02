@@ -174,7 +174,10 @@ function findWeekCol_(sh, year, week) {
   var yearRow = sh.getRange(1, 1, 1, lastCol).getValues()[0];
   var weekRow = sh.getRange(2, 1, 1, lastCol).getValues()[0];
   for (var i = 1; i < yearRow.length; i++) {
-    if (parseInt(yearRow[i]) === year && parseInt(weekRow[i]) === week) return i + 1;
+    // Убираем пробел-разделитель тысяч («2 025» → «2025») перед парсингом
+    var yr = parseInt(String(yearRow[i]).replace(/[\s ]/g, ''));
+    var wk = parseInt(String(weekRow[i]).replace(/[\s ]/g, ''));
+    if (yr === year && wk === week) return i + 1;
   }
   return null;
 }
@@ -718,7 +721,7 @@ function diagnoseDashboard() {
   var revRow  = mb.getRange(4, 2, 1, lastCol-1).getValues()[0];
   var found = 0;
   for (var i = yearRow.length-1; i >= 0 && found < 5; i--) {
-    if (Number(yearRow[i]) === 2026 && Number(revRow[i]) > 0) {
+    if (parseInt(String(yearRow[i]).replace(/[\s ]/g,'')) === 2026 && Number(revRow[i]) > 0) {
       msg += '  нед.' + weekRow[i] + ' → ' + Math.round(Number(revRow[i])).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ') + ' ₽\n';
       found++;
     }
