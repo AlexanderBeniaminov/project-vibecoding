@@ -79,6 +79,7 @@ function onOpen() {
       .addItem('Загрузить данные за прошлую неделю',     'fillMonblanWeekFromIiko')
       .addSeparator()
       .addItem('Найти все недели с нулевой выручкой',    'findZeroWeeks')
+      .addItem('🔍 Диагностика дашборда',                'diagnoseDashboard')
       .addSeparator()
       .addItem('Установить автозагрузку (каждый Пн 9:00)', 'installWeeklyTrigger')
       .addItem('Установить триггер onEdit',              'installTrigger'))
@@ -667,4 +668,49 @@ function getMonblanSheet_(ss) {
   var sheets = ss.getSheets();
   for (var i=0;i<sheets.length;i++) if (sheets[i].getSheetId()===MONBLAN_GID) return sheets[i];
   return ss.getSheetByName('Монблан') || ss.getSheetByName('Еженедельно');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ДИАГНОСТИКА — запустить вручную, покажет алерт с причиной нулей
+// ═══════════════════════════════════════════════════════════════
+function diagnoseDashboard() {
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var dash = getDashSheet_(ss);
+  var mb   = getMonblanSheet_(ss);
+  var msg  = '';
+
+  msg += 'ЛИСТЫ:\n';
+  msg += '  Дашборд: ' + (dash ? dash.getName() + ' (GID=' + dash.getSheetId() + ')' : '❌ НЕ НАЙДЕН') + '\n';
+  msg += '  Монблан: ' + (mb   ? mb.getName()   + ' (GID=' + mb.getSheetId()   + ')' : '❌ НЕ НАЙДЕН') + '\n\n';
+
+  if (!dash || !mb) { SpreadsheetApp.getUi().alert(msg); return; }
+
+  var week = parseInt(dash.getRange(R_SEL, 2).getValue());
+  msg += 'Выбранная неделя в B2: ' + week + '\n\n';
+
+  var col25 = week ? findWeekCol_(mb, 2025, week) : null;
+  var col26 = week ? findWeekCol_(mb, 2026, week) : null;
+  msg += 'СТОЛБЦЫ В ЕЖЕНЕДЕЛЬНО:\n';
+  msg += '  2025 нед.' + week + ': ' + (col25 ? 'столбец ' + col25 : '❌ НЕ НАЙДЕН') + '\n';
+  msg += '  2026 нед.' + week + ': ' + (col26 ? 'столбец ' + col26 : '❌ НЕ НАЙДЕН') + '\n\n';
+
+  msg += 'ВЫРУЧКА (строка 4):\n';
+  if (col25) msg += '  2025: ' + mb.getRange(4, col25).getValue() + '\n';
+  if (col26) msg += '  2026: ' + mb.getRange(4, col26).getValue() + '\n';
+
+  msg += '\nПоследние 5 недель с данными (2026):\n';
+  var lastCol = mb.getLastColumn();
+  var yearRow = mb.getRange(1, 2, 1, lastCol-1).getValues()[0];
+  var weekRow = mb.getRange(2, 2, 1, lastCol-1).getValues()[0];
+  var revRow  = mb.getRange(4, 2, 1, lastCol-1).getValues()[0];
+  var found = 0;
+  for (var i = yearRow.length-1; i >= 0 && found < 5; i--) {
+    if (Number(yearRow[i]) === 2026 && Number(revRow[i]) > 0) {
+      msg += '  нед.' + weekRow[i] + ' → ' + Math.round(Number(revRow[i])).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ') + ' ₽\n';
+      found++;
+    }
+  }
+  if (!found) msg += '  ❌ Нет ни одной недели 2026 с ненулевой выручкой!\n';
+
+  SpreadsheetApp.getUi().alert(msg);
 }
