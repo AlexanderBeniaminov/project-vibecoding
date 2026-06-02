@@ -634,15 +634,27 @@ function loadWeek17_2026() {
   fillMonblanWeek('2026-04-20', '2026-04-26');
 }
 
-// Нед. 22 / 2026: 25–31 мая (восстановить нули на дашборде)
-function loadWeek22_2026() {
-  fillMonblanWeek('2026-05-25', '2026-05-31');
-}
+// ── 2026 (актуальные недели) ─────────────────────────────────────
+function loadWeek14_2026() { fillMonblanWeek('2026-03-30', '2026-04-05'); }
+function loadWeek15_2026() { fillMonblanWeek('2026-04-06', '2026-04-12'); }
+function loadWeek16_2026() { fillMonblanWeek('2026-04-13', '2026-04-19'); }
+function loadWeek17_2026() { fillMonblanWeek('2026-04-20', '2026-04-26'); }
+function loadWeek18_2026() { fillMonblanWeek('2026-04-27', '2026-05-03'); }
+function loadWeek19_2026() { fillMonblanWeek('2026-05-04', '2026-05-10'); }
+function loadWeek20_2026() { fillMonblanWeek('2026-05-11', '2026-05-17'); }
+function loadWeek21_2026() { fillMonblanWeek('2026-05-18', '2026-05-24'); }
+function loadWeek22_2026() { fillMonblanWeek('2026-05-25', '2026-05-31'); }
 
-// Нед. 22 / 2025: 26 мая – 1 июня (база прошлого года для сравнения)
-function loadWeek22_2025() {
-  fillMonblanWeek('2025-05-26', '2025-06-01');
-}
+// ── 2025 (те же недели для сравнения год-к-году) ─────────────────
+function loadWeek14_2025() { fillMonblanWeek('2025-03-31', '2025-04-06'); }
+function loadWeek15_2025() { fillMonblanWeek('2025-04-07', '2025-04-13'); }
+function loadWeek16_2025() { fillMonblanWeek('2025-04-14', '2025-04-20'); }
+function loadWeek17_2025() { fillMonblanWeek('2025-04-21', '2025-04-27'); }
+function loadWeek18_2025() { fillMonblanWeek('2025-04-28', '2025-05-04'); }
+function loadWeek19_2025() { fillMonblanWeek('2025-05-05', '2025-05-11'); }
+function loadWeek20_2025() { fillMonblanWeek('2025-05-12', '2025-05-18'); }
+function loadWeek21_2025() { fillMonblanWeek('2025-05-19', '2025-05-25'); }
+function loadWeek22_2025() { fillMonblanWeek('2025-05-26', '2025-06-01'); }
 
 // ═══════════════════════════════════════════════════════════════
 // ДИАГНОСТИКА: найти все недели с нулевой выручкой
