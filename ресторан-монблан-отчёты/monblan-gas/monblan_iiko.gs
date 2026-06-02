@@ -115,7 +115,22 @@ function fillMonblanWeek(dateFrom, dateTo) {
 
   writeWeekData_(sh, col, data);
   Logger.log('✅ Данные за неделю ' + dateFrom + ' — ' + dateTo + ' записаны.');
-  sendMaxNotificationMonblan_('✅ Монблан — данные за неделю ' + isoWeek + ' (' + dateFrom + ' — ' + dateTo + ') записаны в «ЕженедельноО».');
+
+  // Верификация: проверяем что выручка ненулевая
+  var totalRevCheck = sh.getRange(4, col).getValue();
+  if (!totalRevCheck || totalRevCheck === 0) {
+    sendMaxNotificationMonblan_(
+      '⚠️ Монблан — нед.' + isoWeek + ' (' + dateFrom + ' — ' + dateTo + ')' +
+      ' ВЫРУЧКА = 0 РУБ. Данные не загружены из iiko.' +
+      ' Запустите loadWeek' + isoWeek + '_' + isoYear + '() повторно через 5–10 мин.'
+    );
+    Logger.log('⚠️ ПРЕДУПРЕЖДЕНИЕ: выручка за неделю ' + isoWeek + ' = 0. Данные могут не загрузиться!');
+  } else {
+    sendMaxNotificationMonblan_(
+      '✅ Монблан — нед.' + isoWeek + ' (' + dateFrom + ' — ' + dateTo + ')' +
+      ' выручка ' + Math.round(totalRevCheck).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽'
+    );
+  }
 }
 
 /**
@@ -617,6 +632,49 @@ function loadWeek16_2026() {
 // Нед. 17 / 2026: 20–26 апреля
 function loadWeek17_2026() {
   fillMonblanWeek('2026-04-20', '2026-04-26');
+}
+
+// Нед. 22 / 2026: 25–31 мая (восстановить нули на дашборде)
+function loadWeek22_2026() {
+  fillMonblanWeek('2026-05-25', '2026-05-31');
+}
+
+// Нед. 22 / 2025: 26 мая – 1 июня (база прошлого года для сравнения)
+function loadWeek22_2025() {
+  fillMonblanWeek('2025-05-26', '2025-06-01');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ДИАГНОСТИКА: найти все недели с нулевой выручкой
+// Запустить вручную — покажет в Logs список проблемных недель.
+// ═══════════════════════════════════════════════════════════════
+function findZeroWeeks() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = getMonblanSheet_(ss);
+  if (!sh) { Logger.log('Лист не найден'); return; }
+
+  var lastCol  = sh.getLastColumn();
+  var yearRow  = sh.getRange(1, 2, 1, lastCol - 1).getValues()[0];
+  var weekRow  = sh.getRange(2, 2, 1, lastCol - 1).getValues()[0];
+  var revRow   = sh.getRange(4, 2, 1, lastCol - 1).getValues()[0];
+
+  var zeroWeeks = [];
+  for (var i = 0; i < yearRow.length; i++) {
+    var yr = Number(yearRow[i]);
+    var wk = Number(weekRow[i]);
+    var rv = Number(revRow[i]);
+    if (yr >= 2025 && wk > 0 && rv === 0) {
+      zeroWeeks.push(yr + ' нед.' + wk + ' (столбец ' + (i + 2) + ')');
+    }
+  }
+
+  if (zeroWeeks.length === 0) {
+    Logger.log('✅ Нулевых недель не найдено!');
+  } else {
+    Logger.log('⚠️ Недели с нулевой выручкой (' + zeroWeeks.length + ' шт.):');
+    zeroWeeks.forEach(function(w) { Logger.log('  • ' + w); });
+    Logger.log('Для каждой запустите fillMonblanWeek("YYYY-MM-DD", "YYYY-MM-DD")');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

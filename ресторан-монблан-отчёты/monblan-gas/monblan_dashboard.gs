@@ -78,6 +78,8 @@ function onOpen() {
       .addSeparator()
       .addItem('Загрузить данные за прошлую неделю',     'fillMonblanWeekFromIiko')
       .addSeparator()
+      .addItem('Найти все недели с нулевой выручкой',    'findZeroWeeks')
+      .addSeparator()
       .addItem('Установить автозагрузку (каждый Пн 9:00)', 'installWeeklyTrigger')
       .addItem('Установить триггер onEdit',              'installTrigger'))
     .addSubMenu(SpreadsheetApp.getUi().createMenu('📆 Ежемесячный')
@@ -129,8 +131,22 @@ function refreshDashboard() {
 
   clearDataRows_(dash);
 
+  // Проверка: загружены ли данные для выбранной недели
+  var noData26 = !col26 || (parseFloat(mb.getRange(4, col26).getValue()) || 0) === 0;
+  var noData25 = !col25 || (parseFloat(mb.getRange(4, col25).getValue()) || 0) === 0;
+
+  if (noData26) {
+    dash.getRange(R_DATA, 1, 1, 5).merge()
+      .setValue('⚠️  Данные за неделю ' + week + ' / 2026 не загружены. ' +
+                'Откройте «🔶 Монблан» → «Загрузить данные за прошлую неделю»')
+      .setBackground('#fff3cd').setFontColor('#856404')
+      .setFontWeight('bold').setFontSize(13)
+      .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    dash.setRowHeight(R_DATA, 44);
+  }
+
   // Все метрики (строки 5+)
-  var lastDataRow = writeAllMetricRows_(dash, mb, col25, col26);
+  var lastDataRow = writeAllMetricRows_(dash, mb, col25, col26, noData25, noData26);
 
   // Сигналы недели
   var signals    = computeSignals_(mb, col25, col26);
@@ -255,13 +271,14 @@ function clearDataRows_(dash) {
 // ВСЕ МЕТРИКИ (строки 5+)
 // Полная копия листа «Монблан», кроме Столов и Посадочных мест
 // ═══════════════════════════════════════════════════════════════
-function writeAllMetricRows_(dash, mb, col25, col26) {
+function writeAllMetricRows_(dash, mb, col25, col26, noData25, noData26) {
   var N      = 96;
   var labels = mb.getRange(1, 1, N, 1).getValues();
   var v25arr = col25 ? mb.getRange(1, col25, N, 1).getValues() : null;
   var v26arr = col26 ? mb.getRange(1, col26, N, 1).getValues() : null;
 
-  var dashRow   = R_DATA;
+  // Пропускаем первую строку данных если уже занята баннером предупреждения
+  var dashRow   = (noData26) ? R_DATA + 1 : R_DATA;
   var lastLabel = '';
 
   for (var i = 3; i < N; i++) {
