@@ -619,6 +619,179 @@ function getIsoYear_(date) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// МАССОВОЕ ВОССТАНОВЛЕНИЕ ДАННЫХ
+//
+// Запускай resumeBackfill() несколько раз подряд — каждый запуск
+// загружает 3 недели и запоминает прогресс. Пропускает недели
+// у которых уже есть данные. Охватывает 2025 и 2026 нед.1–22.
+// ═══════════════════════════════════════════════════════════════
+function resumeBackfill() {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sh    = getMonblanSheet_(ss);
+  var props = PropertiesService.getScriptProperties();
+
+  if (!sh) { SpreadsheetApp.getUi().alert('Лист ЕжеНедельно не найден!'); return; }
+
+  // Список всех недель для восстановления: 2025 нед.1-22, затем 2026 нед.1-22
+  var schedule = [];
+  for (var w = 1; w <= 22; w++) schedule.push([2025, w]);
+  for (var w = 1; w <= 22; w++) schedule.push([2026, w]);
+
+  var idx     = parseInt(props.getProperty('BACKFILL_IDX') || '0');
+  var loaded  = 0;
+  var skipped = 0;
+
+  while (idx < schedule.length && loaded < 3) {
+    var yr = schedule[idx][0], wk = schedule[idx][1];
+    var col = findWeekColumn_(sh, yr, wk);
+    var hasData = col && (parseFloat(sh.getRange(4, col).getValue()) || 0) > 0;
+
+    if (hasData) {
+      Logger.log('Пропускаем нед.' + wk + ' ' + yr + ' — данные уже есть');
+      skipped++;
+    } else {
+      var dates = calcWeekDates_(yr, wk);
+      Logger.log('Загружаем нед.' + wk + ' ' + yr + ' (' + dates.from + ')...');
+      fillMonblanWeekFast_(dates.from, dates.to);
+      loaded++;
+    }
+    idx++;
+  }
+
+  props.setProperty('BACKFILL_IDX', String(idx));
+
+  if (idx >= schedule.length) {
+    props.deleteProperty('BACKFILL_IDX');
+    SpreadsheetApp.getUi().alert('✅ Восстановление завершено!\nВсе 44 недели (2025 + 2026) проверены.\nПропущено (уже были): ' + skipped);
+  } else {
+    var nextYr = schedule[idx][0], nextWk = schedule[idx][1];
+    SpreadsheetApp.getUi().alert(
+      'Загружено: ' + loaded + ' нед.  Пропущено: ' + skipped + '\n' +
+      'Осталось: ~' + (schedule.length - idx) + ' нед.\n\n' +
+      'Следующая: ' + nextYr + ' нед.' + nextWk + '\n\n' +
+      '▶ Запустите resumeBackfill() ещё раз.'
+    );
+  }
+}
+
+// Вычисляет даты (Пн–Вс) ISO-недели по году и номеру недели
+function calcWeekDates_(year, week) {
+  var jan4   = new Date(year, 0, 4);
+  var dow    = jan4.getDay() || 7;
+  var monday = new Date(jan4.getTime() - (dow - 1) * 86400000 + (week - 1) * 7 * 86400000);
+  var sunday = new Date(monday.getTime() + 6 * 86400000);
+  var fmt = function(d) {
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  };
+  return {from: fmt(monday), to: fmt(sunday)};
+}
+
+// Быстрая загрузка одной недели (без запроса градации — на 60 сек быстрее)
+// Строки 75–85 (градация чеков) останутся нулями.
+function fillMonblanWeekFast_(dateFrom, dateTo) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = getMonblanSheet_(ss);
+  if (!sh) return;
+
+  var weekDate = new Date(dateFrom + 'T12:00:00');
+  var isoYear  = getIsoYear_(weekDate);
+  var isoWeek  = getIsoWeek_(weekDate);
+  var col      = findWeekColumn_(sh, isoYear, isoWeek);
+  if (!col) { Logger.log('Столбец не найден: нед.' + isoWeek + ' ' + isoYear); return; }
+
+  var token = getIikoToken_();
+  if (!token) { Logger.log('Ошибка авторизации'); return; }
+
+  var baseFilters = [makeDateFilter_(dateFrom, dateTo)].concat(makeNotDeletedFilters_());
+  var data = {
+    totalRevenue:0, kitchenRevenue:0, barRevenue:0,
+    morningRevenue:0, dayRevenue:0, eveningRevenue:0,
+    monRevenue:0, tueRevenue:0, wedRevenue:0, thuRevenue:0,
+    friRevenue:0, satRevenue:0, sunRevenue:0,
+    totalGuests:0, morningGuests:0, dayGuests:0, eveningGuests:0,
+    totalChecks:0, morningChecks:0, dayChecks:0, eveningChecks:0,
+    totalDishes:0, kitchenDishes:0,
+    revenue1Guest:0, revenue2Guests:0, revenue3PlusGuests:0,
+    checks1Guest:0, checks2Guests:0, checks3PlusGuests:0,
+    revenue0to500:0, revenue500to1000:0, revenue1to1500:0,
+    revenue1500to3000:0, revenue3000to5000:0, revenue5000plus:0,
+    breakfastsGuests:0, eventsCount:0, eventsRevenue:0, eventsGuests:0,
+  };
+
+  // Запрос 1: итого по дням
+  var r1 = olapQuery_(token, 'SALES', ['OpenDate.Typed'],
+    ['DishDiscountSumInt','UniqOrderId.OrdersCount','GuestNum','DishAmountInt'], baseFilters);
+  if (r1) {
+    var dayRevMap = {};
+    for (var i = 0; i < r1.length; i++) {
+      data.totalRevenue += r1[i]['DishDiscountSumInt'] || 0;
+      data.totalChecks  += r1[i]['UniqOrderId.OrdersCount'] || 0;
+      data.totalGuests  += r1[i]['GuestNum'] || 0;
+      data.totalDishes  += r1[i]['DishAmountInt'] || 0;
+      if (r1[i]['OpenDate.Typed']) dayRevMap[r1[i]['OpenDate.Typed']] = r1[i]['DishDiscountSumInt'] || 0;
+    }
+    var DAY_KEYS = ['monRevenue','tueRevenue','wedRevenue','thuRevenue','friRevenue','satRevenue','sunRevenue'];
+    var mp = dateFrom.split('-');
+    var monDate = new Date(parseInt(mp[0]), parseInt(mp[1])-1, parseInt(mp[2]), 12, 0, 0);
+    for (var d = 0; d < 7; d++) {
+      var dt = new Date(monDate.getTime() + d * 86400000);
+      var ds = dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2);
+      data[DAY_KEYS[d]] = dayRevMap[ds] || 0;
+    }
+  }
+
+  // Запрос 2: кухня/бар
+  Utilities.sleep(15000);
+  var r2 = olapQuery_(token,'SALES',['DishCategory','DishName'],['DishDiscountSumInt','DishAmountInt'],baseFilters);
+  if (r2) {
+    for (var i = 0; i < r2.length; i++) {
+      var cat  = (r2[i]['DishCategory']||'').toLowerCase().trim();
+      var name = (r2[i]['DishName']||'').toLowerCase().trim();
+      var rev  = r2[i]['DishDiscountSumInt']||0;
+      var dsh  = r2[i]['DishAmountInt']||0;
+      var isKRev  = containsKeyword_(cat,IIKO_KITCHEN_KEYWORDS) || (!cat && containsKeyword_(name,IIKO_KITCHEN_KEYWORDS));
+      var isKDish = containsKeyword_(cat,IIKO_KITCHEN_KEYWORDS) || (!cat && containsKeyword_(name,IIKO_KITCHEN_DISH_KEYWORDS));
+      if (isKRev) data.kitchenRevenue += rev; else data.barRevenue += rev;
+      if (isKDish) data.kitchenDishes += dsh;
+    }
+  }
+
+  // Запрос 3: по часам
+  Utilities.sleep(15000);
+  var r3 = olapQuery_(token,'SALES',['HourClose'],['DishDiscountSumInt','GuestNum','UniqOrderId.OrdersCount'],baseFilters);
+  if (r3) {
+    for (var i = 0; i < r3.length; i++) {
+      var hour   = parseInt(r3[i]['HourClose'])||0;
+      var rev    = r3[i]['DishDiscountSumInt']||0;
+      var guests = r3[i]['GuestNum']||0;
+      var checks = r3[i]['UniqOrderId.OrdersCount']||0;
+      if (hour>=9&&hour<11)   { data.morningRevenue+=rev; data.morningGuests+=guests; data.morningChecks+=checks; }
+      else if (hour>=11&&hour<17) { data.dayRevenue+=rev;     data.dayGuests+=guests;     data.dayChecks+=checks;     }
+      else if (hour>=17&&hour<23) { data.eveningRevenue+=rev; data.eveningGuests+=guests; data.eveningChecks+=checks; }
+    }
+  }
+
+  // Запрос 4: по кол-ву гостей
+  Utilities.sleep(15000);
+  var r4 = olapQuery_(token,'SALES',['GuestNum'],['DishDiscountSumInt','UniqOrderId.OrdersCount'],baseFilters);
+  if (r4) {
+    for (var i = 0; i < r4.length; i++) {
+      var gn  = parseInt(r4[i]['GuestNum'])||0;
+      var rev = r4[i]['DishDiscountSumInt']||0;
+      var chk = r4[i]['UniqOrderId.OrdersCount']||0;
+      if (gn===1)      { data.revenue1Guest+=rev;      data.checks1Guest+=chk;      }
+      else if (gn===2) { data.revenue2Guests+=rev;     data.checks2Guests+=chk;     }
+      else if (gn>=3)  { data.revenue3PlusGuests+=rev; data.checks3PlusGuests+=chk; }
+    }
+  }
+
+  writeWeekData_(sh, col, data);
+  var totalRev = parseFloat(sh.getRange(4, col).getValue()) || 0;
+  Logger.log((totalRev > 0 ? '✅' : '⚠️') + ' нед.' + isoWeek + ' ' + isoYear + ': ' +
+    Math.round(totalRev).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ') + ' ₽');
+}
+
+// ═══════════════════════════════════════════════════════════════
 // РАЗОВАЯ ЗАГРУЗКА КОНКРЕТНЫХ НЕДЕЛЬ (запустить вручную)
 // Запускать повторно при ошибке "Bandwidth quota exceeded":
 // подождать 5–10 минут и запустить снова.

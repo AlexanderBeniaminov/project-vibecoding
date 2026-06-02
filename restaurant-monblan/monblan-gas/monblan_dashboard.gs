@@ -78,6 +78,8 @@ function onOpen() {
       .addSeparator()
       .addItem('Загрузить данные за прошлую неделю',     'fillMonblanWeekFromIiko')
       .addSeparator()
+      .addItem('♻️ Восстановить данные (запускать несколько раз)', 'resumeBackfill')
+      .addSeparator()
       .addItem('Найти все недели с нулевой выручкой',    'findZeroWeeks')
       .addItem('🔍 Диагностика дашборда',                'diagnoseDashboard')
       .addSeparator()
