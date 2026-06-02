@@ -454,7 +454,7 @@ function fillWeekDates() {
   for (var col = 0; col < numCols; col++) {
     var yr = Number(years[col]);
     var wk = Number(weeks[col]);
-    dates.push((yr > 0 && wk > 0) ? weekDateRange_(yr, wk) : '');
+    dates.push((yr > 0 && wk > 0) ? buildWeekDateRange_(yr, wk) : '');
   }
 
   sh.getRange(3, 2, 1, numCols).setValues([dates]);
@@ -553,7 +553,7 @@ function buildHeaders_(sh) {
   for (var i = 0; i < weeksCount; i++) {
     yearRow.push(curYear);
     weekRow.push(curWeek);
-    dateRow.push(weekDateRange_(curYear, curWeek));
+    dateRow.push(buildWeekDateRange_(curYear, curWeek));
 
     // Переходим к следующей неделе
     var weeksInYear = isoWeeksInYear_(curYear);
@@ -746,41 +746,78 @@ function applyNumberFormats_(sh) {
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ═══════════════════════════════════════════════════════════════
 
+// Разделитель аргументов функций зависит от локали таблицы:
+// en_* → запятая, остальные (ru, de и т.д.) → точка с запятой
+function getFormulaSep_() {
+  var locale = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale() || '';
+  return (locale.indexOf('en_') === 0 || locale === 'en') ? ',' : ';';
+}
+
 /**
  * Строит строку формулы для данной колонки и определения строки
  */
 function buildFormulaStr_(c, def) {
+  var s = getFormulaSep_();
   if (def.type === 'pct') {
-    // Простой процент: num / den
-    return '=IFERROR(' + c + def.formula.num + '/' + c + def.formula.den + ',"")';
+    return '=IFERROR(' + c + def.formula.num + '/' + c + def.formula.den + s + '"")';
   }
-
-  // Расчётные строки (calc)
   var f = def.formula;
   switch (f.type) {
     case 'div':
-      // Деление двух строк: num / den
-      return '=IFERROR(' + c + f.num + '/' + c + f.den + ',"")';
-
+      return '=IFERROR(' + c + f.num + '/' + c + f.den + s + '"")';
     case 'div7':
-      // Среднее за 7 дней: num / 7
-      return '=IFERROR(' + c + f.num + '/7,"")';
-
+      return '=IFERROR(' + c + f.num + '/7' + s + '"")';
     case 'turn_total':
-      // Оборачиваемость за неделю: чеки / столы / 7 дней
-      return '=IFERROR(' + c + f.checks + '/' + c + f.cap + '/7,"")';
-
+      return '=IFERROR(' + c + f.checks + '/' + c + f.cap + '/7' + s + '"")';
     case 'turn_slot':
-      // Оборачиваемость за слот (утро/день/вечер): чеки / столы
-      return '=IFERROR(' + c + f.checks + '/' + c + f.cap + ',"")';
-
+      return '=IFERROR(' + c + f.checks + '/' + c + f.cap + s + '"")';
     case 'loyalty':
-      // Коэффициент групповой лояльности: (выручка 2 + выручка 3+) / общая выручка
-      return '=IFERROR((' + c + '63+' + c + '65)/' + c + '4,"")';
-
+      return '=IFERROR((' + c + '63+' + c + '65)/' + c + '4' + s + '"")';
     default:
       return '';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ИСПРАВЛЕНИЕ СИНТАКСИСА ФОРМУЛ (запятая → точка с запятой)
+// Запустить один раз если формулы показывают #ERROR!
+// Не трогает данные — только формульные строки.
+// ═══════════════════════════════════════════════════════════════
+function fixFormulaSyntax() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = getMonblanSheet_(ss);
+  if (!sh) { SpreadsheetApp.getUi().alert('Лист не найден'); return; }
+
+  var lastCol = sh.getLastColumn();
+  if (lastCol < 2) { SpreadsheetApp.getUi().alert('Лист пуст — сначала запустите buildMonblanSheet'); return; }
+  var numCols = lastCol - 1;
+
+  // Все формульные строки (pct + calc из MB_ROWS)
+  var formulaRows = [];
+  for (var i = 0; i < MB_ROWS.length; i++) {
+    if (MB_ROWS[i].type === 'pct' || MB_ROWS[i].type === 'calc') {
+      formulaRows.push(MB_ROWS[i].r);
+    }
+  }
+
+  var fixedRows = 0;
+  formulaRows.forEach(function(rowNum) {
+    var rng      = sh.getRange(rowNum, 2, 1, numCols);
+    var formulas = rng.getFormulas()[0];
+    var changed  = false;
+    var newFormulas = formulas.map(function(f) {
+      if (!f || f.indexOf(',""') === -1) return f;
+      changed = true;
+      return f.replace(/,""\)/g, ';"")');
+    });
+    if (changed) { rng.setFormulas([newFormulas]); fixedRows++; }
+  });
+
+  SpreadsheetApp.getUi().alert(
+    fixedRows > 0
+      ? '✅ Исправлено строк формул: ' + fixedRows + '\n#ERROR! должен исчезнуть.'
+      : 'Формулы уже корректны или не найдены.'
+  );
 }
 
 /**
@@ -799,14 +836,14 @@ function colNumToLetter_(n) {
 /**
  * Возвращает диапазон дат ISO-недели в формате "DD-DD"
  * Пример: неделя 48 2024 = "25-01" (ноября 25 — декабря 1)
+ * Переименована в buildWeekDateRange_ чтобы не конфликтовать
+ * с weekDateRange_ из monblan_dashboard.gs (разные сигнатуры).
  */
-function weekDateRange_(year, isoWeek) {
-  // Понедельник ISO-недели
+function buildWeekDateRange_(year, isoWeek) {
   var jan4    = new Date(year, 0, 4);
-  var dayJan4 = jan4.getDay() || 7;           // 1=Пн ... 7=Вс
+  var dayJan4 = jan4.getDay() || 7;
   var monday  = new Date(jan4.getTime() - (dayJan4 - 1) * 86400000 + (isoWeek - 1) * 7 * 86400000);
   var sunday  = new Date(monday.getTime() + 6 * 86400000);
-
   var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
   return pad(monday.getDate()) + '-' + pad(sunday.getDate());
 }
