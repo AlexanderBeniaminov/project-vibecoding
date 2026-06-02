@@ -8,10 +8,10 @@
 - Стратегические KPI на апр–ноябрь 2026: загрузка 12%/19.8%, маржа 8%, выручка 15.4М, ДР 125, группы 6
 - → подробнее: `aihotel/CLAUDE.md`
 
-### `ресторан-монблан-отчёты/` — Монблан трекинг
+### `restaurant-monblan/` — Монблан трекинг
 iiko → Google Sheets. Три потока: ежедневный / еженедельный (GAS) / ежемесячный (Python).
 - Стек: Python, iiko OLAP API, Google Sheets, GAS, GitHub Actions
-- → подробнее: `ресторан-монблан-отчёты/CLAUDE.md`
+- → подробнее: `restaurant-monblan/CLAUDE.md`
 
 ### `telegram-assistant/` — Персональный AI-ассистент
 Telegram-бот на сервере. Голос, напоминания, заметки, Google Calendar, веб-поиск.

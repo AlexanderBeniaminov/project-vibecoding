@@ -317,7 +317,7 @@ iikoWeb иногда обрывает SSL с GitHub Actions (SSLEOFError).
 ## Структура кода
 
 ```
-ресторан-монблан-отчёты/
+restaurant-monblan/
   scripts/
     main.py           — collect / report
     iiko_client.py    — iikoWeb OLAP: IikoWebSession + collect_daily_data()

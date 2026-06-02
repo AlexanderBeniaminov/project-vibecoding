@@ -18,7 +18,7 @@
 
 ## Проекты
 - **aihotel/** — AI-система управления ВК Губаха (Python, GitHub Actions, Google Sheets)
-- **ресторан-монблан-отчёты/** — трекинг Монблан: iiko → Google Sheets (Python + GAS)
+- **restaurant-monblan/** — трекинг Монблан: iiko → Google Sheets (Python + GAS)
 - **telegram-assistant/** — мобильный бот на VPS (напоминалки, заметки, Calendar)
 - **infrastructure/** — VPS Германия, VLESS+Reality VPN
 - **entens-group_website/** — лендинг EntenS Group (index.html)

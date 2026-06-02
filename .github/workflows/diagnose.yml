@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: ресторан-монблан-отчёты
+        working-directory: restaurant-monblan
 
     env:
       IIKO_STORE_ID: "82455"
@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: ресторан-монблан-отчёты/requirements.txt
+          cache-dependency-path: restaurant-monblan/requirements.txt
 
       - name: Установка зависимостей
         run: pip install -r requirements.txt
@@ -41,5 +41,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: diagnose-${{ github.run_id }}
-          path: ресторан-монблан-отчёты/logs/
+          path: restaurant-monblan/logs/
           retention-days: 7
