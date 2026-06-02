@@ -693,6 +693,16 @@ function diagnoseDashboard() {
 
   var col25 = week ? findWeekCol_(mb, 2025, week) : null;
   var col26 = week ? findWeekCol_(mb, 2026, week) : null;
+  // Показываем реальную структуру листа (первые 8 столбцов строк 1 и 2)
+  var lastCol = mb.getLastColumn();
+  var show = Math.min(8, lastCol);
+  var r1 = show > 0 ? mb.getRange(1, 1, 1, show).getValues()[0] : [];
+  var r2 = show > 0 ? mb.getRange(2, 1, 1, show).getValues()[0] : [];
+  msg += 'СТРУКТУРА ЛИСТА (первые ' + show + ' столбцов):\n';
+  msg += '  Строка 1: ' + r1.map(function(v){return '"'+v+'"';}).join(' | ') + '\n';
+  msg += '  Строка 2: ' + r2.map(function(v){return '"'+v+'"';}).join(' | ') + '\n';
+  msg += '  Всего столбцов: ' + lastCol + '\n\n';
+
   msg += 'СТОЛБЦЫ В ЕЖЕНЕДЕЛЬНО:\n';
   msg += '  2025 нед.' + week + ': ' + (col25 ? 'столбец ' + col25 : '❌ НЕ НАЙДЕН') + '\n';
   msg += '  2026 нед.' + week + ': ' + (col26 ? 'столбец ' + col26 : '❌ НЕ НАЙДЕН') + '\n\n';
