@@ -407,8 +407,10 @@
     .numbers { padding: 72px 0; }
     .numbers__grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 0;
+      max-width: 900px;
+      margin: 0 auto;
     }
     .number-item {
       padding: 32px 24px;
@@ -1218,7 +1220,7 @@
       .nav { display: none; }
       .header__cta { display: none; }
       .burger { display: flex; }
-      .numbers__grid { grid-template-columns: repeat(3, 1fr); }
+      .numbers__grid { grid-template-columns: repeat(2, 1fr); }
       .number-item:nth-child(3) { border-right: none; }
       .number-item:nth-child(4) { border-top: 1px solid var(--border); }
       .cases__grid { grid-template-columns: 1fr 1fr; }
