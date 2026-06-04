@@ -2269,10 +2269,10 @@
           : ''
       ].filter(Boolean).join('\n');
 
-      fetch('https://botapi.max.ru/messages/send?access_token=f9LHodD0cOKf3I_FDR-PuNxx_wY2cc3xcBwPsYmaaLOBGVqXJ1tWBFHTxxPZ5BXDSlqn6_mOoYcznxFrU2pu', {
+      fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: '247973724', text: msgText })
+        body: JSON.stringify({ text: msgText })
       })
       .finally(() => {
         form.style.display = 'none';
