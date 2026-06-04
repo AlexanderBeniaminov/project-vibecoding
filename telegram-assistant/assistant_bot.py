@@ -2015,6 +2015,11 @@ async def main():
         replace_existing=True,
     )
     scheduler.start()
+    # Удаляем webhook при старте — защита от конфликта с внешними сервисами
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+    except Exception as e:
+        print(f"[webhook] delete error: {e}")
     print(f"[{datetime.now(_MSK).strftime('%H:%M:%S')} МСК] Бот запущен.")
     await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
 
