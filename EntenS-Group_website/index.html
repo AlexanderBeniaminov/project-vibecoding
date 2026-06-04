@@ -2255,15 +2255,32 @@
 
       if (!valid) return;
 
-      // Simulate successful send
       const submitBtn = form.querySelector('[type="submit"]');
       submitBtn.textContent = 'Отправляем...';
       submitBtn.disabled = true;
 
-      setTimeout(() => {
+      const msgText = [
+        '📋 Новая заявка с сайта entens.ru',
+        '',
+        '👤 Имя: '     + name.value.trim(),
+        '📞 Контакт: ' + contact.value.trim(),
+        '🏷 Роль: '    + who.value,
+        form.querySelector('#message').value.trim()
+          ? '💬 ' + form.querySelector('#message').value.trim()
+          : ''
+      ].filter(Boolean).join('\n');
+
+      fetch('https://botapi.max.ru/messages/send?access_token=f9LHodD0cOKf3I_FDR-PuNxx_wY2cc3xcBwPsYmaaLOBGVqXJ1tWBFHTxxPZ5BXDSlqn6_mOoYcznxFrU2pu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: '247973724', text: msgText })
+      })
+      .finally(() => {
         form.style.display = 'none';
         success.style.display = 'block';
-      }, 900);
+        submitBtn.textContent = 'Отправить заявку';
+        submitBtn.disabled = false;
+      });
     });
   }
 
