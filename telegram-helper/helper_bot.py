@@ -1566,21 +1566,40 @@ async def _hotelier_send(uid: int, text: str):
             except Exception as e:
                 logging.warning(f"[hotelier] send failed: {e}")
 
-async def _hotelier_llm_digest(prompt: str, max_tokens: int = 1500) -> str:
-    """Вызывает LLM для генерации дайджеста, обрабатывает thinking-модель."""
-    resp = await ai_client.chat.completions.create(
-        model=config.MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        temperature=0.3,
-    )
-    msg = resp.choices[0].message
-    text = (msg.content or "").strip()
-    if not text and hasattr(msg, "reasoning"):
-        # DeepSeek thinking: ответ в конце reasoning после тегов
-        raw = (msg.reasoning or "").strip()
-        text = _clean(raw)
-    return text
+def _hotelier_format_post(row) -> str:
+    """Форматирует пост: оригинальный текст + ссылка на источник."""
+    topics = json.loads(row["topics"] or "[]")
+    tag = ""
+    if "статистика_отелей" in topics and "пермский_край" in topics:
+        tag = "📊🏔 "
+    elif "статистика_отелей" in topics:
+        tag = "📊 "
+    elif "пермский_край" in topics:
+        tag = "🏔 "
+    msg_id = row["message_id"]
+    date_str = row["date"]
+    text = row["text"]
+    link = f"https://t.me/HotelierPRO/{msg_id}"
+    return f"{tag}{date_str}\n\n{text}\n\n{link}"
+
+async def _hotelier_send_posts(uid: int, rows: list, header: str = ""):
+    """Отправляет каждый пост отдельным сообщением."""
+    if header:
+        try:
+            await bot.send_message(uid, header, parse_mode=None)
+        except Exception as e:
+            logging.warning(f"[hotelier] header send failed: {e}")
+        await asyncio.sleep(0.3)
+    for row in rows:
+        text = _hotelier_format_post(row)
+        # Telegram лимит 4096, режем если надо
+        if len(text) > 4000:
+            text = text[:3950] + f"...\n\nhttps://t.me/HotelierPRO/{row['message_id']}"
+        try:
+            await bot.send_message(uid, text, parse_mode=None, disable_web_page_preview=True)
+        except Exception as e:
+            logging.warning(f"[hotelier] post send failed (id={row['message_id']}): {e}")
+        await asyncio.sleep(0.3)
 
 async def hotelier_digest():
     """Ежедневный дайджест в 10:00 МСК."""
@@ -1588,7 +1607,7 @@ async def hotelier_digest():
         since = datetime.now(_MSK) - timedelta(hours=24)
         conn = _hotelier_conn()
         rows = conn.execute(
-            "SELECT id, date, text, topics FROM channel_posts "
+            "SELECT id, message_id, date, text, topics FROM channel_posts "
             "WHERE is_relevant=1 AND sent=0 AND date >= ? "
             "ORDER BY date",
             (since.strftime("%Y-%m-%d %H:%M"),),
@@ -1597,27 +1616,14 @@ async def hotelier_digest():
             conn.close()
             logging.info("[hotelier] digest: no new relevant posts")
             return
-        posts_text = "\n\n".join(f"[{r['date']}] {r['text'][:600]}" for r in rows)
-        prompt = (
-            "На основе этих постов из канала HotelierPRO составь краткий дайджест для владельца отеля.\n"
-            "Структура (только текстом, без Markdown):\n"
-            "СТАТИСТИКА И РЫНОК ОТЕЛЕЙ РОССИИ — ключевые цифры, тренды, прогнозы\n"
-            "ПЕРМСКИЙ КРАЙ — проекты, события, новости\n\n"
-            "Если по теме нет постов — раздел не выводи. Будь конкретен: цифры, факты.\n\n"
-            "Посты:\n" + posts_text
-        )
-        digest = await _hotelier_llm_digest(prompt)
-        if not digest:
-            conn.close()
-            return
-        header = f"Дайджест HotelierPRO — {datetime.now(_MSK).strftime('%d.%m.%Y')}\n\n"
+        header = f"HotelierPRO — {datetime.now(_MSK).strftime('%d.%m.%Y')} ({len(rows)} постов)"
         ids = [r["id"] for r in rows]
         for uid in config.ALLOWED_USER_IDS:
-            await _hotelier_send(uid, header + digest)
+            await _hotelier_send_posts(uid, rows, header)
         conn.execute(f"UPDATE channel_posts SET sent=1 WHERE id IN ({','.join('?' * len(ids))})", ids)
         conn.commit()
         conn.close()
-        logging.info(f"[hotelier] digest sent, {len(rows)} posts covered")
+        logging.info(f"[hotelier] digest sent, {len(rows)} posts")
     except Exception as e:
         logging.error(f"[hotelier] digest error: {e}")
 
@@ -1627,9 +1633,9 @@ async def hotelier_initial_load():
     try:
         conn = _hotelier_conn()
         flag = conn.execute("SELECT value FROM bot_flags WHERE key='hotelier_initial_done'").fetchone()
-        # Если флаг есть, но есть несендженные посты — просто отправляем их
         unsent = conn.execute(
-            "SELECT id, date, text FROM channel_posts WHERE is_relevant=1 AND sent=0 ORDER BY date"
+            "SELECT id, message_id, date, text, topics FROM channel_posts "
+            "WHERE is_relevant=1 AND sent=0 ORDER BY date"
         ).fetchall()
         conn.close()
 
@@ -1661,10 +1667,10 @@ async def hotelier_initial_load():
             conn.execute("INSERT OR REPLACE INTO bot_flags VALUES ('hotelier_initial_done', '1')")
             conn.commit()
             conn.close()
-            # Обновляем список несохранённых
             conn = _hotelier_conn()
             unsent = conn.execute(
-                "SELECT id, date, text FROM channel_posts WHERE is_relevant=1 AND sent=0 ORDER BY date"
+                "SELECT id, message_id, date, text, topics FROM channel_posts "
+                "WHERE is_relevant=1 AND sent=0 ORDER BY date"
             ).fetchall()
             conn.close()
 
@@ -1672,23 +1678,12 @@ async def hotelier_initial_load():
             logging.info("[hotelier] initial: no relevant posts found")
             return
 
-        posts_text = "\n\n".join(f"[{r['date']}] {r['text'][:600]}" for r in unsent)
         since_str = (datetime.now(_MSK) - timedelta(days=62)).strftime("%d.%m")
         now_str = datetime.now(_MSK).strftime("%d.%m.%Y")
-        prompt = (
-            "На основе постов из канала HotelierPRO за последние 2 месяца составь сводный дайджест.\n"
-            "Пиши только обычным текстом без Markdown-символов (*_` и т.п.).\n"
-            "Структура:\n"
-            "СТАТИСТИКА И РЫНОК ОТЕЛЕЙ РОССИИ — ключевые тренды, цифры сезона, загрузка, цены\n"
-            "ПЕРМСКИЙ КРАЙ — проекты, события, новости\n\n"
-            "Если по теме ничего нет — раздел не выводи. Группируй по смыслу, а не по датам.\n\n"
-            "Посты:\n" + posts_text[:12000]
-        )
-        digest = await _hotelier_llm_digest(prompt, max_tokens=2500)
-        header = f"HotelierPRO — сводка за {since_str}–{now_str} ({len(unsent)} постов)\n\n"
+        header = f"HotelierPRO — сводка за {since_str}–{now_str} ({len(unsent)} постов)"
         ids = [r["id"] for r in unsent]
         for uid in config.ALLOWED_USER_IDS:
-            await _hotelier_send(uid, header + digest)
+            await _hotelier_send_posts(uid, unsent, header)
         conn = _hotelier_conn()
         conn.execute(f"UPDATE channel_posts SET sent=1 WHERE id IN ({','.join('?' * len(ids))})", ids)
         conn.commit()
