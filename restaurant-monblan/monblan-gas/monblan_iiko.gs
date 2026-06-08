@@ -317,15 +317,10 @@ function makeDateFilter_(dateFrom, dateTo) {
 }
 
 function makeNotDeletedFilters_() {
+  // Намеренно НЕ фильтруем по DeletedWithWriteoff — iikoWeb включает
+  // позиции с DeletedWithWriteoff=DELETED в «Выручку» (удалённые со склада).
+  // Только OrderDeleted — совпадает с логикой ежедневного Python-скрипта.
   return [
-    {
-      field:         'DeletedWithWriteoff',
-      filterType:    'value_list',
-      dateFrom:      null, dateTo: null,
-      valueMin:      null, valueMax: null,
-      valueList:     ['NOT_DELETED'],
-      includeLeft:   true, includeRight: false, inclusiveList: true,
-    },
     {
       field:         'OrderDeleted',
       filterType:    'value_list',
@@ -801,6 +796,11 @@ function fillMonblanWeekFast_(dateFrom, dateTo) {
 // ═══════════════════════════════════════════════════════════════
 
 // ── 2026 (актуальные недели) ─────────────────────────────────────
+function loadWeek9_2026()  { fillMonblanWeek('2026-02-23', '2026-03-01'); }
+function loadWeek10_2026() { fillMonblanWeek('2026-03-02', '2026-03-08'); }
+function loadWeek11_2026() { fillMonblanWeek('2026-03-09', '2026-03-15'); }
+function loadWeek12_2026() { fillMonblanWeek('2026-03-16', '2026-03-22'); }
+function loadWeek13_2026() { fillMonblanWeek('2026-03-23', '2026-03-29'); }
 function loadWeek14_2026() { fillMonblanWeek('2026-03-30', '2026-04-05'); }
 function loadWeek15_2026() { fillMonblanWeek('2026-04-06', '2026-04-12'); }
 function loadWeek16_2026() { fillMonblanWeek('2026-04-13', '2026-04-19'); }
@@ -810,6 +810,7 @@ function loadWeek19_2026() { fillMonblanWeek('2026-05-04', '2026-05-10'); }
 function loadWeek20_2026() { fillMonblanWeek('2026-05-11', '2026-05-17'); }
 function loadWeek21_2026() { fillMonblanWeek('2026-05-18', '2026-05-24'); }
 function loadWeek22_2026() { fillMonblanWeek('2026-05-25', '2026-05-31'); }
+function loadWeek23_2026() { fillMonblanWeek('2026-06-01', '2026-06-07'); }
 
 // ── 2025 (те же недели для сравнения год-к-году) ─────────────────
 function loadWeek14_2025() { fillMonblanWeek('2025-03-31', '2025-04-06'); }
