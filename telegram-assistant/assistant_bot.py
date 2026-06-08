@@ -1999,21 +1999,6 @@ async def main():
         id="morning_briefing",
         replace_existing=True,
     )
-    scheduler.add_job(
-        weekly_review, "cron",
-        day_of_week="mon", hour=9, minute=5,
-        timezone="Europe/Moscow",
-        id="weekly_review",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        daily_summary, "cron",
-        hour=21, minute=0,
-        timezone="Europe/Moscow",
-        id="daily_summary",
-        replace_existing=True,
-    )
     scheduler.start()
     # Удаляем webhook при старте — защита от конфликта с внешними сервисами
     try:
