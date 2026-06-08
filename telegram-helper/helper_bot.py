@@ -1395,39 +1395,76 @@ def _init_hotelier_db():
     conn.commit()
     conn.close()
 
-async def _fetch_channel_posts(since_date: datetime, limit: int = 500) -> list[dict]:
-    """Читает посты из @HotelierPRO через Telethon MTProto."""
-    from telethon import TelegramClient
-    from telethon.sessions import StringSession
-    posts = []
-    client = TelegramClient(
-        StringSession(""),
-        getattr(config, "TELEGRAM_API_ID", 0),
-        getattr(config, "TELEGRAM_API_HASH", ""),
-    )
+def _scrape_channel_page(before_id: int | None = None) -> tuple[list[dict], int | None]:
+    """Парсит одну страницу t.me/s/HotelierPRO. Возвращает (посты, min_id на странице)."""
+    url = "https://t.me/s/HotelierPRO"
+    if before_id:
+        url += f"?before={before_id}"
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; bot/1.0)"}
     try:
-        await client.start(bot_token=config.TELEGRAM_TOKEN)
-        async for msg in client.iter_messages(
-            "HotelierPRO",
-            offset_date=since_date,
-            reverse=True,
-            limit=limit,
-        ):
-            text = (msg.text or msg.message or "").strip()
-            if not text and hasattr(msg, "caption"):
-                text = (msg.caption or "").strip()
-            if not text or len(text) < 30:
-                continue
-            posts.append({
-                "message_id": msg.id,
-                "date": msg.date.astimezone(_MSK).strftime("%Y-%m-%d %H:%M"),
-                "text": text[:2000],
-            })
+        r = requests.get(url, headers=headers, timeout=15)
+        r.raise_for_status()
     except Exception as e:
-        logging.warning(f"[hotelier] fetch error: {e}")
-    finally:
-        await client.disconnect()
-    return posts
+        logging.warning(f"[hotelier] scrape error: {e}")
+        return [], None
+    soup = BeautifulSoup(r.text, "html.parser")
+    posts = []
+    min_id = None
+    for wrap in soup.select(".tgme_widget_message_wrap"):
+        msg_div = wrap.select_one(".tgme_widget_message")
+        if not msg_div:
+            continue
+        data_post = msg_div.get("data-post", "")
+        try:
+            msg_id = int(data_post.split("/")[-1])
+        except (ValueError, IndexError):
+            continue
+        time_tag = wrap.select_one("time[datetime]")
+        if not time_tag:
+            continue
+        try:
+            dt = datetime.fromisoformat(time_tag["datetime"]).astimezone(_MSK)
+        except Exception:
+            continue
+        text_el = wrap.select_one(".tgme_widget_message_text")
+        text = text_el.get_text("\n", strip=True) if text_el else ""
+        if not text or len(text) < 30:
+            continue
+        posts.append({
+            "message_id": msg_id,
+            "date": dt.strftime("%Y-%m-%d %H:%M"),
+            "date_dt": dt,
+            "text": text[:2000],
+        })
+        if min_id is None or msg_id < min_id:
+            min_id = msg_id
+    return posts, min_id
+
+async def _fetch_channel_posts(since_date: datetime, limit: int = 500) -> list[dict]:
+    """Читает посты из @HotelierPRO через публичный веб-превью t.me/s/."""
+    loop = asyncio.get_event_loop()
+    all_posts: list[dict] = []
+    before_id = None
+    while len(all_posts) < limit:
+        page_posts, min_id = await loop.run_in_executor(None, _scrape_channel_page, before_id)
+        if not page_posts:
+            break
+        for p in page_posts:
+            if p["date_dt"] >= since_date:
+                all_posts.append({k: v for k, v in p.items() if k != "date_dt"})
+        oldest_dt = min(p["date_dt"] for p in page_posts)
+        if oldest_dt < since_date or min_id is None:
+            break
+        before_id = min_id
+        await asyncio.sleep(1)  # вежливая пауза между запросами
+    # убираем дубли, сортируем по дате
+    seen = set()
+    result = []
+    for p in sorted(all_posts, key=lambda x: x["date"]):
+        if p["message_id"] not in seen:
+            seen.add(p["message_id"])
+            result.append(p)
+    return result
 
 async def _filter_posts_by_topics(posts: list[dict]) -> dict[int, list[str]]:
     """Батчами по 20 постов определяет релевантность через DeepSeek."""
@@ -1436,36 +1473,41 @@ async def _filter_posts_by_topics(posts: list[dict]) -> dict[int, list[str]]:
     for i in range(0, len(posts), batch_size):
         batch = posts[i:i + batch_size]
         numbered = "\n\n".join(
-            f"[{p['message_id']}] {p['date']}\n{p['text'][:500]}"
+            f"POST_ID={p['message_id']}\nДата: {p['date']}\n{p['text'][:500]}"
             for p in batch
         )
         prompt = (
-            "Проанализируй каждый пост из канала HotelierPRO (отельный бизнес России).\n"
-            "Для каждого поста ответь одной строкой в формате:\n"
-            "ID: [ТЕМА1] — если пост содержит статистику/цены/загрузку/тренды отелей России\n"
-            "ID: [ТЕМА2] — если пост про проекты/события/новости Пермского края\n"
-            "ID: [НЕТ] — если не подходит ни одна тема\n"
-            "ID может попасть в обе темы сразу: ID: [ТЕМА1][ТЕМА2]\n\n"
+            "Проанализируй посты из Telegram-канала HotelierPRO (отельный бизнес России).\n"
+            "Для каждого поста выведи ОДНУ строку строго в формате:\n"
+            "POST_ID=<число> ТЕМА1 — если содержит статистику/цены/загрузку/тренды отелей России\n"
+            "POST_ID=<число> ТЕМА2 — если содержит новости/проекты Пермского края\n"
+            "POST_ID=<число> ТЕМА1 ТЕМА2 — если подходит обе темы\n"
+            "POST_ID=<число> НЕТ — если не подходит ни одна тема\n\n"
             "Посты:\n" + numbered
         )
         try:
             resp = await ai_client.chat.completions.create(
                 model=config.MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=800,
+                max_tokens=2000,
                 temperature=0.1,
             )
-            text = resp.choices[0].message.content or ""
+            msg = resp.choices[0].message
+            raw = (msg.content or "").strip()
+            if not raw and hasattr(msg, "reasoning"):
+                raw = (msg.reasoning or "").strip()
+            text = raw
+            logging.warning(f"[hotelier] filter LLM response (batch {i//batch_size}): {text[-400:]}")
             for line in text.splitlines():
-                m = re.match(r"(\d+):\s*(.+)", line.strip())
+                m = re.match(r"POST_ID=(\d+)\s+(.+)", line.strip())
                 if not m:
                     continue
                 msg_id = int(m.group(1))
-                tags_raw = m.group(2)
+                tags_raw = m.group(2).upper()
                 topics = []
-                if "[ТЕМА1]" in tags_raw:
+                if "ТЕМА1" in tags_raw or "TEMA1" in tags_raw:
                     topics.append("статистика_отелей")
-                if "[ТЕМА2]" in tags_raw:
+                if "ТЕМА2" in tags_raw or "TEMA2" in tags_raw:
                     topics.append("пермский_край")
                 if topics:
                     result[msg_id] = topics
