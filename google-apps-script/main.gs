@@ -133,6 +133,14 @@ function collectWeeklyHotelReport() {
   Logger.log('  TravelLine: активных=' + collected.active.length +
              ', отменённых=' + collected.cancelled.length);
 
+  // Если TravelLine ничего не нашёл — не перезаписывать нулями существующие данные
+  if (collected.active.length === 0 && collected.cancelled.length === 0) {
+    Logger.log('⚠️ TravelLine вернул 0 броней — пропускаем запись, данные не перезаписаны.');
+    Logger.log('  Возможные причины: API недоступен, данные ещё не обновлены, ошибка фильтра дат.');
+    Logger.log('  Запустите collectWeeklyHotelReport() вручную после устранения причины.');
+    return;
+  }
+
   Logger.log('  TravelLine: загружаем детали ' + collected.active.length + ' броней...');
   var bookings = fetchBookingDetails_(token, collected.active);
   Logger.log('  TravelLine: загружено ' + bookings.length + ' деталей');
