@@ -65,7 +65,7 @@
 
     h1 {
       font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(52px, 8.5vw, 130px);
+      font-size: clamp(28px, 4.25vw, 65px);
       font-weight: 400;
       letter-spacing: -0.04em;
       line-height: 1.0;
@@ -1320,82 +1320,22 @@
       to   { transform: translateX(-50%); }
     }
 
-    /* ════════════════════════════
-       PORTFOLIO PROGRESS BAR (desktop)
-    ════════════════════════════ */
+    /* Portfolio progress line — shown on all screens */
     .portfolio__progress-line {
       height: 2px;
       background: rgba(76,175,80,0.12);
-      margin-top: 28px;
+      margin-top: 24px;
       border-radius: 1px;
       overflow: hidden;
-      display: none;
     }
-    @media (min-width: 1025px) { .portfolio__progress-line { display: block; } }
     .portfolio__progress-line-fill {
       height: 100%;
       background: var(--green-primary);
       width: 0%;
-      transition: width 0.1s linear;
+      transition: width 0.15s linear;
     }
 
-    /* ════════════════════════════
-       CUSTOM CURSOR (desktop only)
-    ════════════════════════════ */
-    @media (hover: hover) and (pointer: fine) {
-      body, a, button, [data-tilt], .bento-tile, .portfolio-card { cursor: none !important; }
-      #cursor {
-        position: fixed;
-        top: 0; left: 0;
-        z-index: 9999;
-        pointer-events: none;
-        display: none;
-      }
-      .cursor__dot {
-        position: fixed;
-        width: 8px; height: 8px;
-        background: var(--green-primary);
-        border-radius: 50%;
-        top: -4px; left: -4px;
-        will-change: transform;
-        transition: opacity 0.2s ease;
-      }
-      .cursor__ring {
-        position: fixed;
-        width: 38px; height: 38px;
-        border: 1.5px solid rgba(76,175,80,0.55);
-        border-radius: 50%;
-        top: -19px; left: -19px;
-        will-change: transform;
-        transition: width 0.3s ease, height 0.3s ease,
-                    top 0.3s ease, left 0.3s ease,
-                    border-color 0.3s ease, background 0.3s ease;
-        display: flex; align-items: center; justify-content: center;
-      }
-      #cursor.cursor--hover .cursor__ring {
-        width: 52px; height: 52px;
-        top: -26px; left: -26px;
-        border-color: var(--green-primary);
-      }
-      #cursor.cursor--view .cursor__ring {
-        width: 86px; height: 86px;
-        top: -43px; left: -43px;
-        border-color: var(--green-primary);
-        background: rgba(76,175,80,0.08);
-      }
-      #cursor.cursor--view .cursor__dot { opacity: 0; }
-      .cursor__label {
-        font-family: 'Bebas Neue', sans-serif;
-        font-size: 11px;
-        letter-spacing: 0.18em;
-        color: var(--green-primary);
-        opacity: 0;
-        transition: opacity 0.2s ease;
-        white-space: nowrap;
-        text-align: center;
-      }
-      #cursor.cursor--view .cursor__label { opacity: 1; }
-    }
+    /* Custom cursor removed — standard system cursor used */
 
     /* ════════════════════════════
        SECTION DECORATIVE NUMBERS
@@ -1417,41 +1357,6 @@
       z-index: 0;
     }
 
-    /* ════════════════════════════
-       CONTACT TRUST BAR
-    ════════════════════════════ */
-    .contact-trust {
-      display: flex;
-      justify-content: center;
-      gap: 0;
-      margin-bottom: 32px;
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      overflow: hidden;
-    }
-    .contact-trust__item {
-      flex: 1;
-      text-align: center;
-      padding: 18px 12px;
-      border-right: 1px solid rgba(255,255,255,0.1);
-    }
-    .contact-trust__item:last-child { border-right: none; }
-    .contact-trust__num {
-      display: block;
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 28px;
-      font-weight: 400;
-      color: var(--green-lime);
-      line-height: 1.1;
-    }
-    .contact-trust__label {
-      display: block;
-      font-size: 11px;
-      font-weight: 500;
-      color: rgba(255,255,255,0.45);
-      margin-top: 3px;
-      letter-spacing: 0.04em;
-    }
     .contact-response-hint {
       display: flex;
       align-items: center;
@@ -1519,7 +1424,7 @@
 
     @media (max-width: 480px) {
       .container { padding: 0 16px; }
-      h1 { font-size: clamp(38px, 10vw, 58px); }
+      h1 { font-size: clamp(22px, 5.5vw, 32px); }
       h2 { font-size: clamp(28px, 7vw, 40px); }
       .hero__cta { flex-direction: column; }
       .hero__cta .btn { width: 100%; justify-content: center; }
@@ -1769,7 +1674,7 @@
       <!-- Карточка 3 -->
       <div class="portfolio-card reveal reveal-delay-2" data-tilt>
         <div class="portfolio-card__img">
-          <img src="photo_restaurant.png" alt="РеBEERная — собственный ресторанный концепт" style="width:100%;height:100%;object-fit:cover;display:block;" />
+          <img src="Ребирная 1.WEBP" alt="Рёберная — ресторанный концепт EntenS Group" style="width:100%;height:100%;object-fit:cover;display:block;" />
         </div>
         <div class="portfolio-card__body">
           <div class="portfolio-card__tag">Рестораны</div>
@@ -2232,25 +2137,6 @@
       <h2>Есть объект или хотите инвестировать?<br>Обсудим за 30 минут</h2>
       <p>Оставьте заявку — ответим в течение 24 часов.<br>Без обязательств, без навязчивых звонков.</p>
 
-      <div class="contact-trust">
-        <div class="contact-trust__item">
-          <span class="contact-trust__num">20</span>
-          <span class="contact-trust__label">лет на рынке</span>
-        </div>
-        <div class="contact-trust__item">
-          <span class="contact-trust__num">500к+</span>
-          <span class="contact-trust__label">гостей в год</span>
-        </div>
-        <div class="contact-trust__item">
-          <span class="contact-trust__num">80+</span>
-          <span class="contact-trust__label">городов охвата</span>
-        </div>
-        <div class="contact-trust__item">
-          <span class="contact-trust__num">3 дня</span>
-          <span class="contact-trust__label">на оценку объекта</span>
-        </div>
-      </div>
-
       <div class="form" id="contact-form-wrap">
         <form id="contact-form" novalidate>
           <div class="form-field">
@@ -2379,14 +2265,6 @@
 <!-- ════ STICKY MOBILE CTA ════ -->
 <div class="sticky-cta" id="sticky-cta">
   <a href="#contact" class="btn btn--primary btn--full">Оставить заявку</a>
-</div>
-
-<!-- ════ CUSTOM CURSOR ════ -->
-<div id="cursor" aria-hidden="true">
-  <div class="cursor__dot"></div>
-  <div class="cursor__ring">
-    <span class="cursor__label">СМОТРЕТЬ</span>
-  </div>
 </div>
 
 <!-- ════ FLOATING TELEGRAM CTA ════ -->
@@ -2545,16 +2423,24 @@
   }, { threshold: 0.1 });
   floatObserver.observe(heroSection);
 
-  // ── CARDS TRACK SCROLL ──
+  // ── CARDS TRACK SCROLL + PROGRESS BAR ──
   const track    = document.getElementById('cards-track');
   const dots     = document.querySelectorAll('.cards-progress__dot');
+  const progressFill = document.getElementById('portfolio-progress-fill');
 
   if (track) {
-    track.addEventListener('scroll', () => {
+    const updateTrack = () => {
       const cardWidth = track.firstElementChild ? track.firstElementChild.offsetWidth + 24 : 364;
       const idx = Math.round(track.scrollLeft / cardWidth);
       dots.forEach((d, i) => d.classList.toggle('active', i === idx));
-    }, { passive: true });
+      // progress bar: 0→100% across full scrollable range
+      const maxScroll = track.scrollWidth - track.clientWidth;
+      if (progressFill && maxScroll > 0) {
+        progressFill.style.width = (track.scrollLeft / maxScroll * 100) + '%';
+      }
+    };
+
+    track.addEventListener('scroll', updateTrack, { passive: true });
 
     dots.forEach(dot => {
       dot.addEventListener('click', () => {
@@ -2663,80 +2549,6 @@
       }
     });
 
-    // Portfolio horizontal scroll on desktop
-    const portfolioTrack = document.getElementById('cards-track');
-    const progressFill   = document.getElementById('portfolio-progress-fill');
-
-    if (portfolioTrack && window.innerWidth >= 1025) {
-      // Override CSS overflow so GSAP can translate the track
-      portfolioTrack.style.overflowX = 'visible';
-      const portfolioDots = document.querySelectorAll('.cards-progress__dot');
-
-      const updatePortfolioScroll = () => {
-        const scrollDist = portfolioTrack.scrollWidth - window.innerWidth + 48;
-        if (scrollDist <= 0) return;
-
-        gsap.to(portfolioTrack, {
-          x: -scrollDist,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '#portfolio',
-            pin: true,
-            anticipatePin: 1,
-            scrub: 1.2,
-            start: 'top top',
-            end: () => '+=' + scrollDist,
-            onUpdate: self => {
-              if (progressFill) progressFill.style.width = (self.progress * 100) + '%';
-              const idx = Math.round(self.progress * (portfolioDots.length - 1));
-              portfolioDots.forEach((d, i) => d.classList.toggle('active', i === idx));
-            }
-          }
-        });
-      };
-
-      // Wait for images to settle before measuring
-      if (document.readyState === 'complete') {
-        updatePortfolioScroll();
-      } else {
-        window.addEventListener('load', updatePortfolioScroll);
-      }
-    }
-  }
-
-  // ── CUSTOM CURSOR (desktop) ──
-  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-    const cursor    = document.getElementById('cursor');
-    const cursorDot = cursor && cursor.querySelector('.cursor__dot');
-    const cursorRing = cursor && cursor.querySelector('.cursor__ring');
-
-    if (cursor && cursorDot && cursorRing) {
-      cursor.style.display = 'block';
-      let mx = -200, my = -200, rx = -200, ry = -200;
-
-      document.addEventListener('mousemove', e => {
-        mx = e.clientX;
-        my = e.clientY;
-        cursorDot.style.transform = `translate(${mx}px,${my}px)`;
-      });
-
-      (function animRing() {
-        rx += (mx - rx) * 0.11;
-        ry += (my - ry) * 0.11;
-        cursorRing.style.transform = `translate(${rx}px,${ry}px)`;
-        requestAnimationFrame(animRing);
-      })();
-
-      document.querySelectorAll('.portfolio-card').forEach(card => {
-        card.addEventListener('mouseenter', () => cursor.classList.add('cursor--view'));
-        card.addEventListener('mouseleave', () => cursor.classList.remove('cursor--view'));
-      });
-
-      document.querySelectorAll('a, button').forEach(el => {
-        el.addEventListener('mouseenter', () => cursor.classList.add('cursor--hover'));
-        el.addEventListener('mouseleave', () => cursor.classList.remove('cursor--hover'));
-      });
-    }
   }
 
   // ── STICKY MOBILE CTA ──
