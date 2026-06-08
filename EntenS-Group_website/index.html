@@ -11,7 +11,7 @@
   <link rel="canonical" href="https://entens.ru/" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Inter:wght@400;500;600;700&family=Oswald:wght@700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <style>
     /* ── CSS CUSTOM PROPERTIES ── */
@@ -65,17 +65,17 @@
 
     h1 {
       font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(40px, 6vw, 96px);
-      font-weight: 300;
-      letter-spacing: -0.03em;
-      line-height: 1.05;
+      font-size: clamp(52px, 8.5vw, 130px);
+      font-weight: 400;
+      letter-spacing: -0.04em;
+      line-height: 1.0;
     }
     h2 {
       font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(30px, 4vw, 52px);
+      font-size: clamp(34px, 4.5vw, 60px);
       font-weight: 400;
       letter-spacing: -0.02em;
-      line-height: 1.15;
+      line-height: 1.1;
     }
     h3 {
       font-family: 'Cormorant Garamond', serif;
@@ -297,18 +297,18 @@
       position: absolute;
       border-radius: 50%;
       pointer-events: none;
-      filter: blur(80px);
+      filter: blur(60px);
     }
     .hero__orb--1 {
       top: -120px; left: -80px;
-      width: 500px; height: 500px;
-      background: radial-gradient(circle, rgba(76,175,80,0.18) 0%, transparent 70%);
+      width: 650px; height: 650px;
+      background: radial-gradient(circle, rgba(76,175,80,0.28) 0%, transparent 70%);
       animation: floatOrb1 28s ease-in-out infinite;
     }
     .hero__orb--2 {
       bottom: -100px; right: -60px;
-      width: 600px; height: 600px;
-      background: radial-gradient(circle, rgba(139,195,74,0.10) 0%, transparent 70%);
+      width: 750px; height: 750px;
+      background: radial-gradient(circle, rgba(139,195,74,0.18) 0%, transparent 70%);
       animation: floatOrb2 36s ease-in-out infinite;
     }
     @keyframes floatOrb1 {
@@ -332,17 +332,15 @@
     .hero__label .label { color: var(--green-lime); }
 
     .hero__h1 { color: #fff; }
-    .hero__h1 .word {
+    .hero__h1 .hero-word {
+      display: inline-block;
+      white-space: nowrap;
+    }
+    .hero__h1 .char {
       display: inline-block;
       opacity: 0;
-      transform: translateY(30px);
-      animation: wordIn 0.6s ease forwards;
-      margin-right: 0.25em;
     }
-
-    @keyframes wordIn {
-      to { opacity: 1; transform: translateY(0); }
-    }
+    .hero__h1.anim-done .char { opacity: 1; }
 
     .hero__sub {
       color: rgba(255,255,255,0.8);
@@ -390,7 +388,7 @@
       display: block;
       font-family: 'Cormorant Garamond', serif;
       font-size: 36px;
-      font-weight: 300;
+      font-weight: 400;
       color: var(--green-lime);
       line-height: 1.1;
     }
@@ -426,12 +424,26 @@
     .number-item__icon svg { width: 100%; height: 100%; }
     .number-item__val {
       font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(32px, 4vw, 48px);
-      font-weight: 300;
+      font-size: clamp(44px, 5.5vw, 76px);
+      font-weight: 400;
       color: var(--text-primary);
       line-height: 1;
     }
     .number-item__val span { color: var(--green-primary); }
+    .number-item__bar {
+      height: 2px;
+      background: rgba(76,175,80,0.15);
+      border-radius: 1px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .number-item__bar-fill {
+      height: 100%;
+      background: var(--green-primary);
+      width: 0;
+      transition: width 1.6s ease;
+    }
+    .number-item.counted .number-item__bar-fill { width: 100%; }
     .number-item__label {
       font-size: 13px;
       font-weight: 600;
@@ -1214,6 +1226,262 @@
     .float-cta svg { width: 20px; height: 20px; }
 
     /* ════════════════════════════
+       HERO UPGRADES
+    ════════════════════════════ */
+    /* Grain texture overlay on hero */
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-size: 180px;
+      opacity: 0.035;
+      pointer-events: none;
+      z-index: 1;
+    }
+    /* Scroll hint indicator */
+    .hero__scroll-hint {
+      position: absolute;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 3;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 1.8s forwards;
+      transition: opacity 0.4s ease;
+    }
+    .hero__scroll-hint.hidden { opacity: 0 !important; pointer-events: none; }
+    .hero__scroll-hint span {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+    }
+    .hero__scroll-line {
+      width: 1px;
+      height: 52px;
+      background: rgba(255,255,255,0.12);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero__scroll-line::after {
+      content: '';
+      position: absolute;
+      top: -100%;
+      left: 0;
+      width: 100%;
+      height: 60%;
+      background: linear-gradient(to bottom, transparent, rgba(76,175,80,0.9), transparent);
+      animation: scrollDrop 1.8s ease-in-out infinite;
+    }
+    @keyframes scrollDrop {
+      0%   { top: -60%; }
+      100% { top: 110%; }
+    }
+
+    /* ════════════════════════════
+       MARQUEE
+    ════════════════════════════ */
+    .marquee {
+      background: #111;
+      padding: 14px 0;
+      overflow: hidden;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .marquee__track {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+      width: max-content;
+      animation: marqueeScroll 36s linear infinite;
+      will-change: transform;
+    }
+    .marquee__item {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 0.08em;
+      color: rgba(255,255,255,0.55);
+      white-space: nowrap;
+    }
+    .marquee__sep {
+      color: var(--green-primary);
+      font-size: 22px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    @keyframes marqueeScroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    /* ════════════════════════════
+       PORTFOLIO PROGRESS BAR (desktop)
+    ════════════════════════════ */
+    .portfolio__progress-line {
+      height: 2px;
+      background: rgba(76,175,80,0.12);
+      margin-top: 28px;
+      border-radius: 1px;
+      overflow: hidden;
+      display: none;
+    }
+    @media (min-width: 1025px) { .portfolio__progress-line { display: block; } }
+    .portfolio__progress-line-fill {
+      height: 100%;
+      background: var(--green-primary);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    /* ════════════════════════════
+       CUSTOM CURSOR (desktop only)
+    ════════════════════════════ */
+    @media (hover: hover) and (pointer: fine) {
+      body, a, button, [data-tilt], .bento-tile, .portfolio-card { cursor: none !important; }
+      #cursor {
+        position: fixed;
+        top: 0; left: 0;
+        z-index: 9999;
+        pointer-events: none;
+        display: none;
+      }
+      .cursor__dot {
+        position: fixed;
+        width: 8px; height: 8px;
+        background: var(--green-primary);
+        border-radius: 50%;
+        top: -4px; left: -4px;
+        will-change: transform;
+        transition: opacity 0.2s ease;
+      }
+      .cursor__ring {
+        position: fixed;
+        width: 38px; height: 38px;
+        border: 1.5px solid rgba(76,175,80,0.55);
+        border-radius: 50%;
+        top: -19px; left: -19px;
+        will-change: transform;
+        transition: width 0.3s ease, height 0.3s ease,
+                    top 0.3s ease, left 0.3s ease,
+                    border-color 0.3s ease, background 0.3s ease;
+        display: flex; align-items: center; justify-content: center;
+      }
+      #cursor.cursor--hover .cursor__ring {
+        width: 52px; height: 52px;
+        top: -26px; left: -26px;
+        border-color: var(--green-primary);
+      }
+      #cursor.cursor--view .cursor__ring {
+        width: 86px; height: 86px;
+        top: -43px; left: -43px;
+        border-color: var(--green-primary);
+        background: rgba(76,175,80,0.08);
+      }
+      #cursor.cursor--view .cursor__dot { opacity: 0; }
+      .cursor__label {
+        font-family: 'Bebas Neue', sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        color: var(--green-primary);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        white-space: nowrap;
+        text-align: center;
+      }
+      #cursor.cursor--view .cursor__label { opacity: 1; }
+    }
+
+    /* ════════════════════════════
+       SECTION DECORATIVE NUMBERS
+    ════════════════════════════ */
+    .sec-num {
+      position: relative;
+    }
+    .sec-num::before {
+      content: attr(data-sec-num);
+      position: absolute;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(80px, 14vw, 180px);
+      color: rgba(76,175,80,0.05);
+      top: -20px;
+      right: 0;
+      line-height: 1;
+      pointer-events: none;
+      user-select: none;
+      z-index: 0;
+    }
+
+    /* ════════════════════════════
+       CONTACT TRUST BAR
+    ════════════════════════════ */
+    .contact-trust {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 32px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .contact-trust__item {
+      flex: 1;
+      text-align: center;
+      padding: 18px 12px;
+      border-right: 1px solid rgba(255,255,255,0.1);
+    }
+    .contact-trust__item:last-child { border-right: none; }
+    .contact-trust__num {
+      display: block;
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--green-lime);
+      line-height: 1.1;
+    }
+    .contact-trust__label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.45);
+      margin-top: 3px;
+      letter-spacing: 0.04em;
+    }
+    .contact-response-hint {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.45);
+      margin-top: 14px;
+    }
+    .contact-response-hint svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* ════════════════════════════
+       STICKY MOBILE CTA
+    ════════════════════════════ */
+    .sticky-cta {
+      display: none;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 80;
+      padding: 12px 16px;
+      background: rgba(17,17,17,0.95);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid rgba(76,175,80,0.25);
+      transform: translateY(100%);
+      transition: transform 0.4s ease;
+    }
+    .sticky-cta.visible { transform: translateY(0); }
+    @media (max-width: 768px) { .sticky-cta { display: block; } }
+
+    /* ════════════════════════════
        RESPONSIVE
     ════════════════════════════ */
     @media (max-width: 1024px) {
@@ -1251,8 +1519,8 @@
 
     @media (max-width: 480px) {
       .container { padding: 0 16px; }
-      h1 { font-size: clamp(32px, 8vw, 52px); }
-      h2 { font-size: clamp(26px, 6vw, 36px); }
+      h1 { font-size: clamp(38px, 10vw, 58px); }
+      h2 { font-size: clamp(28px, 7vw, 40px); }
       .hero__cta { flex-direction: column; }
       .hero__cta .btn { width: 100%; justify-content: center; }
       .numbers__grid { grid-template-columns: 1fr 1fr; }
@@ -1316,7 +1584,7 @@
     <div class="hero__content">
       <div class="hero__inner">
         <h1 class="hero__h1" id="hero-h1">
-          <!-- Words are injected by JS -->
+          <!-- Chars are injected by JS -->
         </h1>
 
         <p class="hero__sub">
@@ -1325,14 +1593,49 @@
         </p>
 
         <div class="hero__cta">
-          <a href="#contact" class="btn btn--primary">Предложить объект</a>
+          <a href="#contact" class="btn btn--primary" data-magnetic>Предложить объект</a>
           <a href="#for-investors" class="btn btn--ghost-dark">Для инвесторов →</a>
         </div>
       </div>
     </div>
 
   </div>
+
+  <div class="hero__scroll-hint" id="hero-scroll-hint">
+    <div class="hero__scroll-line"></div>
+    <span>Прокрутите</span>
+  </div>
 </section>
+
+<!-- ════ MARQUEE ════ -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee__track">
+    <span class="marquee__item">Развлекательные центры</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Парки</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Отели</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Рестораны</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">ИИ-продукты</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Инвестиции</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Развлекательные центры</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Парки</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Отели</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Рестораны</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">ИИ-продукты</span>
+    <span class="marquee__sep">·</span>
+    <span class="marquee__item">Инвестиции</span>
+    <span class="marquee__sep">·</span>
+  </div>
+</div>
 
 <!-- ════ NUMBERS ════ -->
 <section class="numbers" id="numbers">
@@ -1348,6 +1651,7 @@
         <div class="number-item__val"><span data-count="20" data-suffix="">0</span></div>
         <div class="number-item__label">лет на рынке</div>
         <div class="number-item__caption">Компания с 2007 года</div>
+        <div class="number-item__bar"><div class="number-item__bar-fill"></div></div>
       </div>
 
       <div class="number-item reveal reveal-delay-1">
@@ -1359,6 +1663,7 @@
         <div class="number-item__val"><span data-count="5" data-suffix="">0</span></div>
         <div class="number-item__label">направлений деятельности</div>
         <div class="number-item__caption">в компании</div>
+        <div class="number-item__bar"><div class="number-item__bar-fill"></div></div>
       </div>
 
       <div class="number-item reveal reveal-delay-3">
@@ -1370,6 +1675,7 @@
         <div class="number-item__val"><span data-count="80" data-suffix="+">0</span></div>
         <div class="number-item__label">городов присутствия</div>
         <div class="number-item__caption">где мы вели проекты</div>
+        <div class="number-item__bar"><div class="number-item__bar-fill"></div></div>
       </div>
 
       <div class="number-item reveal reveal-delay-4">
@@ -1381,6 +1687,7 @@
         <div class="number-item__val"><span data-count="3" data-suffix="">0</span></div>
         <div class="number-item__label">ИИ-продукта</div>
         <div class="number-item__caption">Цифровые инструменты управления</div>
+        <div class="number-item__bar"><div class="number-item__bar-fill"></div></div>
       </div>
 
     </div>
@@ -1427,7 +1734,7 @@
 <!-- ════ PORTFOLIO ════ -->
 <section class="section section--light" id="portfolio">
   <div class="container">
-    <div class="portfolio__label reveal">
+    <div class="portfolio__label reveal sec-num" data-sec-num="01">
       <span class="label">Направления</span>
       <h2 style="margin-top:12px;">Пять бизнес-направлений группы</h2>
       <p style="margin-top:12px;max-width:520px;">Покупаем и управляем объектами в индустрии развлечений, гостеприимства и питания. Разрабатываем ИИ-инструменты и реализуем инвестпроекты.</p>
@@ -1512,6 +1819,10 @@
         </div>
       </div>
 
+    </div>
+
+    <div class="portfolio__progress-line">
+      <div class="portfolio__progress-line-fill" id="portfolio-progress-fill"></div>
     </div>
 
     <div class="cards-progress" id="cards-progress">
@@ -1641,7 +1952,7 @@
 <!-- ════ BENTO — WHY US ════ -->
 <section class="bento" id="why">
   <div class="container">
-    <div class="reveal">
+    <div class="reveal sec-num" data-sec-num="02">
       <span class="label">Почему мы</span>
       <h2 style="margin-top:12px;">Конкретные преимущества<br>без клише</h2>
     </div>
@@ -1715,7 +2026,7 @@
 <!-- ════ CASES ════ -->
 <section class="section section--light" id="cases">
   <div class="container">
-    <div class="reveal">
+    <div class="reveal sec-num" data-sec-num="03">
       <span class="label">Кейсы</span>
       <h2 style="margin-top:12px;margin-bottom:8px;">История и результаты</h2>
       <p style="max-width:480px;">Ключевые вехи компании и реальные результаты управления объектами.</p>
@@ -1921,6 +2232,25 @@
       <h2>Есть объект или хотите инвестировать?<br>Обсудим за 30 минут</h2>
       <p>Оставьте заявку — ответим в течение 24 часов.<br>Без обязательств, без навязчивых звонков.</p>
 
+      <div class="contact-trust">
+        <div class="contact-trust__item">
+          <span class="contact-trust__num">20</span>
+          <span class="contact-trust__label">лет на рынке</span>
+        </div>
+        <div class="contact-trust__item">
+          <span class="contact-trust__num">500к+</span>
+          <span class="contact-trust__label">гостей в год</span>
+        </div>
+        <div class="contact-trust__item">
+          <span class="contact-trust__num">80+</span>
+          <span class="contact-trust__label">городов охвата</span>
+        </div>
+        <div class="contact-trust__item">
+          <span class="contact-trust__num">3 дня</span>
+          <span class="contact-trust__label">на оценку объекта</span>
+        </div>
+      </div>
+
       <div class="form" id="contact-form-wrap">
         <form id="contact-form" novalidate>
           <div class="form-field">
@@ -1951,7 +2281,11 @@
               Соглашаюсь с обработкой персональных данных в соответствии с <a href="#">152-ФЗ</a>
             </label>
           </div>
-          <button type="submit" class="btn btn--primary btn--full">Отправить заявку</button>
+          <button type="submit" class="btn btn--primary btn--full" data-magnetic>Отправить заявку</button>
+          <p class="contact-response-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            Ответим в течение 2 часов в рабочее время
+          </p>
         </form>
 
         <div class="form-success" id="form-success">
@@ -2042,24 +2376,56 @@
   </div>
 </footer>
 
+<!-- ════ STICKY MOBILE CTA ════ -->
+<div class="sticky-cta" id="sticky-cta">
+  <a href="#contact" class="btn btn--primary btn--full">Оставить заявку</a>
+</div>
+
+<!-- ════ CUSTOM CURSOR ════ -->
+<div id="cursor" aria-hidden="true">
+  <div class="cursor__dot"></div>
+  <div class="cursor__ring">
+    <span class="cursor__label">СМОТРЕТЬ</span>
+  </div>
+</div>
+
 <!-- ════ FLOATING TELEGRAM CTA ════ -->
 <a href="https://t.me/AlexanderBeniaminov" class="float-cta" id="float-cta" target="_blank" rel="noopener" aria-label="Написать в Telegram">
   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.68 7.92c-.12.56-.44.7-.9.44l-2.5-1.84-1.2 1.16c-.14.14-.26.26-.52.26l.18-2.56 4.68-4.22c.2-.18-.04-.28-.32-.1L7.46 14.3l-2.46-.77c-.54-.16-.54-.54.12-.8l9.64-3.72c.44-.16.84.1.88.79z"/></svg>
   <span>Написать в Telegram</span>
 </a>
 
+<!-- External libraries -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+
 <!-- ════ JAVASCRIPT ════ -->
 <script>
 (function() {
   'use strict';
 
-  // ── HERO H1 SPLIT ANIMATION ──
+  // ── GSAP SETUP ──
+  if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+    gsap.registerPlugin(ScrollTrigger);
+  }
+
+  // ── HERO H1 SPLIT ANIMATION (character-by-character) ──
   const h1 = document.getElementById('hero-h1');
-  const heroText = 'Управляем развлекательными и гостиничными активами — и ищем\u00A0следующий';
-  const words = heroText.split(' ');
-  h1.innerHTML = words.map((w, i) =>
-    `<span class="word" style="animation-delay:${i * 80}ms">${w}</span>`
+  const heroText = 'Управляем развлекательными и гостиничными активами — и ищем следующий';
+  const heroWords = heroText.split(' ');
+  h1.innerHTML = heroWords.map(w =>
+    `<span class="hero-word">${w.split('').map(c => `<span class="char">${c}</span>`).join('')}</span>`
   ).join(' ');
+
+  if (typeof gsap !== 'undefined') {
+    gsap.fromTo(h1.querySelectorAll('.char'),
+      { y: 55, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.65, ease: 'power3.out', stagger: 0.022, delay: 0.25,
+        onComplete: () => h1.classList.add('anim-done') }
+    );
+  } else {
+    h1.classList.add('anim-done');
+  }
 
   // ── HEADER SCROLL BEHAVIOR ──
   const header = document.getElementById('header');
@@ -2142,7 +2508,6 @@
     function tick(now) {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
-      // easeOut cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       const value = Math.round(eased * target);
       el.textContent = value + suffix;
@@ -2155,12 +2520,13 @@
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         entry.target.querySelectorAll('[data-count]').forEach(el => {
-          // avoid double-counting
           if (!el.dataset.counted) {
             el.dataset.counted = '1';
             countUp(el);
           }
         });
+        // add .counted class to parent number-items to trigger progress bar
+        entry.target.querySelectorAll('.number-item').forEach(item => item.classList.add('counted'));
         countObserver.unobserve(entry.target);
       }
     });
@@ -2274,10 +2640,149 @@
     });
   }
 
-  // ── BENTO TILE HOVER ──
-  document.querySelectorAll('.bento-tile').forEach(tile => {
-    // CSS handles hover, JS adds extra glow on dark tiles if needed
-  });
+  // ── SCROLL HINT HIDE ──
+  const scrollHint = document.getElementById('hero-scroll-hint');
+  if (scrollHint) {
+    window.addEventListener('scroll', () => {
+      scrollHint.classList.toggle('hidden', window.scrollY > 120);
+    }, { passive: true });
+  }
+
+  // ── GSAP: ScrollTrigger reveals + hero parallax + portfolio horizontal scroll ──
+  if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+
+    // Hero content parallax on scroll
+    gsap.to('.hero__content', {
+      y: 90,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '#hero',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: true,
+      }
+    });
+
+    // Portfolio horizontal scroll on desktop
+    const portfolioTrack = document.getElementById('cards-track');
+    const progressFill   = document.getElementById('portfolio-progress-fill');
+
+    if (portfolioTrack && window.innerWidth >= 1025) {
+      // Override CSS overflow so GSAP can translate the track
+      portfolioTrack.style.overflowX = 'visible';
+      const portfolioDots = document.querySelectorAll('.cards-progress__dot');
+
+      const updatePortfolioScroll = () => {
+        const scrollDist = portfolioTrack.scrollWidth - window.innerWidth + 48;
+        if (scrollDist <= 0) return;
+
+        gsap.to(portfolioTrack, {
+          x: -scrollDist,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: '#portfolio',
+            pin: true,
+            anticipatePin: 1,
+            scrub: 1.2,
+            start: 'top top',
+            end: () => '+=' + scrollDist,
+            onUpdate: self => {
+              if (progressFill) progressFill.style.width = (self.progress * 100) + '%';
+              const idx = Math.round(self.progress * (portfolioDots.length - 1));
+              portfolioDots.forEach((d, i) => d.classList.toggle('active', i === idx));
+            }
+          }
+        });
+      };
+
+      // Wait for images to settle before measuring
+      if (document.readyState === 'complete') {
+        updatePortfolioScroll();
+      } else {
+        window.addEventListener('load', updatePortfolioScroll);
+      }
+    }
+  }
+
+  // ── CUSTOM CURSOR (desktop) ──
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    const cursor    = document.getElementById('cursor');
+    const cursorDot = cursor && cursor.querySelector('.cursor__dot');
+    const cursorRing = cursor && cursor.querySelector('.cursor__ring');
+
+    if (cursor && cursorDot && cursorRing) {
+      cursor.style.display = 'block';
+      let mx = -200, my = -200, rx = -200, ry = -200;
+
+      document.addEventListener('mousemove', e => {
+        mx = e.clientX;
+        my = e.clientY;
+        cursorDot.style.transform = `translate(${mx}px,${my}px)`;
+      });
+
+      (function animRing() {
+        rx += (mx - rx) * 0.11;
+        ry += (my - ry) * 0.11;
+        cursorRing.style.transform = `translate(${rx}px,${ry}px)`;
+        requestAnimationFrame(animRing);
+      })();
+
+      document.querySelectorAll('.portfolio-card').forEach(card => {
+        card.addEventListener('mouseenter', () => cursor.classList.add('cursor--view'));
+        card.addEventListener('mouseleave', () => cursor.classList.remove('cursor--view'));
+      });
+
+      document.querySelectorAll('a, button').forEach(el => {
+        el.addEventListener('mouseenter', () => cursor.classList.add('cursor--hover'));
+        el.addEventListener('mouseleave', () => cursor.classList.remove('cursor--hover'));
+      });
+    }
+  }
+
+  // ── STICKY MOBILE CTA ──
+  const stickyCta   = document.getElementById('sticky-cta');
+  const contactSect = document.getElementById('contact');
+
+  if (stickyCta && contactSect) {
+    let stickyTimer = setTimeout(() => {
+      const stickyObs = new IntersectionObserver(entries => {
+        const contactVisible = entries[0].isIntersecting;
+        stickyCta.classList.toggle('visible', !contactVisible);
+      }, { threshold: 0.1 });
+      stickyObs.observe(contactSect);
+      stickyCta.classList.add('visible');
+    }, 5000);
+
+    // Hide immediately if user scrolls to contact before timer fires
+    const earlyObs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        clearTimeout(stickyTimer);
+        stickyCta.classList.remove('visible');
+      }
+    }, { threshold: 0.1 });
+    earlyObs.observe(contactSect);
+  }
+
+  // ── MAGNETIC BUTTONS (desktop) ──
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    document.querySelectorAll('[data-magnetic]').forEach(btn => {
+      btn.addEventListener('mousemove', e => {
+        const rect = btn.getBoundingClientRect();
+        const dx = e.clientX - (rect.left + rect.width  / 2);
+        const dy = e.clientY - (rect.top  + rect.height / 2);
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const radius = 70;
+        if (dist < radius) {
+          btn.style.transform = `translate(${dx * 0.32}px,${dy * 0.32}px)`;
+        }
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.transform = '';
+        btn.style.transition = 'transform 0.4s ease';
+        setTimeout(() => { btn.style.transition = ''; }, 400);
+      });
+    });
+  }
 
 })();
 </script>
