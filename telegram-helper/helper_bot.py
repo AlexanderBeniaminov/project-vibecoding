@@ -32,6 +32,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from groq import Groq
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
 
@@ -39,11 +40,14 @@ import config
 _MSK = ZoneInfo("Europe/Moscow")
 bot = Bot(token=config.TELEGRAM_TOKEN)
 dp = Dispatcher()
+scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
 ai_client = openai.AsyncOpenAI(
     base_url=config.ROUTERAI_BASE_URL,
     api_key=config.ROUTERAI_API_KEY,
 )
+
+_HOTELIER_DB = Path(config.DATA_DIR) / "hotelier.db"
 
 histories: dict[int, list] = {}
 _pending_reformat: dict[int, dict] = {}  # {user_id: {instruction, original}}
@@ -1360,9 +1364,289 @@ async def handle_message(message: Message):
 
 
 # ══════════════════════════════════════════════════════════════════
+# ДАЙДЖЕСТ HOTELIERРRO
+# ══════════════════════════════════════════════════════════════════
+
+def _hotelier_conn():
+    _HOTELIER_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(_HOTELIER_DB))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def _init_hotelier_db():
+    conn = _hotelier_conn()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS channel_posts (
+            id INTEGER PRIMARY KEY,
+            channel TEXT,
+            message_id INTEGER,
+            date TEXT,
+            text TEXT,
+            is_relevant INTEGER DEFAULT 0,
+            topics TEXT,
+            sent INTEGER DEFAULT 0,
+            UNIQUE(channel, message_id)
+        );
+        CREATE TABLE IF NOT EXISTS bot_flags (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+async def _fetch_channel_posts(since_date: datetime, limit: int = 500) -> list[dict]:
+    """Читает посты из @HotelierPRO через Telethon MTProto."""
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+    posts = []
+    client = TelegramClient(
+        StringSession(""),
+        getattr(config, "TELEGRAM_API_ID", 0),
+        getattr(config, "TELEGRAM_API_HASH", ""),
+    )
+    try:
+        await client.start(bot_token=config.TELEGRAM_TOKEN)
+        async for msg in client.iter_messages(
+            "HotelierPRO",
+            offset_date=since_date,
+            reverse=True,
+            limit=limit,
+        ):
+            text = (msg.text or msg.message or "").strip()
+            if not text and hasattr(msg, "caption"):
+                text = (msg.caption or "").strip()
+            if not text or len(text) < 30:
+                continue
+            posts.append({
+                "message_id": msg.id,
+                "date": msg.date.astimezone(_MSK).strftime("%Y-%m-%d %H:%M"),
+                "text": text[:2000],
+            })
+    except Exception as e:
+        logging.warning(f"[hotelier] fetch error: {e}")
+    finally:
+        await client.disconnect()
+    return posts
+
+async def _filter_posts_by_topics(posts: list[dict]) -> dict[int, list[str]]:
+    """Батчами по 20 постов определяет релевантность через DeepSeek."""
+    result: dict[int, list[str]] = {}
+    batch_size = 20
+    for i in range(0, len(posts), batch_size):
+        batch = posts[i:i + batch_size]
+        numbered = "\n\n".join(
+            f"[{p['message_id']}] {p['date']}\n{p['text'][:500]}"
+            for p in batch
+        )
+        prompt = (
+            "Проанализируй каждый пост из канала HotelierPRO (отельный бизнес России).\n"
+            "Для каждого поста ответь одной строкой в формате:\n"
+            "ID: [ТЕМА1] — если пост содержит статистику/цены/загрузку/тренды отелей России\n"
+            "ID: [ТЕМА2] — если пост про проекты/события/новости Пермского края\n"
+            "ID: [НЕТ] — если не подходит ни одна тема\n"
+            "ID может попасть в обе темы сразу: ID: [ТЕМА1][ТЕМА2]\n\n"
+            "Посты:\n" + numbered
+        )
+        try:
+            resp = await ai_client.chat.completions.create(
+                model=config.MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=800,
+                temperature=0.1,
+            )
+            text = resp.choices[0].message.content or ""
+            for line in text.splitlines():
+                m = re.match(r"(\d+):\s*(.+)", line.strip())
+                if not m:
+                    continue
+                msg_id = int(m.group(1))
+                tags_raw = m.group(2)
+                topics = []
+                if "[ТЕМА1]" in tags_raw:
+                    topics.append("статистика_отелей")
+                if "[ТЕМА2]" in tags_raw:
+                    topics.append("пермский_край")
+                if topics:
+                    result[msg_id] = topics
+        except Exception as e:
+            logging.warning(f"[hotelier] filter batch error: {e}")
+    return result
+
+async def hotelier_fetch_and_store():
+    """Сбор новых постов каждые 4 часа."""
+    try:
+        conn = _hotelier_conn()
+        row = conn.execute("SELECT MAX(date) as last FROM channel_posts").fetchone()
+        conn.close()
+        if row and row["last"]:
+            since = datetime.strptime(row["last"], "%Y-%m-%d %H:%M").replace(tzinfo=_MSK)
+        else:
+            since = datetime.now(_MSK) - timedelta(hours=4)
+        posts = await _fetch_channel_posts(since_date=since)
+        if not posts:
+            logging.info("[hotelier] no new posts")
+            return
+        relevance = await _filter_posts_by_topics(posts)
+        if not relevance:
+            logging.info(f"[hotelier] fetched {len(posts)} posts, 0 relevant")
+            return
+        conn = _hotelier_conn()
+        saved = 0
+        for p in posts:
+            if p["message_id"] in relevance:
+                topics = json.dumps(relevance[p["message_id"]], ensure_ascii=False)
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO channel_posts (channel, message_id, date, text, is_relevant, topics) "
+                        "VALUES (?, ?, ?, ?, 1, ?)",
+                        ("HotelierPRO", p["message_id"], p["date"], p["text"], topics),
+                    )
+                    saved += 1
+                except Exception:
+                    pass
+        conn.commit()
+        conn.close()
+        logging.info(f"[hotelier] fetched {len(posts)} posts, {saved} relevant saved")
+    except Exception as e:
+        logging.error(f"[hotelier] fetch_and_store error: {e}")
+
+async def hotelier_digest():
+    """Ежедневный дайджест в 10:00 МСК."""
+    try:
+        since = datetime.now(_MSK) - timedelta(hours=24)
+        conn = _hotelier_conn()
+        rows = conn.execute(
+            "SELECT id, date, text, topics FROM channel_posts "
+            "WHERE is_relevant=1 AND sent=0 AND date >= ? "
+            "ORDER BY date",
+            (since.strftime("%Y-%m-%d %H:%M"),),
+        ).fetchall()
+        if not rows:
+            conn.close()
+            logging.info("[hotelier] digest: no new relevant posts")
+            return
+        posts_text = "\n\n".join(
+            f"[{r['date']}] {r['text'][:600]}" for r in rows
+        )
+        prompt = (
+            "На основе этих постов из канала HotelierPRO составь краткий дайджест для владельца отеля.\n"
+            "Структура:\n"
+            "📊 *Статистика и рынок отелей России* — ключевые цифры, тренды, прогнозы\n"
+            "🏔 *Пермский край* — проекты, события, новости\n\n"
+            "Если по теме нет постов — раздел не выводи. Будь конкретен: цифры, факты.\n\n"
+            "Посты:\n" + posts_text
+        )
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1500,
+            temperature=0.3,
+        )
+        digest = (resp.choices[0].message.content or "").strip()
+        if not digest:
+            conn.close()
+            return
+        header = f"📰 *Дайджест HotelierPRO* — {datetime.now(_MSK).strftime('%d.%m.%Y')}\n\n"
+        message_text = header + digest
+        for uid in config.ALLOWED_USER_IDS:
+            try:
+                await bot.send_message(uid, message_text, parse_mode="Markdown")
+            except Exception as e:
+                logging.warning(f"[hotelier] send to {uid} failed: {e}")
+        ids = [r["id"] for r in rows]
+        conn.execute(f"UPDATE channel_posts SET sent=1 WHERE id IN ({','.join('?' * len(ids))})", ids)
+        conn.commit()
+        conn.close()
+        logging.info(f"[hotelier] digest sent, {len(rows)} posts covered")
+    except Exception as e:
+        logging.error(f"[hotelier] digest error: {e}")
+
+async def hotelier_initial_load():
+    """Однократная загрузка истории за 2 месяца при первом старте."""
+    await asyncio.sleep(5)  # ждём старта бота
+    try:
+        conn = _hotelier_conn()
+        flag = conn.execute("SELECT value FROM bot_flags WHERE key='hotelier_initial_done'").fetchone()
+        conn.close()
+        if flag:
+            return
+        logging.info("[hotelier] initial load started, fetching 2 months...")
+        since = datetime.now(_MSK) - timedelta(days=62)
+        posts = await _fetch_channel_posts(since_date=since, limit=2000)
+        logging.info(f"[hotelier] initial: got {len(posts)} total posts")
+        if not posts:
+            return
+        relevance = await _filter_posts_by_topics(posts)
+        logging.info(f"[hotelier] initial: {len(relevance)} relevant")
+        conn = _hotelier_conn()
+        relevant_posts = []
+        for p in posts:
+            if p["message_id"] in relevance:
+                topics = json.dumps(relevance[p["message_id"]], ensure_ascii=False)
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO channel_posts (channel, message_id, date, text, is_relevant, topics) "
+                        "VALUES (?, ?, ?, ?, 1, ?)",
+                        ("HotelierPRO", p["message_id"], p["date"], p["text"], topics),
+                    )
+                    relevant_posts.append(p)
+                except Exception:
+                    pass
+        conn.commit()
+        conn.close()
+        if not relevant_posts:
+            conn = _hotelier_conn()
+            conn.execute("INSERT OR REPLACE INTO bot_flags VALUES ('hotelier_initial_done', '1')")
+            conn.commit()
+            conn.close()
+            return
+        posts_text = "\n\n".join(
+            f"[{p['date']}] {p['text'][:600]}" for p in relevant_posts
+        )
+        prompt = (
+            "На основе постов из канала HotelierPRO за последние 2 месяца составь сводный дайджест.\n"
+            "Структура:\n"
+            "📊 *Статистика и рынок отелей России* — ключевые тренды, цифры сезона, загрузка, цены\n"
+            "🏔 *Пермский край* — проекты, события, новости\n\n"
+            "Если по теме ничего нет — раздел не выводи. Группируй по смыслу, а не по датам.\n\n"
+            "Посты:\n" + posts_text[:12000]
+        )
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2500,
+            temperature=0.3,
+        )
+        digest = (resp.choices[0].message.content or "").strip()
+        since_str = since.strftime("%d.%m")
+        now_str = datetime.now(_MSK).strftime("%d.%m.%Y")
+        header = f"📰 *HotelierPRO — сводка за {since_str}–{now_str}*\n({len(relevant_posts)} релевантных постов)\n\n"
+        message_text = header + digest
+        for uid in config.ALLOWED_USER_IDS:
+            try:
+                await bot.send_message(uid, message_text, parse_mode="Markdown")
+            except Exception as e:
+                logging.warning(f"[hotelier] initial send to {uid} failed: {e}")
+        conn = _hotelier_conn()
+        conn.execute("INSERT OR REPLACE INTO bot_flags VALUES ('hotelier_initial_done', '1')")
+        conn.execute("UPDATE channel_posts SET sent=1 WHERE is_relevant=1")
+        conn.commit()
+        conn.close()
+        logging.info("[hotelier] initial load complete")
+    except Exception as e:
+        logging.error(f"[hotelier] initial_load error: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════
 # ЗАПУСК
 # ══════════════════════════════════════════════════════════════════
 async def main():
+    _init_hotelier_db()
+    scheduler.add_job(hotelier_fetch_and_store, "interval", hours=4, id="hotelier_fetch", replace_existing=True)
+    scheduler.add_job(hotelier_digest, "cron", hour=10, minute=0, id="hotelier_digest", replace_existing=True)
+    scheduler.start()
+    asyncio.create_task(hotelier_initial_load())
     print(f"[{datetime.now(_MSK).strftime('%H:%M:%S')} МСК] Помощник запущен.")
     await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
 

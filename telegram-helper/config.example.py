@@ -20,3 +20,8 @@ GUBAHA_FINANCE_SHEET_ID  = "1Ohm7tst750zDzSeIewJFj_cPC6vl0-5J0UiuNfZvY_k"
 
 # Mail.ru
 MAILRU_CFG = "/home/parser/config/mailru.json"
+
+# Telegram MTProto API (для чтения публичных каналов через Telethon)
+# Получить на https://my.telegram.org/apps
+TELEGRAM_API_ID = 0
+TELEGRAM_API_HASH = ""
