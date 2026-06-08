@@ -448,6 +448,7 @@
       opacity: 0;
       animation: fadeUp 0.6s ease 0.9s forwards;
     }
+    .hero__cta--mobile { display: none; }
     @keyframes fadeUp {
       to { opacity: 1; transform: translateY(0); }
       from { opacity: 0; transform: translateY(16px); }
@@ -1638,6 +1639,8 @@
         padding-top: calc(var(--header-h) + 48px);
         padding-bottom: 52px;
       }
+      .hero__cta--desktop { display: none; }
+      .hero__cta--mobile  { display: flex; margin-top: 0; }
     }
 
     @media (max-width: 768px) {
@@ -1735,14 +1738,14 @@
           Покупаем, берём в аренду РЦ, парки, отели.<br>
           Для собственников и инвесторов.
         </p>
-        <div class="hero__cta">
+        <div class="hero__cta hero__cta--desktop">
           <a href="#contact" class="btn btn--primary" data-magnetic>Предложить объект</a>
           <a href="#for-investors" class="btn btn--ghost-dark">Для инвесторов →</a>
         </div>
       </div>
     </div>
 
-    <!-- Right: deal formats panel -->
+    <!-- Right: deal formats panel (on mobile: second block) -->
     <div class="hero__deals">
       <div class="hero__deals-header">Форматы сотрудничества</div>
 
@@ -1772,6 +1775,12 @@
         <span class="hero__deal-label">Инвестиции</span>
         <span class="hero__deal-text">Совместное владение. Мы управляем.</span>
       </a>
+    </div>
+
+    <!-- Mobile-only CTA: third block after deals panel -->
+    <div class="hero__cta hero__cta--mobile">
+      <a href="#contact" class="btn btn--primary" data-magnetic>Предложить объект</a>
+      <a href="#for-investors" class="btn btn--ghost-dark">Для инвесторов →</a>
     </div>
 
   </div>
