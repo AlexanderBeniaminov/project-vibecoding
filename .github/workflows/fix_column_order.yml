@@ -1,0 +1,32 @@
+name: Монблан — переместить колонку 01.06
+
+on:
+  workflow_dispatch:
+
+jobs:
+  move-col:
+    name: Переместить 2026-06-01 между 31.05 и 02.06
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: restaurant-monblan
+
+    env:
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Настройка Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: restaurant-monblan/requirements.txt
+
+      - name: Установка зависимостей
+        run: pip install -r requirements.txt
+
+      - name: Переместить колонку
+        run: python3 scripts/fix_column_order.py

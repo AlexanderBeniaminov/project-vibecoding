@@ -149,26 +149,6 @@ def daily_collect(report_date: date):
         _alert_dev(bot, f"Ошибка подключения к Sheets за {report_date}: {e}")
         sys.exit(1)
 
-    # 2b. Защита: не перезаписывать ненулевые данные нулями
-    if revenue == 0:
-        try:
-            existing     = read_daily_row(service, SHEETS_ID, str(report_date))
-            existing_rev = _num(existing, "Выручка итого")
-            if existing_rev > 0:
-                logger.warning(
-                    f"Sheets уже содержит {int(existing_rev)} руб за {report_date}, "
-                    f"iiko вернул 0 — запись отменена"
-                )
-                _alert_dev(
-                    bot,
-                    f"⚠️ {report_date}: iiko=0 руб, Sheets={int(existing_rev)} руб — "
-                    f"запись отменена. Проверьте iiko вручную."
-                )
-                logger.info(f"=== ФИНИШ collect за {report_date} (защита от обнуления) ===")
-                return
-        except Exception as e:
-            logger.warning(f"Проверка существующих данных в Sheets не удалась: {e}")
-
     # 3. Записать в Google Sheets
     logger.info("Шаг 3: запись в Google Sheets...")
     try:
