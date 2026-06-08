@@ -1642,9 +1642,12 @@
 
     @media (max-width: 768px) {
       .section { padding: 64px 0; }
+      .logo__img { height: 50px; }
       .about__grid { grid-template-columns: 1fr; gap: 40px; }
       .owners__grid { grid-template-columns: 1fr; gap: 40px; }
       .investors__grid { grid-template-columns: 1fr; gap: 40px; }
+      .investors__grid > .reveal-right { order: 2; }
+      .investors__grid > .reveal-left  { order: 1; }
       .geo__grid { grid-template-columns: 1fr; gap: 40px; }
       .cases__grid { grid-template-columns: 1fr; }
       .team__grid { grid-template-columns: repeat(2, 1fr); }
