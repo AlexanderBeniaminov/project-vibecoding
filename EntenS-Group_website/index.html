@@ -1387,6 +1387,38 @@
     @media (max-width: 768px) { .sticky-cta { display: block; } }
 
     /* ════════════════════════════
+       PORTFOLIO ARROWS
+    ════════════════════════════ */
+    .portfolio__nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 32px;
+    }
+    .cards-arrow {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-active);
+      background: #fff;
+      color: var(--green-deep);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition),
+                  transform var(--transition), box-shadow var(--transition);
+      flex-shrink: 0;
+    }
+    .cards-arrow:hover {
+      background: var(--green-primary);
+      color: #fff;
+      transform: scale(1.08);
+      box-shadow: 0 6px 20px rgba(76,175,80,0.35);
+    }
+    .cards-arrow svg { width: 20px; height: 20px; }
+
+    /* ════════════════════════════
        PARTNERS LOGOS
     ════════════════════════════ */
     .partners { padding: 96px 0 80px; background: #fff; }
@@ -1831,12 +1863,26 @@
       <div class="portfolio__progress-line-fill" id="portfolio-progress-fill"></div>
     </div>
 
-    <div class="cards-progress" id="cards-progress">
-      <div class="cards-progress__dot active" data-index="0"></div>
-      <div class="cards-progress__dot" data-index="1"></div>
-      <div class="cards-progress__dot" data-index="2"></div>
-      <div class="cards-progress__dot" data-index="3"></div>
-      <div class="cards-progress__dot" data-index="4"></div>
+    <div class="portfolio__nav">
+      <button class="cards-arrow" id="cards-prev" aria-label="Назад">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+
+      <div class="cards-progress" id="cards-progress">
+        <div class="cards-progress__dot active" data-index="0"></div>
+        <div class="cards-progress__dot" data-index="1"></div>
+        <div class="cards-progress__dot" data-index="2"></div>
+        <div class="cards-progress__dot" data-index="3"></div>
+        <div class="cards-progress__dot" data-index="4"></div>
+      </div>
+
+      <button class="cards-arrow" id="cards-next" aria-label="Вперёд">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
     </div>
   </div>
 </section>
@@ -1958,7 +2004,7 @@
 <!-- ════ BENTO — WHY US ════ -->
 <section class="bento" id="why">
   <div class="container">
-    <div class="reveal sec-num" data-sec-num="02">
+    <div class="reveal">
       <span class="label">Почему мы</span>
       <h2 style="margin-top:12px;">Конкретные преимущества<br>без клише</h2>
     </div>
@@ -2494,32 +2540,66 @@
   }, { threshold: 0.1 });
   floatObserver.observe(heroSection);
 
-  // ── CARDS TRACK SCROLL + PROGRESS BAR ──
-  const track    = document.getElementById('cards-track');
-  const dots     = document.querySelectorAll('.cards-progress__dot');
+  // ── PORTFOLIO CAROUSEL (arrows + infinite loop) ──
+  const track       = document.getElementById('cards-track');
+  const dots        = document.querySelectorAll('.cards-progress__dot');
   const progressFill = document.getElementById('portfolio-progress-fill');
+  const btnPrev     = document.getElementById('cards-prev');
+  const btnNext     = document.getElementById('cards-next');
 
   if (track) {
-    const updateTrack = () => {
-      const cardWidth = track.firstElementChild ? track.firstElementChild.offsetWidth + 24 : 364;
-      const idx = Math.round(track.scrollLeft / cardWidth);
-      dots.forEach((d, i) => d.classList.toggle('active', i === idx));
-      // progress bar: 0→100% across full scrollable range
+    const totalCards = track.children.length;   // 5 cards
+    let currentIdx = 0;
+
+    const cardGap = () => {
+      const style = window.getComputedStyle(track);
+      return parseInt(style.gap) || 24;
+    };
+    const cardWidth = () =>
+      track.firstElementChild ? track.firstElementChild.offsetWidth + cardGap() : 364;
+
+    const goTo = (idx, animate = true) => {
+      // wrap-around
+      if (idx < 0) idx = totalCards - 1;
+      if (idx >= totalCards) idx = 0;
+      currentIdx = idx;
+
+      track.scrollTo({ left: currentIdx * cardWidth(), behavior: animate ? 'smooth' : 'auto' });
+
+      dots.forEach((d, i) => d.classList.toggle('active', i === currentIdx));
+
       const maxScroll = track.scrollWidth - track.clientWidth;
       if (progressFill && maxScroll > 0) {
-        progressFill.style.width = (track.scrollLeft / maxScroll * 100) + '%';
+        progressFill.style.width = (currentIdx / (totalCards - 1) * 100) + '%';
       }
     };
 
-    track.addEventListener('scroll', updateTrack, { passive: true });
+    // Arrow buttons
+    if (btnPrev) btnPrev.addEventListener('click', () => goTo(currentIdx - 1));
+    if (btnNext) btnNext.addEventListener('click', () => goTo(currentIdx + 1));
 
+    // Dot clicks
     dots.forEach(dot => {
-      dot.addEventListener('click', () => {
-        const idx = parseInt(dot.dataset.index, 10);
-        const cardWidth = track.firstElementChild ? track.firstElementChild.offsetWidth + 24 : 364;
-        track.scrollTo({ left: idx * cardWidth, behavior: 'smooth' });
-      });
+      dot.addEventListener('click', () => goTo(parseInt(dot.dataset.index, 10)));
     });
+
+    // Keep index in sync when user swipes manually
+    let scrollTimer;
+    track.addEventListener('scroll', () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        const cw = cardWidth();
+        const idx = Math.round(track.scrollLeft / cw);
+        if (idx !== currentIdx) {
+          currentIdx = Math.max(0, Math.min(idx, totalCards - 1));
+          dots.forEach((d, i) => d.classList.toggle('active', i === currentIdx));
+          const maxScroll = track.scrollWidth - track.clientWidth;
+          if (progressFill && maxScroll > 0) {
+            progressFill.style.width = (currentIdx / (totalCards - 1) * 100) + '%';
+          }
+        }
+      }, 80);
+    }, { passive: true });
   }
 
   // ── 3D CARD TILT ──
