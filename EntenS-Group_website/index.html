@@ -1387,6 +1387,107 @@
     @media (max-width: 768px) { .sticky-cta { display: block; } }
 
     /* ════════════════════════════
+       PARTNERS LOGOS
+    ════════════════════════════ */
+    .partners { padding: 96px 0 80px; background: #fff; }
+    .partners__header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .partners__header h2 { margin-top: 12px; }
+    .partners__header p {
+      margin-top: 12px;
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 440px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Rows wrapper with fade masks on edges */
+    .partners__rows {
+      position: relative;
+    }
+    .partners__rows::before,
+    .partners__rows::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 120px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .partners__rows::before {
+      left: 0;
+      background: linear-gradient(to right, #fff 0%, transparent 100%);
+    }
+    .partners__rows::after {
+      right: 0;
+      background: linear-gradient(to left, #fff 0%, transparent 100%);
+    }
+
+    .partners__row {
+      overflow: hidden;
+      padding: 10px 0;
+    }
+    .partners__row + .partners__row { margin-top: 16px; }
+
+    .partners__track {
+      display: flex;
+      gap: 20px;
+      width: max-content;
+      will-change: transform;
+    }
+    .partners__track--left  { animation: partnersLeft  50s linear infinite; }
+    .partners__track--right { animation: partnersRight 50s linear infinite; }
+
+    @keyframes partnersLeft {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    @keyframes partnersRight {
+      from { transform: translateX(-50%); }
+      to   { transform: translateX(0); }
+    }
+
+    .partner-logo {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 32px;
+      background: #fff;
+      border: 1.5px solid rgba(46,125,50,0.12);
+      border-radius: 14px;
+      height: 92px;
+      width: 200px;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+    }
+    .partner-logo:hover {
+      border-color: rgba(76,175,80,0.45);
+      box-shadow: 0 8px 28px rgba(76,175,80,0.1);
+      transform: translateY(-4px);
+    }
+    .partner-logo img {
+      max-height: 52px;
+      max-width: 140px;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      filter: grayscale(100%) opacity(0.65);
+      transition: filter 0.35s ease;
+      display: block;
+      margin: 0 auto;
+    }
+    .partner-logo:hover img {
+      filter: grayscale(0%) opacity(1);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .partners__track { animation: none; }
+    }
+
+    /* ════════════════════════════
        RESPONSIVE
     ════════════════════════════ */
     @media (max-width: 1024px) {
@@ -2044,99 +2145,56 @@
   </div>
 </section>
 
-<!-- ════ GEOGRAPHY ════ -->
-<section class="section section--light" id="geography">
+<!-- ════ PARTNERS ════ -->
+<section class="partners" id="geography">
   <div class="container">
-    <div class="geo__grid">
-      <div class="geo__map reveal-left">
-        <!-- Simplified SVG map of Russia -->
-        <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" fill="none">
-          <!-- Russia simplified outline -->
-          <path d="M120,180 L180,150 L240,130 L300,110 L380,100 L440,90 L520,85 L600,95 L660,110 L700,130 L720,160 L710,200 L680,230 L650,260 L620,290 L590,310 L560,330 L530,310 L500,290 L460,280 L420,290 L400,310 L380,290 L360,270 L340,280 L320,300 L300,320 L280,340 L260,360 L240,370 L220,360 L200,340 L180,320 L160,300 L140,280 L120,260 L110,230 L115,200 Z"
-            fill="#e8f5e9" stroke="#4CAF50" stroke-width="1.5"/>
-          <!-- Eastern Russia -->
-          <path d="M600,95 L650,80 L700,70 L750,80 L780,100 L790,130 L780,160 L760,190 L740,210 L720,200 L700,180 L680,200 L660,190 L650,160 L640,130 L620,110 Z"
-            fill="#e8f5e9" stroke="#4CAF50" stroke-width="1.5"/>
-          <!-- Siberia extension -->
-          <path d="M660,110 L700,130 L720,160 L720,200 L700,180 L680,200 L660,190 L650,160 L640,130 L620,110 Z"
-            fill="#c8e6c9" stroke="#4CAF50" stroke-width="1"/>
+    <div class="partners__header reveal">
+      <span class="label">Партнёры</span>
+      <h2>Нас уже выбрали</h2>
+      <p>Объекты и компании, с которыми мы работали и сотрудничали</p>
+    </div>
+  </div>
 
-          <!-- Current presence dots -->
-          <!-- Perm / Gubakha -->
-          <circle cx="490" cy="220" r="10" fill="#4CAF50" stroke="white" stroke-width="2"/>
-          <text x="505" y="225" font-family="Inter" font-size="11" fill="#2E7D32" font-weight="600">Пермский край</text>
-
-          <!-- Moscow region (Zavidovo) -->
-          <circle cx="370" cy="215" r="8" fill="#4CAF50" stroke="white" stroke-width="2"/>
-          <text x="385" y="220" font-family="Inter" font-size="11" fill="#2E7D32" font-weight="600">Завидово</text>
-
-          <!-- Sochi (Roza Khutor) -->
-          <circle cx="340" cy="310" r="8" fill="#4CAF50" stroke="white" stroke-width="2"/>
-          <text x="355" y="315" font-family="Inter" font-size="11" fill="#2E7D32" font-weight="600">Роза Хутор</text>
-
-          <!-- Priority regions (outline circles) -->
-          <circle cx="530" cy="270" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
-          <circle cx="450" cy="180" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
-          <circle cx="280" cy="230" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
-          <circle cx="580" cy="200" r="8" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
-
-          <!-- Legend -->
-          <circle cx="40" cy="410" r="7" fill="#4CAF50"/>
-          <text x="55" y="415" font-family="Inter" font-size="11" fill="#555">Текущие объекты</text>
-          <circle cx="40" cy="435" r="7" fill="transparent" stroke="#8BC34A" stroke-width="2" stroke-dasharray="4,2"/>
-          <text x="55" y="440" font-family="Inter" font-size="11" fill="#555">Приоритетные регионы</text>
-        </svg>
+  <div class="partners__rows">
+    <!-- Ряд 1 — движется влево -->
+    <div class="partners__row">
+      <div class="partners__track partners__track--left">
+        <div class="partner-logo"><img src="logos/logo_gazprom.png"          alt="Газпром"></div>
+        <div class="partner-logo"><img src="logos/logo_detsky_mir.png"       alt="Детский мир"></div>
+        <div class="partner-logo"><img src="logos/logo_dochki.jpg"           alt="ДочкиСыночки"></div>
+        <div class="partner-logo"><img src="logos/logo_dreamwood.jpg"        alt="Дримуд"></div>
+        <div class="partner-logo"><img src="logos/logo_zavidovo.png"         alt="Завидово Резорт"></div>
+        <div class="partner-logo"><img src="logos/logo_zamania.png"          alt="Замания"></div>
+        <div class="partner-logo"><img src="logos/logo_krasnaya_polyana.png" alt="Красная Поляна"></div>
+        <!-- дубль для бесшовного цикла -->
+        <div class="partner-logo"><img src="logos/logo_gazprom.png"          alt="Газпром"></div>
+        <div class="partner-logo"><img src="logos/logo_detsky_mir.png"       alt="Детский мир"></div>
+        <div class="partner-logo"><img src="logos/logo_dochki.jpg"           alt="ДочкиСыночки"></div>
+        <div class="partner-logo"><img src="logos/logo_dreamwood.jpg"        alt="Дримуд"></div>
+        <div class="partner-logo"><img src="logos/logo_zavidovo.png"         alt="Завидово Резорт"></div>
+        <div class="partner-logo"><img src="logos/logo_zamania.png"          alt="Замания"></div>
+        <div class="partner-logo"><img src="logos/logo_krasnaya_polyana.png" alt="Красная Поляна"></div>
       </div>
+    </div>
 
-      <div class="reveal-right reveal-delay-1">
-        <span class="label">География</span>
-        <h2 style="margin-top:12px;margin-bottom:28px;">Где мы работаем и куда планируем расти</h2>
-
-        <div class="geo__presence">
-          <h4>Текущее присутствие</h4>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--filled"></span>
-            Пермский край (Губаха) — горнолыжный курорт
-          </div>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--filled"></span>
-            Роза Хутор — гостиничный и ресторанный бизнес
-          </div>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--filled"></span>
-            Завидово — отельный проект
-          </div>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--filled"></span>
-            Другие регионы — развлекательные центры
-          </div>
-        </div>
-
-        <div class="geo__target">
-          <h4>Приоритетные регионы для роста</h4>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--outline"></span>
-            Поволжье и Урал — города от 100 000 чел.
-          </div>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--outline"></span>
-            Сибирь — горнолыжные и туристические кластеры
-          </div>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--outline"></span>
-            Центральная Россия — РЦ и семейные парки
-          </div>
-          <div class="geo__item">
-            <span class="geo__dot geo__dot--outline"></span>
-            Юг России — курорты и развлечения
-          </div>
-        </div>
-
-        <p style="margin:20px 0 24px;font-size:14px;">
-          Если ваш объект находится в одном из этих регионов — свяжитесь с нами первыми.
-        </p>
-
-        <a href="#contact" class="btn btn--primary">Предложить объект в моём регионе →</a>
+    <!-- Ряд 2 — движется вправо -->
+    <div class="partners__row">
+      <div class="partners__track partners__track--right">
+        <div class="partner-logo"><img src="logos/logo_manjerok.png"    alt="Манжерок"></div>
+        <div class="partner-logo"><img src="logos/logo_pandapark.png"   alt="ПандаПарк"></div>
+        <div class="partner-logo"><img src="logos/logo_roza_khutor.jpg" alt="Роза Хутор"></div>
+        <div class="partner-logo"><img src="logos/logo_smf.png"         alt="СМФ"></div>
+        <div class="partner-logo"><img src="logos/logo_sochi_park.png"  alt="Сочи Парк"></div>
+        <div class="partner-logo"><img src="logos/logo_fixipark.png"    alt="ФиксиПарк"></div>
+        <div class="partner-logo"><img src="logos/logo_chekharda.jpg"   alt="Чехарда"></div>
+        <!-- дубль для бесшовного цикла -->
+        <div class="partner-logo"><img src="logos/logo_manjerok.png"    alt="Манжерок"></div>
+        <div class="partner-logo"><img src="logos/logo_pandapark.png"   alt="ПандаПарк"></div>
+        <div class="partner-logo"><img src="logos/logo_roza_khutor.jpg" alt="Роза Хутор"></div>
+        <div class="partner-logo"><img src="logos/logo_smf.png"         alt="СМФ"></div>
+        <div class="partner-logo"><img src="logos/logo_sochi_park.png"  alt="Сочи Парк"></div>
+        <div class="partner-logo"><img src="logos/logo_fixipark.png"    alt="ФиксиПарк"></div>
+        <div class="partner-logo"><img src="logos/logo_chekharda.jpg"   alt="Чехарда"></div>
       </div>
     </div>
   </div>
