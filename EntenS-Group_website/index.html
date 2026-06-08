@@ -1389,33 +1389,33 @@
     /* ════════════════════════════
        PORTFOLIO ARROWS
     ════════════════════════════ */
-    .portfolio__nav {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      margin-top: 32px;
+    .portfolio__track-wrapper {
+      position: relative;
     }
     .cards-arrow {
-      width: 52px; height: 52px;
+      position: absolute;
+      top: 100px; /* центр картинки (200px / 2) */
+      transform: translateY(-50%);
+      z-index: 10;
+      width: 48px; height: 48px;
       border-radius: 50%;
-      border: 1.5px solid var(--border-active);
-      background: #fff;
+      background: rgba(255,255,255,0.95);
+      border: 1.5px solid rgba(76,175,80,0.4);
       color: var(--green-deep);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: background var(--transition), color var(--transition),
-                  transform var(--transition), box-shadow var(--transition);
-      flex-shrink: 0;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.13);
+      transition: background var(--transition), color var(--transition), box-shadow var(--transition);
     }
     .cards-arrow:hover {
       background: var(--green-primary);
       color: #fff;
-      transform: scale(1.08);
-      box-shadow: 0 6px 20px rgba(76,175,80,0.35);
+      box-shadow: 0 6px 20px rgba(76,175,80,0.4);
     }
+    .cards-arrow--prev { left: 8px; }
+    .cards-arrow--next { right: 8px; }
     .cards-arrow svg { width: 20px; height: 20px; }
 
     /* ════════════════════════════
@@ -1778,6 +1778,11 @@
       <p style="margin-top:12px;max-width:520px;">Покупаем и управляем объектами в индустрии развлечений, гостеприимства и питания. Разрабатываем ИИ-инструменты и реализуем инвестпроекты.</p>
     </div>
 
+    <div class="portfolio__track-wrapper">
+    <button class="cards-arrow cards-arrow--prev" id="cards-prev" aria-label="Назад">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+
     <div class="cards-track" id="cards-track">
 
       <!-- Карточка 1 -->
@@ -1859,30 +1864,21 @@
 
     </div>
 
+    <button class="cards-arrow cards-arrow--next" id="cards-next" aria-label="Вперёд">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    </div><!-- /portfolio__track-wrapper -->
+
     <div class="portfolio__progress-line">
       <div class="portfolio__progress-line-fill" id="portfolio-progress-fill"></div>
     </div>
 
-    <div class="portfolio__nav">
-      <button class="cards-arrow" id="cards-prev" aria-label="Назад">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-      </button>
-
-      <div class="cards-progress" id="cards-progress">
-        <div class="cards-progress__dot active" data-index="0"></div>
-        <div class="cards-progress__dot" data-index="1"></div>
-        <div class="cards-progress__dot" data-index="2"></div>
-        <div class="cards-progress__dot" data-index="3"></div>
-        <div class="cards-progress__dot" data-index="4"></div>
-      </div>
-
-      <button class="cards-arrow" id="cards-next" aria-label="Вперёд">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
-      </button>
+    <div class="cards-progress" id="cards-progress">
+      <div class="cards-progress__dot active" data-index="0"></div>
+      <div class="cards-progress__dot" data-index="1"></div>
+      <div class="cards-progress__dot" data-index="2"></div>
+      <div class="cards-progress__dot" data-index="3"></div>
+      <div class="cards-progress__dot" data-index="4"></div>
     </div>
   </div>
 </section>
@@ -2540,67 +2536,115 @@
   }, { threshold: 0.1 });
   floatObserver.observe(heroSection);
 
-  // ── PORTFOLIO CAROUSEL (arrows + infinite loop) ──
-  const track       = document.getElementById('cards-track');
-  const dots        = document.querySelectorAll('.cards-progress__dot');
-  const progressFill = document.getElementById('portfolio-progress-fill');
-  const btnPrev     = document.getElementById('cards-prev');
-  const btnNext     = document.getElementById('cards-next');
+  // ── PORTFOLIO CAROUSEL — seamless infinite loop ──
+  (function() {
+    const track        = document.getElementById('cards-track');
+    const dots         = document.querySelectorAll('.cards-progress__dot');
+    const progressFill = document.getElementById('portfolio-progress-fill');
+    const btnPrev      = document.getElementById('cards-prev');
+    const btnNext      = document.getElementById('cards-next');
+    if (!track) return;
 
-  if (track) {
-    const totalCards = track.children.length;   // 5 cards
-    let currentIdx = 0;
+    // 1. Clone all cards: prepend + append for seamless wrap
+    const origCards = Array.from(track.children);
+    const N = origCards.length; // 5
 
-    const cardGap = () => {
-      const style = window.getComputedStyle(track);
-      return parseInt(style.gap) || 24;
-    };
-    const cardWidth = () =>
-      track.firstElementChild ? track.firstElementChild.offsetWidth + cardGap() : 364;
+    // prepend clones of originals (going left past card0 shows cardN-1)
+    origCards.forEach(c => {
+      const cl = c.cloneNode(true);
+      cl.setAttribute('aria-hidden', 'true');
+      cl.classList.remove('reveal','reveal-delay-1','reveal-delay-2','reveal-delay-3','reveal-delay-4');
+      track.insertBefore(cl, track.firstChild);
+    });
+    // append clones (going right past cardN-1 shows card0)
+    origCards.forEach(c => {
+      const cl = c.cloneNode(true);
+      cl.setAttribute('aria-hidden', 'true');
+      cl.classList.remove('reveal','reveal-delay-1','reveal-delay-2','reveal-delay-3','reveal-delay-4');
+      track.appendChild(cl);
+    });
+    // total cards now = 3 × N (15), real cards at indices N … 2N-1
 
-    const goTo = (idx, animate = true) => {
-      // wrap-around
-      if (idx < 0) idx = totalCards - 1;
-      if (idx >= totalCards) idx = 0;
+    // 2. Helpers
+    const gap = () => parseInt(window.getComputedStyle(track).gap) || 24;
+    const cw  = () => (track.children[0] ? track.children[0].offsetWidth + gap() : 364);
+
+    let currentIdx = N; // start at first real card
+    let isJumping  = false;
+    let jumpTimer;
+
+    // Jump to position without animation
+    const jumpTo = (idx) => {
+      isJumping = true;
+      track.style.scrollSnapType = 'none';
+      track.scrollLeft = idx * cw();
       currentIdx = idx;
-
-      track.scrollTo({ left: currentIdx * cardWidth(), behavior: animate ? 'smooth' : 'auto' });
-
-      dots.forEach((d, i) => d.classList.toggle('active', i === currentIdx));
-
-      const maxScroll = track.scrollWidth - track.clientWidth;
-      if (progressFill && maxScroll > 0) {
-        progressFill.style.width = (currentIdx / (totalCards - 1) * 100) + '%';
-      }
+      // short timeout to re-enable snap after layout settles
+      setTimeout(() => {
+        track.style.scrollSnapType = '';
+        isJumping = false;
+      }, 40);
     };
 
-    // Arrow buttons
+    // Initialise position
+    window.addEventListener('load', () => jumpTo(N), { once: true });
+    jumpTo(N);
+
+    // Update dots & progress bar using real index
+    const updateUI = (realIdx) => {
+      dots.forEach((d, i) => d.classList.toggle('active', i === realIdx));
+      if (progressFill) progressFill.style.width = (realIdx / (N - 1) * 100) + '%';
+    };
+
+    // Navigate to virtual index with smooth scroll
+    const goTo = (idx) => {
+      if (isJumping) return;
+      currentIdx = idx;
+      track.scrollTo({ left: currentIdx * cw(), behavior: 'smooth' });
+      const realIdx = ((currentIdx - N) % N + N) % N;
+      updateUI(realIdx);
+
+      // After smooth scroll finishes, jump back to real zone if in clones
+      clearTimeout(jumpTimer);
+      jumpTimer = setTimeout(() => {
+        if (currentIdx < N) {
+          jumpTo(currentIdx + N);
+        } else if (currentIdx >= 2 * N) {
+          jumpTo(currentIdx - N);
+        }
+      }, 460);
+    };
+
+    // Arrow clicks
     if (btnPrev) btnPrev.addEventListener('click', () => goTo(currentIdx - 1));
     if (btnNext) btnNext.addEventListener('click', () => goTo(currentIdx + 1));
 
-    // Dot clicks
+    // Dot clicks → navigate to that real card
     dots.forEach(dot => {
-      dot.addEventListener('click', () => goTo(parseInt(dot.dataset.index, 10)));
+      dot.addEventListener('click', () => {
+        const target = N + parseInt(dot.dataset.index, 10);
+        goTo(target);
+      });
     });
 
-    // Keep index in sync when user swipes manually
-    let scrollTimer;
+    // Sync on manual swipe
+    let swipeTimer;
     track.addEventListener('scroll', () => {
-      clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(() => {
-        const cw = cardWidth();
-        const idx = Math.round(track.scrollLeft / cw);
-        if (idx !== currentIdx) {
-          currentIdx = Math.max(0, Math.min(idx, totalCards - 1));
-          dots.forEach((d, i) => d.classList.toggle('active', i === currentIdx));
-          const maxScroll = track.scrollWidth - track.clientWidth;
-          if (progressFill && maxScroll > 0) {
-            progressFill.style.width = (currentIdx / (totalCards - 1) * 100) + '%';
-          }
+      if (isJumping) return;
+      clearTimeout(swipeTimer);
+      swipeTimer = setTimeout(() => {
+        const snapped = Math.round(track.scrollLeft / cw());
+        if (snapped !== currentIdx) {
+          currentIdx = snapped;
+          const realIdx = ((currentIdx - N) % N + N) % N;
+          updateUI(realIdx);
+          // jump if in clone zone after swipe
+          if (currentIdx < N) jumpTo(currentIdx + N);
+          else if (currentIdx >= 2 * N) jumpTo(currentIdx - N);
         }
-      }, 80);
+      }, 120);
     }, { passive: true });
-  }
+  })();
 
   // ── 3D CARD TILT ──
   document.querySelectorAll('[data-tilt]').forEach(card => {
