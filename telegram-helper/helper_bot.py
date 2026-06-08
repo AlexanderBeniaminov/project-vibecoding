@@ -1466,48 +1466,50 @@ async def _fetch_channel_posts(since_date: datetime, limit: int = 500) -> list[d
             result.append(p)
     return result
 
+_KW_TEMA2 = re.compile(r"Пермск|Пермь|Губах|Прикамь|пермяк", re.IGNORECASE)
+
 async def _filter_posts_by_topics(posts: list[dict]) -> dict[int, list[str]]:
-    """Батчами по 20 постов определяет релевантность через DeepSeek."""
+    """Классификация через Claude — батчами по 15 постов."""
     result: dict[int, list[str]] = {}
-    batch_size = 20
+    batch_size = 15
     for i in range(0, len(posts), batch_size):
         batch = posts[i:i + batch_size]
         numbered = "\n\n".join(
-            f"POST_ID={p['message_id']}\nДата: {p['date']}\n{p['text'][:500]}"
+            f"ID={p['message_id']}\n{p['text'][:600]}"
             for p in batch
         )
         prompt = (
-            "Проанализируй посты из Telegram-канала HotelierPRO (отельный бизнес России).\n"
-            "Для каждого поста выведи ОДНУ строку строго в формате:\n"
-            "POST_ID=<число> ТЕМА1 — если содержит статистику/цены/загрузку/тренды отелей России\n"
-            "POST_ID=<число> ТЕМА2 — если содержит новости/проекты Пермского края\n"
-            "POST_ID=<число> ТЕМА1 ТЕМА2 — если подходит обе темы\n"
-            "POST_ID=<число> НЕТ — если не подходит ни одна тема\n\n"
-            "Посты:\n" + numbered
+            "Ты классификатор постов из канала HotelierPRO.\n"
+            "Для каждого поста выведи строго ОДНУ строку:\n"
+            "ID=<число> T1  — пост содержит рыночную статистику: данные о загрузке/ценах/турпотоке/спросе/сезоне "
+            "по отрасли или региону России (цифры, прогнозы, тренды рынка в целом).\n"
+            "ID=<число> T2  — пост упоминает Пермский край (проекты, события, новости).\n"
+            "ID=<число> T1 T2  — подходят обе.\n"
+            "ID=<число> NO  — реклама продукта/сервиса, HR/вакансии, мотивация, новости конкретного отеля без рыночных цифр.\n\n"
+            "Выводи ТОЛЬКО строки классификации, без пояснений.\n\n"
+            + numbered
         )
         try:
             resp = await ai_client.chat.completions.create(
-                model=config.MODEL,
+                model=getattr(config, "VISION_MODEL", config.MODEL),
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=2000,
-                temperature=0.1,
+                max_tokens=400,
+                temperature=0.0,
             )
-            msg = resp.choices[0].message
-            raw = (msg.content or "").strip()
-            if not raw and hasattr(msg, "reasoning"):
-                raw = (msg.reasoning or "").strip()
-            text = raw
-            logging.warning(f"[hotelier] filter LLM response (batch {i//batch_size}): {text[-400:]}")
+            text = (resp.choices[0].message.content or "").strip()
+            logging.warning(f"[hotelier] filter batch {i//batch_size}: {text}")
             for line in text.splitlines():
-                m = re.match(r"POST_ID=(\d+)\s+(.+)", line.strip())
+                m = re.match(r"ID=(\d+)\s+(.+)", line.strip())
                 if not m:
                     continue
                 msg_id = int(m.group(1))
-                tags_raw = m.group(2).upper()
+                tags = m.group(2).upper()
                 topics = []
-                if "ТЕМА1" in tags_raw or "TEMA1" in tags_raw:
+                if "T1" in tags:
                     topics.append("статистика_отелей")
-                if "ТЕМА2" in tags_raw or "TEMA2" in tags_raw:
+                if "T2" in tags or _KW_TEMA2.search(
+                    next((p["text"] for p in batch if p["message_id"] == msg_id), "")
+                ):
                     topics.append("пермский_край")
                 if topics:
                     result[msg_id] = topics
