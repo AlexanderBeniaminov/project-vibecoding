@@ -11,16 +11,50 @@ _pending_acks: dict[int, set[int]] = {}
 
 REPEAT_MINUTES = 15
 
+# Поддерживаемые типы повторений
+RECURRENCE_LABELS = {
+    "daily":   "каждый день",
+    "weekly":  "каждую неделю",
+    "monthly": "каждый месяц",
+    "yearly":  "каждый год",
+}
+
 def init_scheduler(bot, scheduler: AsyncIOScheduler):
     global _scheduler, _bot
     _bot = bot
     _scheduler = scheduler
     _restore_pending()
 
+def _next_dt(dt: datetime, recurrence: str) -> datetime:
+    """Вычисляет следующее время срабатывания для повторяющегося напоминания."""
+    if recurrence == "daily":
+        return dt + timedelta(days=1)
+    if recurrence == "weekly":
+        return dt + timedelta(weeks=1)
+    if recurrence == "monthly":
+        # Следующий месяц, тот же день. Если дня нет — последний день месяца.
+        month = dt.month + 1
+        year = dt.year
+        if month > 12:
+            month = 1
+            year += 1
+        import calendar
+        max_day = calendar.monthrange(year, month)[1]
+        day = min(dt.day, max_day)
+        return dt.replace(year=year, month=month, day=day)
+    if recurrence == "yearly":
+        import calendar
+        year = dt.year + 1
+        max_day = calendar.monthrange(year, dt.month)[1]
+        day = min(dt.day, max_day)
+        return dt.replace(year=year, day=day)
+    return dt
+
 def _restore_pending():
     conn = get_conn()
     rows = conn.execute(
-        "SELECT id, user_id, text, remind_at FROM reminders WHERE done=0 AND remind_at > datetime('now')"
+        "SELECT id, user_id, text, remind_at, recurrence FROM reminders "
+        "WHERE done=0 AND remind_at > datetime('now')"
     ).fetchall()
     conn.close()
     for r in rows:
@@ -28,7 +62,7 @@ def _restore_pending():
         _scheduler.add_job(
             _fire, "date",
             run_date=dt,
-            args=[r["user_id"], r["text"], r["id"]],
+            args=[r["user_id"], r["text"], r["id"], r["recurrence"]],
             id=f"rem_{r['id']}",
             replace_existing=True,
         )
@@ -54,11 +88,12 @@ def _snooze_keyboard(reminder_id: int):
         [InlineKeyboardButton(text="◀ Назад", callback_data=f"snz_{reminder_id}_back")],
     ])
 
-async def _fire(user_id: int, text: str, reminder_id: int):
+async def _fire(user_id: int, text: str, reminder_id: int, recurrence: str | None = None):
     if _bot:
+        label = f" ({RECURRENCE_LABELS[recurrence]})" if recurrence else ""
         await _bot.send_message(
             user_id,
-            f"⏰ *Напоминание:* {text}",
+            f"⏰ *Напоминание{label}:* {text}",
             parse_mode="Markdown",
             reply_markup=_main_keyboard(reminder_id),
         )
@@ -68,7 +103,7 @@ async def _fire(user_id: int, text: str, reminder_id: int):
         _scheduler.add_job(
             _fire, "date",
             run_date=next_run,
-            args=[user_id, text, reminder_id],
+            args=[user_id, text, reminder_id, recurrence],
             id=f"repeat_rem_{reminder_id}",
             replace_existing=True,
         )
@@ -81,10 +116,35 @@ def ack_reminder_by_id(reminder_id: int, user_id: int):
                 _scheduler.remove_job(jid)
             except Exception:
                 pass
+
     conn = get_conn()
-    conn.execute("UPDATE reminders SET done=1 WHERE id=?", (reminder_id,))
-    conn.commit()
-    conn.close()
+    row = conn.execute(
+        "SELECT text, remind_at, recurrence FROM reminders WHERE id=?", (reminder_id,)
+    ).fetchone()
+
+    if row and row["recurrence"]:
+        # Повторяющееся — планируем следующее срабатывание
+        recurrence = row["recurrence"]
+        old_dt = datetime.fromisoformat(row["remind_at"])
+        next_dt = _next_dt(old_dt, recurrence)
+        conn.execute(
+            "UPDATE reminders SET remind_at=?, done=0 WHERE id=?",
+            (next_dt.isoformat(), reminder_id),
+        )
+        conn.commit()
+        conn.close()
+        if _scheduler:
+            _scheduler.add_job(
+                _fire, "date",
+                run_date=next_dt,
+                args=[user_id, row["text"], reminder_id, recurrence],
+                id=f"rem_{reminder_id}",
+                replace_existing=True,
+            )
+    else:
+        conn.execute("UPDATE reminders SET done=1 WHERE id=?", (reminder_id,))
+        conn.commit()
+        conn.close()
 
 def snooze_reminder(reminder_id: int, user_id: int, minutes: int) -> str:
     """Откладывает напоминание на N минут. minutes=0 означает завтра в 09:00."""
@@ -97,7 +157,6 @@ def snooze_reminder(reminder_id: int, user_id: int, minutes: int) -> str:
                 pass
     now_msk = datetime.now(_MSK).replace(tzinfo=None)
     if minutes == 0:
-        # Завтра в 09:00
         tomorrow = now_msk.date() + timedelta(days=1)
         new_dt = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 9, 0)
         label = "завтра в 09:00"
@@ -112,22 +171,25 @@ def snooze_reminder(reminder_id: int, user_id: int, minutes: int) -> str:
         else:
             label = f"через {minutes} мин"
     conn = get_conn()
-    text_row = conn.execute("SELECT text FROM reminders WHERE id=?", (reminder_id,)).fetchone()
+    row = conn.execute(
+        "SELECT text, recurrence FROM reminders WHERE id=?", (reminder_id,)
+    ).fetchone()
     conn.execute("UPDATE reminders SET remind_at=?, done=0 WHERE id=?", (new_dt.isoformat(), reminder_id))
     conn.commit()
     conn.close()
-    text = text_row["text"] if text_row else "напоминание"
+    text = row["text"] if row else "напоминание"
+    recurrence = row["recurrence"] if row else None
     if _scheduler:
         _scheduler.add_job(
             _fire, "date",
             run_date=new_dt,
-            args=[user_id, text, reminder_id],
+            args=[user_id, text, reminder_id, recurrence],
             id=f"rem_{reminder_id}",
             replace_existing=True,
         )
     return label
 
-def add_reminder(text: str, remind_at: str, user_id: int) -> str:
+def add_reminder(text: str, remind_at: str, user_id: int, recurrence: str | None = None) -> str:
     try:
         dt = datetime.fromisoformat(remind_at)
     except ValueError:
@@ -135,10 +197,12 @@ def add_reminder(text: str, remind_at: str, user_id: int) -> str:
     now_msk = datetime.now(_MSK).replace(tzinfo=None)
     if dt <= now_msk:
         return "Это время уже прошло. Укажи время в будущем."
+    if recurrence and recurrence not in RECURRENCE_LABELS:
+        return f"Неверный тип повторения: {recurrence}. Допустимые: daily, weekly, monthly, yearly."
     conn = get_conn()
     cur = conn.execute(
-        "INSERT INTO reminders (user_id, text, remind_at) VALUES (?, ?, ?)",
-        (user_id, text, dt.isoformat()),
+        "INSERT INTO reminders (user_id, text, remind_at, recurrence) VALUES (?, ?, ?, ?)",
+        (user_id, text, dt.isoformat(), recurrence),
     )
     rem_id = cur.lastrowid
     conn.commit()
@@ -147,22 +211,26 @@ def add_reminder(text: str, remind_at: str, user_id: int) -> str:
         _scheduler.add_job(
             _fire, "date",
             run_date=dt,
-            args=[user_id, text, rem_id],
+            args=[user_id, text, rem_id, recurrence],
             id=f"rem_{rem_id}",
             replace_existing=True,
         )
-    return f"Напоминание #{rem_id} установлено на {dt.strftime('%d.%m.%Y %H:%M')}."
+    rec_label = f", повтор: {RECURRENCE_LABELS[recurrence]}" if recurrence else ""
+    return f"Напоминание #{rem_id} установлено на {dt.strftime('%d.%m.%Y %H:%M')}{rec_label}."
 
 def list_reminders(user_id: int) -> str:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT id, text, remind_at FROM reminders WHERE user_id=? AND done=0 ORDER BY remind_at",
+        "SELECT id, text, remind_at, recurrence FROM reminders WHERE user_id=? AND done=0 ORDER BY remind_at",
         (user_id,),
     ).fetchall()
     conn.close()
     if not rows:
         return "Активных напоминаний нет."
-    lines = [f"#{r['id']} — {r['remind_at'][:16]} — {r['text']}" for r in rows]
+    lines = []
+    for r in rows:
+        rec = f" 🔁 {RECURRENCE_LABELS[r['recurrence']]}" if r["recurrence"] else ""
+        lines.append(f"#{r['id']} — {r['remind_at'][:16]} — {r['text']}{rec}")
     return "\n".join(lines)
 
 def get_reminders_for_date(user_id: int, date_iso: str) -> list[dict]:

@@ -259,12 +259,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "add_reminder",
-            "description": "Установить напоминание. Время в ISO8601: 2026-05-20T18:00:00",
+            "description": "Установить напоминание. Время в ISO8601: 2026-05-20T18:00:00. Для повторяющихся — передай recurrence.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "text": {"type": "string"},
-                    "remind_at": {"type": "string", "description": "ISO8601, например 2026-05-21T09:00:00"},
+                    "remind_at": {"type": "string", "description": "ISO8601, например 2026-05-21T09:00:00 — первое срабатывание"},
+                    "recurrence": {
+                        "type": "string",
+                        "enum": ["daily", "weekly", "monthly", "yearly"],
+                        "description": "Периодичность: daily=каждый день, weekly=каждую неделю, monthly=каждый месяц, yearly=каждый год. Не передавай если разовое напоминание.",
+                    },
                 },
                 "required": ["text", "remind_at"],
             },
@@ -632,7 +637,7 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                     f"Вызови add_reminder снова с remind_at в формате YYYY-MM-DDTHH:MM:SS, "
                     f"например remind_at='{tomorrow}T09:30:00' для завтра в 9:30."
                 )
-            return rem_tool.add_reminder(args["text"], remind_at, user_id)
+            return rem_tool.add_reminder(args["text"], remind_at, user_id, args.get("recurrence"))
         elif name == "list_reminders":
             return rem_tool.list_reminders(user_id)
         elif name == "cancel_reminder":
@@ -788,10 +793,11 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             "   «Создаю напоминание: [текст] — [дата] в [время]. Верно?» — жди ✅.\n\n"
             "② Нет времени, есть дело/идея/мысль → add_note (НЕ напоминание).\n"
             "   Если голосовое — эхо: «Записываю заметку: [текст]. Верно?»\n\n"
-            "③ «каждый [день недели]» / «каждый месяц [число]» →\n"
-            "   create_calendar_event (повторяющееся событие) + add_reminder.\n"
-            "   Уточни время если не указано. Уточни дату окончания или спроси «бессрочно?».\n"
-            "   Если задача не выполнена — переносится автоматически до нажатия ✅.\n\n"
+            "③ «каждый день» / «каждую неделю» / «каждый месяц [число]» / «каждый год» →\n"
+            "   add_reminder с параметром recurrence (daily/weekly/monthly/yearly).\n"
+            "   remind_at = дата+время первого срабатывания в ISO8601.\n"
+            "   После ✅ напоминание автоматически планируется на следующий период — Google Calendar НЕ нужен.\n"
+            "   Уточни время если не указано. Не спрашивай «бессрочно?» — повторяется до ручной отмены.\n\n"
             "④ «что сегодня» / «что завтра» / «покажи [день]» / «расписание» → get_schedule(YYYY-MM-DD).\n\n"
             "⑤ «добавь встречу» / «добавь событие» → уточни дату и время → create_calendar_event.\n\n"
             "⑥ «запомни что...» / важный факт о человеке, проекте, договорённости → remember_fact.\n"

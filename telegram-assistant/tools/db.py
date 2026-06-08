@@ -23,6 +23,7 @@ def init_db():
             text TEXT NOT NULL,
             remind_at TEXT NOT NULL,
             done INTEGER DEFAULT 0,
+            recurrence TEXT DEFAULT NULL,
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
         CREATE TABLE IF NOT EXISTS contacts (
@@ -35,5 +36,9 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
     """)
+    # Миграция: добавить recurrence если колонки ещё нет
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(reminders)").fetchall()]
+    if "recurrence" not in cols:
+        conn.execute("ALTER TABLE reminders ADD COLUMN recurrence TEXT DEFAULT NULL")
     conn.commit()
     conn.close()
