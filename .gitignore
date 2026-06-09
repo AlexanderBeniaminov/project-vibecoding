@@ -3,6 +3,8 @@
 .env
 *.json
 !package.json
+!google-apps-script/.clasp.json
+!google-apps-script/appsscript.json
 hotel-restaurant-processes/scripts/credentials.json
 # Конфиги парсера объявлений (не секреты)
 !obyavlenia/keywords_config.json
