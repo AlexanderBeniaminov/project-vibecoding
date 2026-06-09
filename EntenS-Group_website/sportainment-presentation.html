@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Sportainment — EntenS Group</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#111;width:100vw;height:100vh;overflow:hidden;font-family:'Inter',sans-serif}
+#outer{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#111}
+#pres{width:1920px;height:1080px;position:relative;overflow:hidden;transform-origin:center center;flex-shrink:0}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;display:none;flex-direction:column;padding:64px 96px;font-family:'Inter',sans-serif}
+.slide.active{display:flex}
+.dark{background:#0d0d0d;color:#fff}
+.light{background:#f5f8f5;color:#111}
+.green{color:#4CAF50}
+.bg-green{background:#4CAF50}
+.slide-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px;flex-shrink:0}
+.logo-img{height:48px;width:auto}
+.slide-num{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.1em;opacity:0.4}
+.sec-label{font-size:15px;font-weight:700;letter-spacing:0.25em;text-transform:uppercase;color:#4CAF50;margin-bottom:12px}
+.divider{width:72px;height:4px;background:#4CAF50;margin:20px 0}
+.hl-xl{font-family:'Bebas Neue',sans-serif;font-size:130px;line-height:0.88;letter-spacing:0.02em}
+.hl-lg{font-family:'Bebas Neue',sans-serif;font-size:100px;line-height:0.9;letter-spacing:0.02em}
+.hl-md{font-family:'Bebas Neue',sans-serif;font-size:72px;line-height:0.95;letter-spacing:0.02em}
+.hl-sm{font-family:'Bebas Neue',sans-serif;font-size:56px;line-height:1;letter-spacing:0.02em}
+.body-lg{font-size:28px;font-weight:400;line-height:1.55}
+.body-md{font-size:22px;font-weight:400;line-height:1.6}
+.body-sm{font-size:17px;font-weight:400;line-height:1.65}
+.fw600{font-weight:600}
+.fw700{font-weight:700}
+.op70{opacity:0.7}
+.op50{opacity:0.5}
+.card-d{background:#181818;border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:36px 40px}
+.card-l{background:#fff;border:1px solid rgba(0,0,0,0.07);border-radius:16px;padding:36px 40px;box-shadow:0 2px 20px rgba(0,0,0,0.06)}
+.card-gb{border-left:4px solid #4CAF50}
+.kpi-val{font-family:'Bebas Neue',sans-serif;font-size:68px;color:#4CAF50;line-height:1}
+.kpi-lbl{font-size:16px;font-weight:500;opacity:0.65;line-height:1.3;margin-top:6px}
+
+/* NAV */
+#nav{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:16px;z-index:999;background:rgba(0,0,0,0.65);backdrop-filter:blur(12px);padding:10px 20px;border-radius:50px;border:1px solid rgba(255,255,255,0.1)}
+#prev,#next{width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+#prev:hover,#next:hover{background:#4CAF50;border-color:#4CAF50}
+#dots{display:flex;gap:7px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.25);cursor:pointer;transition:all .2s}
+.dot.on{background:#4CAF50;width:22px;border-radius:4px}
+#sinfo{color:rgba(255,255,255,0.6);font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:.08em}
+
+/* PRINT */
+@media print{
+  body{overflow:visible;background:#fff}
+  #outer{position:static;overflow:visible;display:block;background:#fff}
+  #pres{transform:none!important;width:297mm!important;height:auto!important;overflow:visible}
+  .slide{display:flex!important;width:297mm!important;height:210mm!important;padding:12mm 18mm;page-break-after:always;break-after:page;position:relative!important;overflow:hidden}
+  #nav{display:none}
+  .dark{background:#0d0d0d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .light{background:#f5f8f5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .card-d{background:#181818!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .bg-green{background:#4CAF50!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div id="outer"><div id="pres">
+
+<!-- ══════════════ СЛАЙД 1 — HOOK ══════════════ -->
+<div class="slide dark active" id="s1">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">01 / 16</span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+    <div class="sec-label">Спортэймент · Коммерческое предложение · 2026</div>
+    <div class="divider"></div>
+    <div class="hl-xl" style="font-size:138px">4 000 М²<br><span class="green">ЯКОРНОГО ТРАФИКА</span> —<br>ИЛИ ПУСТУЮЩИЙ ЭТАЖ?</div>
+    <div style="margin-top:44px;max-width:1000px">
+      <p class="body-lg op70">Первый в России центр активных игр для взрослых и семей.<br>EntenS Group разрабатывает мастер-план и управляет объектом.</p>
+    </div>
+  </div>
+  <div style="display:flex;gap:48px;align-items:center;border-top:1px solid rgba(255,255,255,0.1);padding-top:28px;margin-top:auto">
+    <div style="font-size:20px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase">48 активностей</div>
+    <div style="width:1px;height:28px;background:rgba(255,255,255,0.2)"></div>
+    <div style="font-size:20px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase">4 000 м²</div>
+    <div style="width:1px;height:28px;background:rgba(255,255,255,0.2)"></div>
+    <div style="font-size:20px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase">IRR 40%</div>
+    <div style="width:1px;height:28px;background:rgba(255,255,255,0.2)"></div>
+    <div style="font-size:20px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase">Окупаемость 3,2 года</div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 2 — ПРОБЛЕМА ТРЦ ══════════════ -->
+<div class="slide light" id="s2">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">02 / 16</span>
+  </div>
+  <div class="sec-label">Контекст</div>
+  <div class="hl-lg" style="font-size:92px;color:#111;margin-bottom:44px">FASHION RETAIL УМИРАЕТ.<br>РАЗВЛЕЧЕНИЯ — <span class="green">НОВЫЙ ЯКОРЬ</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;flex:1">
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:80px;color:#4CAF50;line-height:1">40 мин</div>
+      <div style="font-size:18px;color:#555;margin-top:8px;line-height:1.5">Среднее время в ТЦ<br><strong>без</strong> развлекательного якоря</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:80px;color:#4CAF50;line-height:1">+47%</div>
+      <div style="font-size:18px;color:#555;margin-top:8px;line-height:1.5">Рост времени пребывания<br>в ТЦ <strong>с FEC-якорем</strong></div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:80px;color:#4CAF50;line-height:1">×3</div>
+      <div style="font-size:18px;color:#555;margin-top:8px;line-height:1.5">Рост выручки кафе и F&B<br>при наличии активного FEC</div>
+    </div>
+  </div>
+  <div style="margin-top:28px;background:#0d0d0d;border-radius:16px;padding:28px 40px;display:flex;align-items:center;gap:48px">
+    <div style="font-size:19px;color:rgba(255,255,255,0.8);line-height:1.6">
+      <strong style="color:#4CAF50">Вывод:</strong> Посетитель с развлечениями тратит в 2–3 раза больше, чем тот, кто пришёл только в магазин. Развлекательный якорь — это не расходы, а инвестиция в трафик всего ТЦ.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 3 — РЫНОК ══════════════ -->
+<div class="slide dark" id="s3">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">03 / 16</span>
+  </div>
+  <div class="sec-label">Рынок</div>
+  <div class="hl-lg" style="margin-bottom:44px">227 МЛРД РУБ. <span class="green">РОСТ +20%</span> В ГОД</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;flex:1">
+    <div class="card-d">
+      <div class="kpi-val">227<br><span style="font-size:40px">млрд</span></div>
+      <div class="kpi-lbl">Рынок развлечений РФ (2024)</div>
+    </div>
+    <div class="card-d">
+      <div class="kpi-val">+20%</div>
+      <div class="kpi-lbl">Ежегодный рост рынка</div>
+    </div>
+    <div class="card-d">
+      <div class="kpi-val">4,5<br><span style="font-size:40px">трлн</span></div>
+      <div class="kpi-lbl">Прогноз рынка к 2030 г.</div>
+    </div>
+    <div class="card-d">
+      <div class="kpi-val">70+<br><span style="font-size:40px">млн</span></div>
+      <div class="kpi-lbl">Потенциальных посетителей в городах РФ</div>
+    </div>
+  </div>
+  <div style="margin-top:28px;padding:24px 0;border-top:1px solid rgba(255,255,255,0.1);display:flex;gap:48px">
+    <div style="font-size:19px;opacity:0.75;max-width:600px;line-height:1.6">С 2022 года россияне тратят внутри страны. Выездной туризм упал — внутренний досуг растёт. Рынок под ветром.</div>
+    <div style="font-size:19px;opacity:0.75;max-width:600px;line-height:1.6">Дефицит формата: сегмент 16–45 лет практически не охвачен. Есть детские центры и фитнес — пустота посередине.</div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 4 — РЕШЕНИЕ ══════════════ -->
+<div class="slide light" id="s4">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">04 / 16</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:64px;flex:1">
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <div class="sec-label">Решение</div>
+      <div class="hl-xl" style="font-size:120px;color:#111">СПОРТ<span class="green">ЭЙ</span>МЕНТ</div>
+      <div class="divider"></div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#555;letter-spacing:0.05em;line-height:1.3">НЕ ДЕТСКАЯ ПЛОЩАДКА.<br>НЕ СПОРТЗАЛ.<br>НОВЫЙ ФОРМАТ.</div>
+      <div style="margin-top:32px">
+        <p class="body-md" style="color:#333;line-height:1.7">Активный парк игр нового поколения. Единый билет — всё включено. Пришёл и сразу играешь — без подготовки, без инвентаря, без записи.</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
+      <div class="card-l" style="display:flex;align-items:flex-start;gap:20px">
+        <div style="width:48px;height:48px;background:#4CAF50;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px">🎮</div>
+        <div><div style="font-size:20px;font-weight:700">48 активностей в 6 блоках</div><div style="font-size:16px;color:#777;margin-top:4px">Каждый месяц — новые форматы без доп. CapEx</div></div>
+      </div>
+      <div class="card-l" style="display:flex;align-items:flex-start;gap:20px">
+        <div style="width:48px;height:48px;background:#4CAF50;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px">🎟</div>
+        <div><div style="font-size:20px;font-weight:700">Единый билет — всё включено</div><div style="font-size:16px;color:#777;margin-top:4px">Выше средний чек, нет трений при входе</div></div>
+      </div>
+      <div class="card-l" style="display:flex;align-items:flex-start;gap:20px">
+        <div style="width:48px;height:48px;background:#4CAF50;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px">🏆</div>
+        <div><div style="font-size:20px;font-weight:700">Рейтинги и рекорды</div><div style="font-size:16px;color:#777;margin-top:4px">Единая система баллов → возвращаемость</div></div>
+      </div>
+      <div class="card-l" style="display:flex;align-items:flex-start;gap:20px">
+        <div style="width:48px;height:48px;background:#4CAF50;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px">🌍</div>
+        <div><div style="font-size:20px;font-weight:700">Action Stadium OY, Финляндия</div><div style="font-size:16px;color:#777;margin-top:4px">Партнёр по оборудованию · 20+ объектов в мире</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 5 — 4 ЗОНЫ ══════════════ -->
+<div class="slide dark" id="s5">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">05 / 16</span>
+  </div>
+  <div class="sec-label">Продукт</div>
+  <div class="hl-md" style="margin-bottom:36px">4 ЗОНЫ · <span class="green">48 АКТИВНОСТЕЙ</span> · 701 ЧЕЛ. ОДНОВРЕМЕННО</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;flex:1">
+    <div class="card-d" style="display:flex;flex-direction:column">
+      <div style="font-size:13px;font-weight:700;letter-spacing:0.2em;color:#4CAF50;text-transform:uppercase;margin-bottom:12px">Арена · 800 м²</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;margin-bottom:16px;line-height:1">КОМАНДНЫЕ<br>БИТВЫ</div>
+      <div style="font-size:15px;opacity:0.65;line-height:1.7;flex:1">Экшн-болл<br>Волейбол-крест<br>Гигантский теннис<br>Перехватчик<br>Живой кёрлинг<br>Слепая эстафета</div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);font-size:13px;opacity:0.5">4–20 участников · соревнования команд</div>
+    </div>
+    <div class="card-d" style="display:flex;flex-direction:column">
+      <div style="font-size:13px;font-weight:700;letter-spacing:0.2em;color:#4CAF50;text-transform:uppercase;margin-bottom:12px">Реакция · 600 м²</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;margin-bottom:16px;line-height:1">ТОЧНОСТЬ<br>И РЕАКЦИЯ</div>
+      <div style="font-size:15px;opacity:0.65;line-height:1.7;flex:1">Стена реакции<br>Американский футбол<br>Аэрохоккей<br>Флорбол-мишень<br>Космический баскетбол<br>Футбол-крестики</div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);font-size:13px;opacity:0.5">2 игрока · дуэли · личный рекорд</div>
+    </div>
+    <div class="card-d" style="display:flex;flex-direction:column">
+      <div style="font-size:13px;font-weight:700;letter-spacing:0.2em;color:#4CAF50;text-transform:uppercase;margin-bottom:12px">Атлетика · 500 м²</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;margin-bottom:16px;line-height:1">АТЛЕТИКА<br>И ГТО</div>
+      <div style="font-size:15px;opacity:0.65;line-height:1.7;flex:1">Спринт 15 м<br>Ниндзя-трасса<br>Тест силы удара<br>Скалодром-скоростник<br>Вис на время<br>Степ-марафон</div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.1);font-size:13px;opacity:0.5">Офиц. нормативы ГТО · рейтинг</div>
+    </div>
+    <div class="card-d" style="display:flex;flex-direction:column;border:1px solid rgba(76,175,80,0.3)">
+      <div style="font-size:13px;font-weight:700;letter-spacing:0.2em;color:#4CAF50;text-transform:uppercase;margin-bottom:12px">Якорь · 600 м²</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;margin-bottom:16px;line-height:1">ЯКОРНЫЕ<br>АТТРАКЦИОНЫ</div>
+      <div style="font-size:15px;opacity:0.65;line-height:1.7;flex:1">Взрослый лабиринт (2 ур.)<br>Ниндзя-стена<br>Велотрек — гонка теней<br>Слэклайн<br>Гигантская рогатка<br>Зал рекордов</div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(76,175,80,0.2);font-size:13px;color:#4CAF50;font-weight:600">RFID-трекинг · аналогов в РФ нет</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 6 — 48 АКТИВНОСТЕЙ ══════════════ -->
+<div class="slide light" id="s6">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">06 / 16</span>
+  </div>
+  <div class="sec-label">Каталог активностей</div>
+  <div class="hl-md" style="color:#111;margin-bottom:8px">48 <span class="green">СПОСОБОВ</span> ВЫИГРАТЬ</div>
+  <div style="font-size:17px;color:#777;margin-bottom:28px">6 блоков · 8 активностей в каждом · новые форматы каждый месяц</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;flex:1">
+    <div class="card-l" style="border-top:4px solid #E53935;padding:28px 32px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:17px;font-weight:700;color:#E53935;text-transform:uppercase;letter-spacing:.1em">Командные битвы</div>
+        <div style="background:#E53935;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;padding:2px 12px;border-radius:20px">8</div>
+      </div>
+      <div style="font-size:14px;color:#555;line-height:1.9">Экшн-болл · Волейбол-крест · Гигантский теннис<br>Перехватчик · Живой кёрлинг · Слепая эстафета<br>Крепость — доджболл · Гигантская гиря</div>
+    </div>
+    <div class="card-l" style="border-top:4px solid #1E88E5;padding:28px 32px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:17px;font-weight:700;color:#1E88E5;text-transform:uppercase;letter-spacing:.1em">Точность и реакция</div>
+        <div style="background:#1E88E5;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;padding:2px 12px;border-radius:20px">8</div>
+      </div>
+      <div style="font-size:14px;color:#555;line-height:1.9">Стена реакции · Американский футбол · Флорбол-мишень<br>Футбол-реакция · Баскетбол на время · Космический баскет<br>Аэрохоккей · Футбол-крестики-нолики</div>
+    </div>
+    <div class="card-l" style="border-top:4px solid #FF8F00;padding:28px 32px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:17px;font-weight:700;color:#FF8F00;text-transform:uppercase;letter-spacing:.1em">Атлетика и ГТО</div>
+        <div style="background:#FF8F00;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;padding:2px 12px;border-radius:20px">8</div>
+      </div>
+      <div style="font-size:14px;color:#555;line-height:1.9">Спринт 15 м · Ниндзя-трасса · Тест силы удара<br>Вис на время · Гонка на самокатах · Степ-марафон<br>Прыжок в квадрат · Кольца — броски на высоту</div>
+    </div>
+    <div class="card-l" style="border-top:4px solid #8E24AA;padding:28px 32px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:17px;font-weight:700;color:#8E24AA;text-transform:uppercase;letter-spacing:.1em">Нестандартные механики</div>
+        <div style="background:#8E24AA;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;padding:2px 12px;border-radius:20px">8</div>
+      </div>
+      <div style="font-size:14px;color:#555;line-height:1.9">Футпинбол · Снукербол · Потолочный траверс<br>Сумо на балансах · Бумеранг · Живые шашки<br>Горячая картошка · Робот-уклонист</div>
+    </div>
+    <div class="card-l" style="border-top:4px solid #00897B;padding:28px 32px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:17px;font-weight:700;color:#00897B;text-transform:uppercase;letter-spacing:.1em">Творческие и необычные</div>
+        <div style="background:#00897B;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;padding:2px 12px;border-radius:20px">8</div>
+      </div>
+      <div style="font-size:14px;color:#555;line-height:1.9">Граффити-дартс · Световой лабиринт руками · Дженга 2м<br>Ловушки памяти · Зеркальный боксёр · Барабанная дуэль<br>Кидалки в темноте · Меткий капитан — морской бой</div>
+    </div>
+    <div class="card-l" style="border-top:4px solid #4CAF50;padding:28px 32px;border:1px solid rgba(76,175,80,0.3)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:17px;font-weight:700;color:#4CAF50;text-transform:uppercase;letter-spacing:.1em">Якорные аттракционы</div>
+        <div style="background:#4CAF50;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:22px;padding:2px 12px;border-radius:20px">8</div>
+      </div>
+      <div style="font-size:14px;color:#555;line-height:1.9">Взрослый лабиринт (RFID) · Слэклайн · Ниндзя-стена<br>Командный пазл · Гигантская рогатка · Велотрек теней<br>Скалодром-скоростник · Зал рекордов</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 7 — 3 АУДИТОРИИ ══════════════ -->
+<div class="slide dark" id="s7">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">07 / 16</span>
+  </div>
+  <div class="sec-label">Аудитория</div>
+  <div class="hl-md" style="margin-bottom:36px">ТРИ АУДИТОРИИ — <span class="green">ТРИ ПОТОКА</span> ВЫРУЧКИ</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;flex:1">
+    <div class="card-d" style="display:flex;flex-direction:column;border-top:4px solid #4CAF50">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:#4CAF50;margin-bottom:8px">Подростки и молодёжь</div>
+      <div style="font-size:18px;opacity:0.5;margin-bottom:24px">14–25 лет</div>
+      <div style="font-size:17px;opacity:0.8;line-height:1.8;flex:1">
+        Выходные и вечера будней<br>
+        Соревнования и рейтинги<br>
+        Повторные визиты ради рекордов<br>
+        Вирусный контент в соцсетях
+      </div>
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1)">
+        <div style="font-size:13px;opacity:0.5;margin-bottom:4px">Средний чек</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:#4CAF50">900–1 200 ₽</div>
+      </div>
+    </div>
+    <div class="card-d" style="display:flex;flex-direction:column;border-top:4px solid #4CAF50">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:#4CAF50;margin-bottom:8px">Семьи</div>
+      <div style="font-size:18px;opacity:0.5;margin-bottom:24px">Родители + дети от 7 лет</div>
+      <div style="font-size:17px;opacity:0.8;line-height:1.8;flex:1">
+        Выходные, 2–3 часа вместе<br>
+        Дни рождения (150 ДР/мес)<br>
+        Первый вопрос: «Куда сходить?»<br>
+        Единственный формат для всех
+      </div>
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1)">
+        <div style="font-size:13px;opacity:0.5;margin-bottom:4px">ДР-пакет</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:#4CAF50">30 000 ₽/ДР</div>
+      </div>
+    </div>
+    <div class="card-d" style="display:flex;flex-direction:column;border-top:4px solid #4CAF50">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:#4CAF50;margin-bottom:8px">Групповые визиты</div>
+      <div style="font-size:18px;opacity:0.5;margin-bottom:24px">Корпоративы · ДР взрослых · Компании</div>
+      <div style="font-size:17px;opacity:0.8;line-height:1.8;flex:1">
+        Формат «Спартакиада / Форт Боярд»<br>
+        Загружают будни — не только выходные<br>
+        Высокий корп. бюджет<br>
+        9 групп в месяц — стабильный поток
+      </div>
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1)">
+        <div style="font-size:13px;opacity:0.5;margin-bottom:4px">Корп. пакет</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:#4CAF50">35 000 ₽/гр.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 8 — ПРЕИМУЩЕСТВА ══════════════ -->
+<div class="slide light" id="s8">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">08 / 16</span>
+  </div>
+  <div class="sec-label">Преимущества формата</div>
+  <div class="hl-md" style="color:#111;margin-bottom:32px">ПОЧЕМУ <span class="green">СПОРТЭЙМЕНТ</span> РАБОТАЕТ</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
+    <div class="card-l card-gb">
+      <div style="font-size:32px;margin-bottom:12px">🎟</div>
+      <div style="font-size:19px;font-weight:700;margin-bottom:8px">Один билет — всё включено</div>
+      <div style="font-size:15px;color:#666;line-height:1.7">Нет трений при каждой активности. Средний чек выше, чем при оплате по-отдельности.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-size:32px;margin-bottom:12px">🏆</div>
+      <div style="font-size:19px;font-weight:700;margin-bottom:8px">Рейтинги тянут обратно</div>
+      <div style="font-size:15px;color:#666;line-height:1.7">Единая система рекордов и баллов. Человек хочет вернуться и побить свой рекорд или рекорд друга.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-size:32px;margin-bottom:12px">📱</div>
+      <div style="font-size:19px;font-weight:700;margin-bottom:8px">Вирусный UGC-контент</div>
+      <div style="font-size:15px;color:#666;line-height:1.7">Смешные моменты, неожиданные результаты, командные дуэли → TikTok/Reels → бесплатный маркетинг.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-size:32px;margin-bottom:12px">🏢</div>
+      <div style="font-size:19px;font-weight:700;margin-bottom:8px">Корпоративы — будничный якорь</div>
+      <div style="font-size:15px;color:#666;line-height:1.7">Спартакиада / Форт Боярд формат. Загружает объект в будни, когда нет частных посетителей.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-size:32px;margin-bottom:12px">🔧</div>
+      <div style="font-size:19px;font-weight:700;margin-bottom:8px">Простая эксплуатация</div>
+      <div style="font-size:15px;color:#666;line-height:1.7">Механические аттракционы без дорогостоящего техобслуживания. Нет льда, нет VR, нет спецоборудования.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-size:32px;margin-bottom:12px">♾</div>
+      <div style="font-size:19px;font-weight:700;margin-bottom:8px">Ассортимент обновляется</div>
+      <div style="font-size:15px;color:#666;line-height:1.7">Каждый месяц — новые активности. Формат не надоедает. Причина прийти снова — всегда есть.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 9 — СЕРПУХОВ ══════════════ -->
+<div class="slide dark" id="s9">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">09 / 16</span>
+  </div>
+  <div style="display:grid;grid-template-columns:340px 1fr;gap:48px;flex:1">
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div>
+        <div class="sec-label">Локация</div>
+        <div class="hl-sm" style="line-height:1.1">СЕРПУХОВ:<br><span class="green">РЫНОК<br>СВОБОДЕН</span></div>
+      </div>
+      <div class="card-d" style="padding:24px 28px">
+        <div class="kpi-val" style="font-size:52px">134 400</div>
+        <div class="kpi-lbl">жителей · 2025</div>
+      </div>
+      <div class="card-d" style="padding:24px 28px">
+        <div class="kpi-val" style="font-size:52px">100 км</div>
+        <div class="kpi-lbl">от Москвы · зона притяжения 50 км</div>
+      </div>
+      <div class="card-d" style="padding:24px 28px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#4CAF50;line-height:1">~250 000</div>
+        <div class="kpi-lbl">чел. в радиусе 50 км</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column">
+      <div style="font-size:16px;font-weight:700;letter-spacing:.2em;color:#4CAF50;text-transform:uppercase;margin-bottom:16px">Анализ конкурентов</div>
+      <table style="width:100%;border-collapse:collapse;font-size:15px;flex:1">
+        <thead>
+          <tr style="background:rgba(255,255,255,0.05)">
+            <th style="padding:12px 16px;text-align:left;font-size:13px;opacity:0.6;font-weight:600;letter-spacing:.1em">Критерий</th>
+            <th style="padding:12px 16px;text-align:center;font-size:13px;opacity:0.6;font-weight:600">Корстон</th>
+            <th style="padding:12px 16px;text-align:center;font-size:13px;opacity:0.6;font-weight:600">Космос</th>
+            <th style="padding:12px 16px;text-align:center;font-size:13px;opacity:0.6;font-weight:600">Mr. Mish</th>
+            <th style="padding:12px 16px;text-align:center;background:rgba(76,175,80,0.12);border-radius:8px;font-size:13px;color:#4CAF50;font-weight:700">СПОРТЭЙМЕНТ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:11px 16px;opacity:.75">Целевая аудитория</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65;font-size:14px">Все возрасты</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65;font-size:14px">Дети до 14</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65;font-size:14px">Дети + семьи</td>
+            <td style="padding:11px 16px;text-align:center;background:rgba(76,175,80,0.08);font-weight:700;color:#4CAF50">14–45 лет</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:11px 16px;opacity:.75">Активных игр</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">2–3</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">3–4</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">4–5</td>
+            <td style="padding:11px 16px;text-align:center;background:rgba(76,175,80,0.08);font-weight:700;color:#4CAF50">48</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:11px 16px;opacity:.75">Командные игры</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;background:rgba(76,175,80,0.08);color:#4CAF50;font-size:18px">✓</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:11px 16px;opacity:.75">Корпоративный формат</td>
+            <td style="padding:11px 16px;text-align:center;font-size:13px;opacity:.5">Только банкет</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;background:rgba(76,175,80,0.08);color:#4CAF50;font-weight:700;font-size:14px">Спартакиада</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:11px 16px;opacity:.75">Время пребывания</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">1–2 ч</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">1 ч</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">1 ч</td>
+            <td style="padding:11px 16px;text-align:center;background:rgba(76,175,80,0.08);font-weight:700;color:#4CAF50">2–4 часа</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <td style="padding:11px 16px;opacity:.75">Средний чек</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">~900 ₽</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">~700 ₽</td>
+            <td style="padding:11px 16px;text-align:center;opacity:.65">~800 ₽</td>
+            <td style="padding:11px 16px;text-align:center;background:rgba(76,175,80,0.08);font-weight:700;color:#4CAF50">~1 784 ₽</td>
+          </tr>
+          <tr>
+            <td style="padding:11px 16px;opacity:.75">Рейтинги и рекорды</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;color:#e57373;font-size:18px">✗</td>
+            <td style="padding:11px 16px;text-align:center;background:rgba(76,175,80,0.08);color:#4CAF50;font-size:18px">✓</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:16px;padding:16px 20px;background:rgba(76,175,80,0.12);border-radius:12px;font-size:15px;color:#81C784;line-height:1.6">
+        <strong style="color:#4CAF50">Вывод:</strong> Ни один конкурент не работает с аудиторией 16–45 лет. Нет командных игр. Нет корпоративного продукта. Серпухов = нетронутый рынок.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 10 — ФИНАНСЫ ══════════════ -->
+<div class="slide light" id="s10">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">10 / 16</span>
+  </div>
+  <div class="sec-label">Финансовая модель</div>
+  <div class="hl-md" style="color:#111;margin-bottom:32px">МАТЕМАТИКА <span class="green">ПРОЕКТА</span></div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:20px">
+    <div class="card-l card-gb">
+      <div class="kpi-val">210<br><span style="font-size:36px">млн ₽</span></div>
+      <div class="kpi-lbl" style="color:#444">Общие инвестиции в объект</div>
+    </div>
+    <div class="card-l card-gb">
+      <div class="kpi-val">215 К</div>
+      <div class="kpi-lbl" style="color:#444">Посетителей в год (план)</div>
+    </div>
+    <div class="card-l card-gb">
+      <div class="kpi-val">1 784 ₽</div>
+      <div class="kpi-lbl" style="color:#444">Средний чек с F&B</div>
+    </div>
+    <div class="card-l card-gb">
+      <div class="kpi-val">392<br><span style="font-size:36px">млн ₽</span></div>
+      <div class="kpi-lbl" style="color:#444">Выручка в год (среднее)</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;flex:1">
+    <div class="card-l card-gb">
+      <div class="kpi-val">112<br><span style="font-size:36px">млн ₽</span></div>
+      <div class="kpi-lbl" style="color:#444">EBITDA в год</div>
+    </div>
+    <div class="card-l card-gb">
+      <div class="kpi-val">29%</div>
+      <div class="kpi-lbl" style="color:#444">Операционная рентабельность</div>
+    </div>
+    <div class="card-l" style="border-left:4px solid #4CAF50;background:#f0f9f0">
+      <div class="kpi-val" style="font-size:80px">40%</div>
+      <div class="kpi-lbl" style="color:#2E7D32;font-weight:600">IRR — внутренняя норма доходности</div>
+    </div>
+    <div class="card-l" style="border-left:4px solid #4CAF50;background:#f0f9f0">
+      <div class="kpi-val" style="font-size:80px">3,2<br><span style="font-size:36px">года</span></div>
+      <div class="kpi-lbl" style="color:#2E7D32;font-weight:600">Срок окупаемости (дисконт.)</div>
+    </div>
+  </div>
+  <div style="margin-top:16px;font-size:15px;color:#999;text-align:center">* Полная динамическая финансовая модель с возможностью моделирования сценариев входит в состав мастер-плана</div>
+</div>
+
+<!-- ══════════════ СЛАЙД 11 — ВЫРУЧКА ══════════════ -->
+<div class="slide dark" id="s11">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">11 / 16</span>
+  </div>
+  <div class="sec-label">Структура выручки</div>
+  <div class="hl-md" style="margin-bottom:40px">5 ПОТОКОВ — <span class="green">392 МЛН ₽</span> В ГОД</div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:18px;justify-content:center">
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="width:220px;font-size:17px;opacity:.75;text-align:right;flex-shrink:0">Активити-парк (билеты)</div>
+      <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:8px;height:52px;overflow:hidden">
+        <div style="width:59%;height:100%;background:#4CAF50;border-radius:8px;display:flex;align-items:center;padding:0 20px">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:24px;white-space:nowrap">59% — 228 млн ₽/год</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="width:220px;font-size:17px;opacity:.75;text-align:right;flex-shrink:0">Кафе и F&B</div>
+      <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:8px;height:52px;overflow:hidden">
+        <div style="width:20%;height:100%;background:#66BB6A;border-radius:8px;display:flex;align-items:center;padding:0 20px">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:24px;white-space:nowrap">20% — 75 млн ₽/год</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="width:220px;font-size:17px;opacity:.75;text-align:right;flex-shrink:0">Дни рождения</div>
+      <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:8px;height:52px;overflow:hidden">
+        <div style="width:14%;height:100%;background:#81C784;border-radius:8px;display:flex;align-items:center;padding:0 20px">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:24px;white-space:nowrap">14% — 54 млн ₽/год</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="width:220px;font-size:17px;opacity:.75;text-align:right;flex-shrink:0">Занятия + про-шоп</div>
+      <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:8px;height:52px;overflow:hidden">
+        <div style="width:5%;height:100%;background:#A5D6A7;border-radius:8px;min-width:200px;display:flex;align-items:center;padding:0 20px">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:24px;white-space:nowrap">5% — 18 млн ₽/год</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="width:220px;font-size:17px;opacity:.75;text-align:right;flex-shrink:0">Корпоративы + реклама</div>
+      <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:8px;height:52px;overflow:hidden">
+        <div style="width:2%;height:100%;background:#C8E6C9;border-radius:8px;min-width:160px;display:flex;align-items:center;padding:0 20px">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:24px;white-space:nowrap;color:#111">2% — 8 млн ₽/год</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:24px;padding:20px 32px;background:rgba(76,175,80,0.1);border-radius:12px;font-size:17px;opacity:.8">
+    Будни загружают корпоративы и дни рождения. Выходные — семьи и молодёжь. Объект работает 7 дней в неделю с разными аудиториями.
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 12 — КОНКУРЕНТНАЯ КАРТА ══════════════ -->
+<div class="slide light" id="s12">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">12 / 16</span>
+  </div>
+  <div class="sec-label">Конкурентный анализ</div>
+  <div class="hl-md" style="color:#111;margin-bottom:24px">МЫ ЗАНИМАЕМ <span class="green">ПУСТОЙ КВАДРАНТ</span></div>
+  <div style="flex:1;display:flex;gap:40px;align-items:stretch">
+    <div style="flex:1;position:relative;border:2px solid rgba(0,0,0,0.1);border-radius:16px;overflow:hidden;background:#fff">
+      <!-- Y axis label -->
+      <div style="position:absolute;left:16px;top:50%;transform:translateY(-50%) rotate(-90deg);font-size:13px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;opacity:0.4;white-space:nowrap">Взрослые ↑</div>
+      <!-- X axis label -->
+      <div style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-size:13px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;opacity:0.4">→ Активность</div>
+      <!-- Grid lines -->
+      <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:rgba(0,0,0,0.1)"></div>
+      <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.1)"></div>
+      <!-- Q1: top-left = взрослые, пассивные -->
+      <div style="position:absolute;top:8%;left:8%;font-size:15px;color:#999;text-align:center">
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Кино</div>
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Бар / ресторан</div>
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Выставки</div>
+      </div>
+      <!-- Q2: top-right = взрослые, активные = SPORTAINMENT -->
+      <div style="position:absolute;top:8%;right:8%;text-align:center">
+        <div style="background:#4CAF50;color:#fff;padding:16px 24px;border-radius:12px;font-weight:700;font-size:18px;box-shadow:0 4px 20px rgba(76,175,80,0.4)">
+          СПОРТЭЙМЕНТ<br><span style="font-size:13px;font-weight:400;opacity:.9">← ПУСТОЙ КВАДРАНТ</span>
+        </div>
+        <div style="background:#fff;border:2px dashed #4CAF50;padding:8px 16px;border-radius:8px;margin-top:10px;font-size:13px;color:#4CAF50;font-weight:600">Фитнес-клубы (частично)</div>
+      </div>
+      <!-- Q3: bottom-left = дети, пассивные -->
+      <div style="position:absolute;bottom:12%;left:8%;font-size:15px;color:#999;text-align:center">
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Квест-румы</div>
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Аркадные автоматы</div>
+      </div>
+      <!-- Q4: bottom-right = дети, активные -->
+      <div style="position:absolute;bottom:12%;right:8%;font-size:15px;color:#999;text-align:center">
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Замания</div>
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Батутные центры</div>
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Лазертаг</div>
+        <div style="background:#f5f5f5;padding:8px 14px;border-radius:8px;margin:4px">Mr. Mish / Космос</div>
+      </div>
+    </div>
+    <div style="width:380px;display:flex;flex-direction:column;gap:16px;justify-content:center">
+      <div class="card-l" style="background:#f0f9f0;border:1px solid rgba(76,175,80,0.2)">
+        <div style="font-size:17px;font-weight:700;color:#2E7D32;margin-bottom:8px">Незанятая ниша</div>
+        <div style="font-size:14px;color:#555;line-height:1.7">Взрослые 16–45 + высокая физическая активность + развлечение — этот квадрант пуст во всех городах России.</div>
+      </div>
+      <div class="card-l">
+        <div style="font-size:17px;font-weight:700;margin-bottom:8px">Первый = монополист</div>
+        <div style="font-size:14px;color:#555;line-height:1.7">Кто откроется первым в городе — тот занимает долю рынка без конкурентов на 3–5 лет.</div>
+      </div>
+      <div class="card-l">
+        <div style="font-size:17px;font-weight:700;margin-bottom:8px">В Серпухове — 0 конкурентов</div>
+        <div style="font-size:14px;color:#555;line-height:1.7">Корстон, Космос, Mr. Mish — все работают в детском/семейном сегменте. Взрослый активный формат в городе отсутствует.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 13 — ЧТО ДЕЛАЕТ ENTENS ══════════════ -->
+<div class="slide dark" id="s13">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">13 / 16</span>
+  </div>
+  <div class="sec-label">Предложение</div>
+  <div class="hl-md" style="margin-bottom:40px">ЧТО ДЕЛАЕТ <span class="green">ENTENS GROUP</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;flex:1">
+    <div class="card-d" style="border-top:4px solid #4CAF50;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+        <div style="width:56px;height:56px;background:#4CAF50;border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:28px;flex-shrink:0">01</div>
+        <div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;line-height:1">МАСТЕР-ПЛАН + ФИНМОДЕЛЬ</div>
+          <div style="font-size:15px;opacity:.5;margin-top:2px">Этап 1 · 40 рабочих дней</div>
+        </div>
+      </div>
+      <div style="font-size:17px;opacity:.8;line-height:2;flex:1">
+        2D мастер-план объекта<br>
+        Функциональное зонирование<br>
+        Размещение активностей (референсы)<br>
+        Гостевые пути и потоки посетителей<br>
+        Тех., подсобные и адм. помещения<br>
+        Список всех услуг центра<br>
+        Динамическая финмодель (IRR / NPV / EBITDA)
+      </div>
+      <div style="margin-top:24px;padding:20px 24px;background:rgba(76,175,80,0.12);border-radius:12px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:14px;opacity:.6">Стоимость</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:44px;color:#4CAF50">590 000 ₽</div>
+      </div>
+    </div>
+    <div class="card-d" style="border-top:4px solid rgba(76,175,80,0.4);display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+        <div style="width:56px;height:56px;background:rgba(76,175,80,0.2);border:2px solid #4CAF50;border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;flex-shrink:0">02</div>
+        <div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;line-height:1">ОПЕРАЦИОННОЕ УПРАВЛЕНИЕ</div>
+          <div style="font-size:15px;opacity:.5;margin-top:2px">Этап 2 · После мастер-плана</div>
+        </div>
+      </div>
+      <div style="font-size:17px;opacity:.8;line-height:2;flex:1">
+        EntenS Group = управляющая компания центра<br>
+        Найм и обучение 62 сотрудников<br>
+        Маркетинг и продажи<br>
+        Корпоративные контракты<br>
+        Ежемесячная отчётность<br>
+        Управление меню активностей
+      </div>
+      <div style="margin-top:24px;padding:20px 24px;background:rgba(255,255,255,0.05);border-radius:12px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:14px;opacity:.6">Модель оплаты</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#4CAF50">% от выручки</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 14 — СОСТАВ МАСТЕР-ПЛАНА ══════════════ -->
+<div class="slide light" id="s14">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">14 / 16</span>
+  </div>
+  <div class="sec-label">Состав работ</div>
+  <div class="hl-md" style="color:#111;margin-bottom:32px">СОСТАВ <span class="green">МАСТЕР-ПЛАНА</span></div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;margin-bottom:12px">01. 2D МАСТЕР-ПЛАН</div>
+      <div style="font-size:15px;color:#555;line-height:1.7">Полный план объекта с обозначением всех зон, проходов, аварийных выходов. Формат: PDF + DWG.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;margin-bottom:12px">02. ЗОНИРОВАНИЕ</div>
+      <div style="font-size:15px;color:#555;line-height:1.7">Функциональное разделение площади: игровые зоны, F&B, административные, технические помещения.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;margin-bottom:12px">03. АКТИВНОСТИ</div>
+      <div style="font-size:15px;color:#555;line-height:1.7">Размещение всех 48+ аттракционов с референсами, фото оборудования, площадью каждой зоны.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;margin-bottom:12px">04. ГОСТЕВЫЕ ПУТИ</div>
+      <div style="font-size:15px;color:#555;line-height:1.7">Схема потоков посетителей: вход, навигация по зонам, пропускная способность, кассовый узел.</div>
+    </div>
+    <div class="card-l card-gb">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;margin-bottom:12px">05. ТЕХ. ПОМЕЩЕНИЯ</div>
+      <div style="font-size:15px;color:#555;line-height:1.7">Технические, подсобные и административные помещения: склады, серверная, кухня, офисы, раздевалки.</div>
+    </div>
+    <div class="card-l card-gb" style="background:#f0f9f0;border:1px solid rgba(76,175,80,0.2)">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;margin-bottom:12px">06. ФИНМОДЕЛЬ</div>
+      <div style="font-size:15px;color:#2E7D32;line-height:1.7"><strong>Динамическая:</strong> настраиваемые сценарии по посещаемости и среднему чеку. KPI: IRR · NPV · EBITDA · срок окупаемости.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 15 — О КОМПАНИИ ══════════════ -->
+<div class="slide dark" id="s15">
+  <div class="slide-top">
+    <img src="logo_white.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">15 / 16</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:64px;flex:1">
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <div class="sec-label">О компании</div>
+      <div class="hl-md" style="line-height:0.95">ENTENS<br><span class="green">GROUP</span></div>
+      <div class="divider"></div>
+      <p class="body-md" style="opacity:.8;margin-bottom:24px;line-height:1.7">Управляющая компания в сфере развлечений и гостеприимства. Покупаем, берём в аренду и управляем РЦ, парками, отелями и ресторанами.</p>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;background:#181818;border-radius:12px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#4CAF50;flex-shrink:0">20+</div>
+          <div style="font-size:15px;opacity:.75">лет в управлении объектами развлечений и гостеприимства</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;background:#181818;border-radius:12px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#4CAF50;flex-shrink:0">62</div>
+          <div style="font-size:15px;opacity:.75">штатных сотрудника в типовом объекте под управлением</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;background:#181818;border-radius:12px">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#4CAF50;flex-shrink:0;line-height:1">Action<br>Stadium</div>
+          <div style="font-size:15px;opacity:.75">партнёр по оборудованию — Action Stadium OY, Финляндия. 20+ объектов по всему миру</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <div style="font-size:15px;font-weight:700;letter-spacing:.2em;color:#4CAF50;text-transform:uppercase;margin-bottom:24px">Партнёры и клиенты</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+        <div style="background:#181818;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center">
+          <img src="Лого/Замания.png" style="height:36px;width:auto;filter:brightness(0) invert(1);opacity:.7" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=font-size:13px;opacity:.5>Замания</span>'">
+        </div>
+        <div style="background:#181818;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center">
+          <img src="Лого/Газпром.svg.png" style="height:36px;width:auto;filter:brightness(0) invert(1);opacity:.7" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=font-size:13px;opacity:.5>Газпром</span>'">
+        </div>
+        <div style="background:#181818;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center">
+          <img src="Лого/Детский мир.png" style="height:36px;width:auto;filter:brightness(0) invert(1);opacity:.7" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=font-size:13px;opacity:.5>Детский мир</span>'">
+        </div>
+        <div style="background:#181818;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center">
+          <img src="Лого/ПандаПарк.png" style="height:36px;width:auto;filter:brightness(0) invert(1);opacity:.7" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=font-size:13px;opacity:.5>ПандаПарк</span>'">
+        </div>
+        <div style="background:#181818;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center">
+          <img src="Лого/Чехарда.jpg" style="height:36px;width:auto;filter:brightness(0) invert(1);opacity:.7" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=font-size:13px;opacity:.5>Чехарда</span>'">
+        </div>
+        <div style="background:#181818;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center">
+          <img src="Лого/Сочи Парк.png" style="height:36px;width:auto;filter:brightness(0) invert(1);opacity:.7" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=font-size:13px;opacity:.5>Сочи Парк</span>'">
+        </div>
+      </div>
+      <div style="margin-top:24px;padding:20px 24px;background:rgba(76,175,80,0.1);border-radius:12px;font-size:15px;opacity:.75;line-height:1.7">
+        Мы не только разрабатываем — мы несём операционную ответственность за результат. Управляем объектом как своим собственным.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ СЛАЙД 16 — ПРЕДЛОЖЕНИЕ ══════════════ -->
+<div class="slide light" id="s16">
+  <div class="slide-top">
+    <img src="logo.png" alt="EntenS Group" class="logo-img">
+    <span class="slide-num">16 / 16</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;flex:1">
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <div class="sec-label">Следующий шаг</div>
+      <div class="hl-lg" style="color:#111;font-size:88px;line-height:.9;margin-bottom:24px">ЗАКАЗАТЬ<br><span class="green">МАСТЕР-ПЛАН</span></div>
+      <div style="background:#0d0d0d;border-radius:20px;padding:40px;margin-bottom:24px">
+        <div style="font-size:14px;color:rgba(255,255,255,.5);letter-spacing:.2em;text-transform:uppercase;margin-bottom:8px">Стоимость разработки</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:100px;color:#4CAF50;line-height:.9">590 000 ₽</div>
+        <div style="font-size:14px;color:rgba(255,255,255,.5);margin-top:12px;letter-spacing:.2em;text-transform:uppercase">Срок: <strong style="color:#fff">40 рабочих дней</strong></div>
+        <div style="font-size:13px;color:rgba(255,255,255,.4);margin-top:6px">* без учёта времени на согласование с заказчиком</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="width:8px;height:8px;background:#4CAF50;border-radius:50%;flex-shrink:0"></div>
+          <div style="font-size:16px;color:#333">Подписание NDA — <strong>сейчас</strong></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="width:8px;height:8px;background:#4CAF50;border-radius:50%;flex-shrink:0"></div>
+          <div style="font-size:16px;color:#333">Договор на мастер-план — <strong>+30 дней</strong></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="width:8px;height:8px;background:#4CAF50;border-radius:50%;flex-shrink:0"></div>
+          <div style="font-size:16px;color:#333">Готовый мастер-план + финмодель — <strong>+40 р.д.</strong></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div style="width:8px;height:8px;background:#4CAF50;border-radius:50%;flex-shrink:0"></div>
+          <div style="font-size:16px;color:#333">Управляющий договор + старт строительства</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;justify-content:center;gap:20px">
+      <div class="card-l" style="text-align:center;padding:48px 40px;background:#f0f9f0;border:2px solid rgba(76,175,80,0.3)">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:#2E7D32;letter-spacing:.1em;margin-bottom:32px">СВЯЗАТЬСЯ С НАМИ</div>
+        <div style="font-size:22px;font-weight:700;margin-bottom:8px">Александр Бениаминов</div>
+        <div style="font-size:16px;color:#777;margin-bottom:28px">Основатель · EntenS Group</div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <a href="mailto:olegstradivarius2604@gmail.com" style="display:flex;align-items:center;gap:12px;padding:16px 20px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.08);font-size:16px;color:#333;text-decoration:none">
+            <span style="font-size:22px">✉️</span> olegstradivarius2604@gmail.com
+          </a>
+          <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;background:#fff;border-radius:12px;border:1px solid rgba(0,0,0,.08);font-size:16px;color:#333">
+            <span style="font-size:22px">📱</span> entens.ru
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:15px;color:#999;line-height:1.6">
+        Пока нет ни одного аналога Спортэймента в Серпухове.<br>
+        <strong style="color:#4CAF50">Кто первый — тот владеет рынком.</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div></div>
+
+<!-- NAVIGATION -->
+<div id="nav">
+  <button id="prev">&#8592;</button>
+  <div id="dots"></div>
+  <span id="sinfo">1 / 16</span>
+  <button id="next">&#8594;</button>
+</div>
+
+<script>
+const TOTAL = 16;
+let cur = 1;
+const slides = () => document.querySelectorAll('.slide');
+const dotsEl = document.getElementById('dots');
+const sinfoEl = document.getElementById('sinfo');
+
+// Build dots
+for(let i=1;i<=TOTAL;i++){
+  const d = document.createElement('div');
+  d.className = 'dot' + (i===1?' on':'');
+  d.dataset.i = i;
+  d.onclick = () => go(i);
+  dotsEl.appendChild(d);
+}
+
+function go(n){
+  if(n<1||n>TOTAL) return;
+  document.getElementById('s'+cur).classList.remove('active');
+  document.querySelectorAll('.dot')[cur-1].classList.remove('on');
+  cur = n;
+  document.getElementById('s'+cur).classList.add('active');
+  document.querySelectorAll('.dot')[cur-1].classList.add('on');
+  sinfoEl.textContent = cur + ' / ' + TOTAL;
+}
+
+document.getElementById('prev').onclick = () => go(cur-1);
+document.getElementById('next').onclick = () => go(cur+1);
+
+document.addEventListener('keydown', e => {
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'||e.key===' ') go(cur+1);
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp') go(cur-1);
+  if(e.key==='Home') go(1);
+  if(e.key==='End') go(TOTAL);
+});
+
+// Touch swipe
+let tsx=0;
+document.addEventListener('touchstart',e=>tsx=e.touches[0].clientX);
+document.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tsx;
+  if(Math.abs(dx)>50) go(dx<0?cur+1:cur-1);
+});
+
+// Scale
+function scale(){
+  const p = document.getElementById('pres');
+  const s = Math.min(window.innerWidth/1920, window.innerHeight/1080);
+  p.style.transform = 'scale('+s+')';
+}
+scale();
+window.addEventListener('resize', scale);
+</script>
+</body>
+</html>
