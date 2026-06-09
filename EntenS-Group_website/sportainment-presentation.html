@@ -51,16 +51,29 @@ body{background:#111;width:100vw;height:100vh;overflow:hidden;font-family:'Inter
 .dot.on{background:#4CAF50;width:22px;border-radius:4px}
 #sinfo{color:rgba(255,255,255,.6);font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:.08em;min-width:50px;text-align:center}
 
-/* Print */
+/* Print — каждый слайд = страница 1920×1080px, без обрезания */
 @media print{
-  body{overflow:visible;background:#fff}
-  #outer{position:static;overflow:visible;display:block;background:#fff}
-  #pres{transform:none!important;width:297mm!important;height:auto!important;overflow:visible}
-  .slide{display:flex!important;width:297mm!important;height:210mm!important;padding:12mm 18mm 14mm;page-break-after:always;break-after:page;position:relative!important;overflow:hidden}
-  #nav{display:none}
-  .dark{background:#0d0d0d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .light{background:#f5f8f5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .card-d{background:#181818!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:1920px 1080px;margin:0}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{overflow:visible;margin:0;padding:0;background:#111;width:1920px}
+  #outer{position:static!important;display:block!important;width:1920px!important;height:auto!important;overflow:visible!important;background:#111}
+  #pres{transform:none!important;width:1920px!important;height:auto!important;overflow:visible!important;position:static!important;display:block!important}
+  .slide{
+    display:flex!important;
+    position:static!important;
+    top:auto!important;right:auto!important;bottom:auto!important;left:auto!important;
+    width:1920px!important;height:1080px!important;
+    page-break-after:always;break-after:page;
+    overflow:hidden;flex-shrink:0
+  }
+  #nav{display:none!important}
+  .dark{background:#0d0d0d!important}
+  .light{background:#f5f8f5!important}
+  .card-d{background:#181818!important}
+  .card-l{background:#fff!important}
+  .green{color:#4CAF50!important}
+  .sec-label{color:#4CAF50!important}
+  .kpi-val{color:#4CAF50!important}
 }
 </style>
 </head>
