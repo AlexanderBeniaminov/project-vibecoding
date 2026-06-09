@@ -192,9 +192,10 @@ def collect_booking_numbers(token: str, week_start: date, week_end: date):
     """
     hdrs = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
-    # Целевые префиксы: заезды в неделю + 3 дня до (stay-over гости)
+    # Целевые префиксы: заезды в неделю + 21 день до (переходящие брони)
+    # 21 день покрывает типичный максимальный срок проживания на курорте.
     prefixes = set()
-    d = week_start - timedelta(days=3)
+    d = week_start - timedelta(days=21)
     while d <= week_end:
         prefixes.add(d.strftime("%Y%m%d"))
         d += timedelta(days=1)

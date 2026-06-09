@@ -326,10 +326,11 @@ function collectBookings_(token, weekStart, weekEnd) {
   var PROPERTY_ID = PropertiesService.getScriptProperties().getProperty('TL_PROPERTY_ID');
   var hdrs = {'Authorization': 'Bearer ' + token, 'Accept': 'application/json'};
 
-  // Префиксы дат для фильтрации: week_start-3 … week_end (stay-over гости)
+  // Префиксы дат для фильтрации: week_start-21 … week_end (переходящие брони)
+  // 21 день покрывает максимальный срок проживания — ловим гостей из прошлой недели.
   var prefixes = {};
   var d = new Date(weekStart.getTime());
-  d.setDate(d.getDate() - 3);
+  d.setDate(d.getDate() - 21);
   while (d <= weekEnd) {
     prefixes[formatDate_(d)] = true;
     d.setDate(d.getDate() + 1);
