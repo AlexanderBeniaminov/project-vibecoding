@@ -87,11 +87,38 @@ TOTAL_ALEN     = 58   # 82xxx(6)+220392(48)+220405(4) — уточнить
 # ============================================================
 # Загрузка ключей — из os.environ (GitHub Actions) или .env (локально)
 # ============================================================
-try:
-    from dotenv import load_dotenv as _load_dotenv
-    _load_dotenv()
-except ImportError:
-    pass
+def _load_env_file(path=".env"):
+    """Парсим .env вручную — python-dotenv не обрабатывает многострочный JSON."""
+    if not os.path.exists(path):
+        return
+    content = open(path).read()
+    lines = content.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line or line.startswith("#"):
+            i += 1
+            continue
+        if "=" not in line:
+            i += 1
+            continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        val = val.strip()
+        if val.startswith("{"):
+            json_lines = [val]
+            depth = val.count("{") - val.count("}")
+            i += 1
+            while depth > 0 and i < len(lines):
+                json_lines.append(lines[i])
+                depth += lines[i].count("{") - lines[i].count("}")
+                i += 1
+            os.environ.setdefault(key, "\n".join(json_lines))
+        else:
+            os.environ.setdefault(key, val)
+            i += 1
+
+_load_env_file()
 
 def _env(key):
     val = os.environ.get(key, '').strip()
