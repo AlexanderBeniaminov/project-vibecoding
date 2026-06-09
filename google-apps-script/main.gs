@@ -571,9 +571,12 @@ function readMonblan_(weekNum, year) {
     var weekRow = mbSh.getRange(2, 2, 1, 200).getValues()[0];
 
     // Попытка 1: точное совпадение год + номер недели (ISO)
+    // Год хранится с пробелом-разделителем тысяч ('2 026') — убираем нецифры перед Number()
     var mbCol = -1;
     for (var i = 0; i < weekRow.length; i++) {
-      if (Number(weekRow[i]) === weekNum && Number(yearRow[i]) === year) {
+      var yr = Number(String(yearRow[i]).replace(/\D/g, ''));
+      var wk = Number(weekRow[i]);
+      if (wk === weekNum && yr === year) {
         mbCol = i + 2;
         break;
       }
