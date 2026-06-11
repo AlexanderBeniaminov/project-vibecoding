@@ -174,6 +174,18 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_team_info",
+            "description": (
+                "Получить точную информацию о команде ВК Губаха: имена, должности, зоны ответственности. "
+                "Вызывай ПЕРВЫМ при ЛЮБОМ вопросе о Викторе, Евгении, Надежде, Управляющем, Тех.директоре. "
+                "НЕ ищи этих людей через web_search — они сотрудники Александра, их данные только здесь."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "web_search",
             "description": (
                 "Поиск во внешнем интернете. "
@@ -622,7 +634,18 @@ TOOLS = [
 # ── Выполнение инструментов ───────────────────────────────────
 def execute_tool(name: str, args: dict, user_id: int) -> str:
     try:
-        if name == "web_search":
+        if name == "get_team_info":
+            from pathlib import Path as _Path
+            import re as _re
+            knowledge_dir = _Path(getattr(config, "KNOWLEDGE_DIR", "/home/parser/bots/assistant/knowledge"))
+            fpath = knowledge_dir / "projects.md"
+            if fpath.exists():
+                content = fpath.read_text(encoding="utf-8")
+                match = _re.search(r'(Команда ВК Губаха.*?)(?=\n- Стратегические|\n###|\Z)', content, _re.DOTALL)
+                if match:
+                    return match.group(1).strip()
+            return "Информация о команде не найдена в базе знаний."
+        elif name == "web_search":
             return web.search(args["query"])
         elif name == "fetch_url":
             return web.fetch_url(args["url"])
