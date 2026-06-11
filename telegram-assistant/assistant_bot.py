@@ -758,13 +758,7 @@ async def _send_fact_approval(chat_id: int, fact_id: int, text: str):
     )
 
 async def _execute_and_notify(name: str, args: dict, user_id: int, chat_id: int) -> str:
-    """Выполняет инструмент. Для remember_fact — отправляет запрос на подтверждение."""
-    if name == "remember_fact":
-        fact_id, orig_cat, text = mem_tool.remember_fact_pending(
-            args["text"], args.get("category", "fact")
-        )
-        await _send_fact_approval(chat_id, fact_id, text)
-        return f"Факт #{fact_id} отправлен пользователю на подтверждение [{orig_cat}]."
+    """Выполняет инструмент."""
     result = execute_tool(name, args, user_id)
     if name in _ACTION_TOOLS:
         await bot.send_message(chat_id, f"✅ {result}")
