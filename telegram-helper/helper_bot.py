@@ -35,7 +35,7 @@ from groq import Groq
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
-from smart_search import COMMERCIAL_RE, smart_search_and_answer
+from smart_search import COMMERCIAL_RE, detect_type, get_clarification, smart_search_and_answer
 
 # ── Инициализация ─────────────────────────────────────────────────
 _MSK = ZoneInfo("Europe/Moscow")
@@ -54,6 +54,7 @@ histories: dict[int, list] = {}
 _pending_reformat: dict[int, dict] = {}  # {user_id: {instruction, original}}
 _last_message_time: dict[int, float] = {}
 _CONTEXT_TTL = 300  # 5 минут — после паузы контекст считается новым
+_pending_searches: dict[int, str] = {}   # частичный коммерческий запрос ожидает уточнения
 
 # ── Проверка доступа ──────────────────────────────────────────────
 def is_allowed(user_id: int) -> bool:
@@ -1229,6 +1230,27 @@ async def handle_message(message: Message):
 
     q = text.lower()
 
+    # ── 0. Ожидающий коммерческий поиск (пользователь ответил на уточнение) ──
+    if user_id in _pending_searches:
+        combined = _pending_searches.pop(user_id) + " " + text
+        kind = detect_type(combined)
+        clarification = get_clarification(combined, kind)
+        if clarification:
+            # Всё ещё не хватает данных — задаём следующий вопрос
+            _pending_searches[user_id] = combined
+            await message.answer(clarification)
+            return
+        stop = asyncio.Event()
+        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+        try:
+            result = await smart_search_and_answer(combined, ai_client, config.SEARCH_MODEL, kind)
+        finally:
+            stop.set(); typing.cancel()
+            try: await typing
+            except asyncio.CancelledError: pass
+        await _safe_answer(message, result)
+        return
+
     # ── 1. Проектные заметки ──────────────────────────────────────
     proj_m = _PROJ_RE.match(text.strip())
     if proj_m:
@@ -1311,20 +1333,34 @@ async def handle_message(message: Message):
         return
 
     # ── 8. Веб-поиск ─────────────────────────────────────────────
-    # Сначала проверяем коммерческие запросы (билеты/отели/товары) → Perplexity
+    # Коммерческие запросы (билеты/отели/товары) → Perplexity; общие → DuckDuckGo
     _is_commercial = COMMERCIAL_RE.search(text.strip())
     if _is_commercial or _SEARCH_RE.match(text.strip()) or any(k in q for k in ["расписание", "онлайн табло", "курс валют", "погода", "новости"]):
-        stop = asyncio.Event()
-        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-        try:
-            if _is_commercial:
-                result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL)
-            else:
+        if _is_commercial:
+            kind = detect_type(text)
+            clarification = get_clarification(text, kind)
+            if clarification:
+                # Не хватает данных — сохраняем запрос и задаём вопрос
+                _pending_searches[user_id] = text
+                await message.answer(clarification)
+                return
+            stop = asyncio.Event()
+            typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+            try:
+                result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
+            finally:
+                stop.set(); typing.cancel()
+                try: await typing
+                except asyncio.CancelledError: pass
+        else:
+            stop = asyncio.Event()
+            typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+            try:
                 result = await web_search_and_answer(text)
-        finally:
-            stop.set(); typing.cancel()
-            try: await typing
-            except asyncio.CancelledError: pass
+            finally:
+                stop.set(); typing.cancel()
+                try: await typing
+                except asyncio.CancelledError: pass
         await _safe_answer(message, result)
         return
 
@@ -1350,17 +1386,30 @@ async def handle_message(message: Message):
 
     # LLM сигнализирует что нужен веб-поиск
     if response.strip() == "ПОИСК":
-        stop2 = asyncio.Event()
-        typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
-        try:
-            if COMMERCIAL_RE.search(text):
-                response = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL)
+        if COMMERCIAL_RE.search(text):
+            kind = detect_type(text)
+            clarification = get_clarification(text, kind)
+            if clarification:
+                _pending_searches[user_id] = text
+                response = clarification
             else:
+                stop2 = asyncio.Event()
+                typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
+                try:
+                    response = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
+                finally:
+                    stop2.set(); typing2.cancel()
+                    try: await typing2
+                    except asyncio.CancelledError: pass
+        else:
+            stop2 = asyncio.Event()
+            typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
+            try:
                 response = await web_search_and_answer(text)
-        finally:
-            stop2.set(); typing2.cancel()
-            try: await typing2
-            except asyncio.CancelledError: pass
+            finally:
+                stop2.set(); typing2.cancel()
+                try: await typing2
+                except asyncio.CancelledError: pass
 
     try:
         from rule_engine import apply_rules as _apply_rules
