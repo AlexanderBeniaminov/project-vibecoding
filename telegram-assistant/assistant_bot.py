@@ -800,12 +800,14 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                 args.get("how_to_check", ""),
             )
         elif name == "save_card":
-            return vault_tool.save_card(
-                args["card_type"],
-                args["title"],
-                args["content"],
-                args.get("tags", ""),
-            )
+            card_type = args["card_type"]
+            title = args["title"]
+            content = args["content"]
+            # Идеи → Google Sheets (существующая таблица идей), остальное → vault
+            if card_type == "idea":
+                text_for_sheet = f"{title}: {content}" if title else content
+                return _save_project_note_sync("Без проекта", text_for_sheet)
+            return vault_tool.save_card(card_type, title, content, args.get("tags", ""))
         elif name == "search_vault":
             return vault_tool.search_vault(args["query"])
         else:
@@ -1183,18 +1185,21 @@ _HELP_TEXT = """🤖 *Напоминатор — шпаргалка*
 `Напомни завтра в 9:30 позвонить Виктору`
 `Напомни каждый понедельник в 10:00 сделать отчёт`
 `Напомни через 2 часа проверить духовку`
-Повторяет каждые 5 мин пока не нажмёшь ✅
+Повторяет каждые 30 мин пока не нажмёшь ✅
 
 *📅 Календарь*
 `Что у меня сегодня / завтра?`
 `Создай встречу "Планёрка" в среду в 11:00`
 
-*🧠 База знаний (vault)*
+*💡 Идеи → Google Sheets*
 `Сохрани идею: запустить завтрак-буфет по выходным`
+`Запомни идею про маркетинг Губахи`
+Идеи автоматически попадают в таблицу идей
+
+*🧠 Решения и выводы → база знаний*
 `Запомни решение: партнёрство с туроператором — нет`
-`Зафиксируй вывод: гости бронируют поздно`
-`Найди в базе знаний идеи про маркетинг`
-В 21:00 бот сам структурирует день в карточки 📦
+`Зафиксируй вывод: гости бронируют поздно, нужен триггер за 2 дня`
+`Найди в базе знаний решения по Губахе`
 
 *💾 Память фактов*
 `Запомни: Виктор предпочитает задачи письменно`
@@ -2093,6 +2098,16 @@ async def main():
         await bot.delete_webhook(drop_pending_updates=True)
     except Exception as e:
         print(f"[webhook] delete error: {e}")
+    # Меню команд (подсказки при вводе /)
+    from aiogram.types import BotCommand
+    await bot.set_my_commands([
+        BotCommand(command="help",      description="Шпаргалка — все команды и примеры"),
+        BotCommand(command="reminders", description="Активные напоминания"),
+        BotCommand(command="notes",     description="Последние заметки"),
+        BotCommand(command="memory",    description="Сохранённые факты"),
+        BotCommand(command="schedule",  description="Расписание на сегодня"),
+        BotCommand(command="reset",     description="Очистить контекст диалога"),
+    ])
     print(f"[{datetime.now(_MSK).strftime('%H:%M:%S')} МСК] Бот запущен.")
     await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
 

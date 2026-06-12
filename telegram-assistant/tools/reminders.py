@@ -9,7 +9,7 @@ _scheduler: AsyncIOScheduler | None = None
 _bot = None
 _pending_acks: dict[int, set[int]] = {}
 
-REPEAT_MINUTES = 15
+REPEAT_MINUTES = 30
 
 # Поддерживаемые типы повторений
 RECURRENCE_LABELS = {
