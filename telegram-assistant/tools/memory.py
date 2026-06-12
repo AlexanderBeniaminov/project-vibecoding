@@ -1,10 +1,49 @@
 from __future__ import annotations
-from datetime import datetime
+import math
+from datetime import datetime, date
 from pathlib import Path
 from .db import get_conn
 
 # Категории для LLM (pending_* — внутренние, не передаются модели)
 CATEGORIES = {"fact", "preference", "project", "decision"}
+
+# Базовые скорости угасания по категории (Ebbinghaus)
+_DECAY_RATES = {
+    "fact": 0.005,
+    "preference": 0.003,
+    "project": 0.004,
+    "decision": 0.002,
+}
+_DECAY_DEFAULT = 0.006
+
+# Пороги тиров по relevance
+_TIERS = [
+    (0.8, "core"),
+    (0.6, "active"),
+    (0.4, "warm"),
+    (0.2, "cold"),
+    (0.0, "archive"),
+]
+
+
+def _calc_relevance(access_count: int, category: str, last_accessed: str | None) -> float:
+    """Вычисляет relevance по формуле Ebbinghaus decay."""
+    if not last_accessed:
+        return 0.5
+    try:
+        delta = (date.today() - date.fromisoformat(last_accessed)).days
+    except Exception:
+        delta = 0
+    rate = _DECAY_RATES.get(category, _DECAY_DEFAULT)
+    strength = 1 + math.log(max(access_count, 1))
+    return max(0.0, 1.0 - (rate / strength) * delta)
+
+
+def _get_tier(relevance: float) -> str:
+    for threshold, tier in _TIERS:
+        if relevance >= threshold:
+            return tier
+    return "archive"
 
 
 def _init_memory_table():
@@ -14,13 +53,21 @@ def _init_memory_table():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             category TEXT NOT NULL DEFAULT 'fact',
             text TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            access_count INTEGER NOT NULL DEFAULT 1,
+            last_accessed TEXT
         )
     """)
     conn.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
         USING fts5(text, content=memory, content_rowid=id)
     """)
+    # Миграция: добавить колонки decay если их нет
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(memory)").fetchall()]
+    if "access_count" not in cols:
+        conn.execute("ALTER TABLE memory ADD COLUMN access_count INTEGER NOT NULL DEFAULT 1")
+    if "last_accessed" not in cols:
+        conn.execute("ALTER TABLE memory ADD COLUMN last_accessed TEXT")
     conn.commit()
     conn.close()
 
@@ -126,9 +173,10 @@ def remember_fact(text: str, category: str = "fact") -> str:
 
 def recall_facts(query: str, limit: int = 5) -> str:
     conn = get_conn()
+    today = date.today().isoformat()
     try:
         rows = conn.execute(
-            """SELECT m.category, m.text
+            """SELECT m.id, m.category, m.text, m.access_count, m.last_accessed
                FROM memory_fts f
                JOIN memory m ON m.id = f.rowid
                WHERE memory_fts MATCH ? AND m.category NOT LIKE 'pending_%'
@@ -140,13 +188,31 @@ def recall_facts(query: str, limit: int = 5) -> str:
         rows = []
     if not rows:
         rows = conn.execute(
-            "SELECT category, text FROM memory WHERE category NOT LIKE 'pending_%' ORDER BY id DESC LIMIT ?",
+            "SELECT id, category, text, access_count, last_accessed FROM memory WHERE category NOT LIKE 'pending_%' ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
+
+    # Обновляем счётчики обращений
+    ids = [r["id"] for r in rows]
+    if ids:
+        conn.execute(
+            f"UPDATE memory SET access_count = access_count + 1, last_accessed = ? WHERE id IN ({','.join('?'*len(ids))})",
+            [today] + ids,
+        )
+        conn.commit()
+
     conn.close()
     if not rows:
         return "Ничего не найдено в памяти."
-    return "\n".join(f"[{r['category']}] {r['text']}" for r in rows)
+
+    # Сортируем: core → active → warm → cold → archive
+    def sort_key(r):
+        rel = _calc_relevance(r["access_count"] or 1, r["category"], r["last_accessed"])
+        order = {"core": 0, "active": 1, "warm": 2, "cold": 3, "archive": 4}
+        return order.get(_get_tier(rel), 5)
+
+    sorted_rows = sorted(rows, key=sort_key)
+    return "\n".join(f"[{r['category']}] {r['text']}" for r in sorted_rows)
 
 
 def list_memories(category: str = "") -> str:
@@ -178,13 +244,19 @@ def forget_fact(memory_id: int) -> str:
 def get_recent_summary(limit: int = 5) -> str:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT category, text FROM memory WHERE category NOT LIKE 'pending_%' ORDER BY id DESC LIMIT ?",
+        "SELECT category, text, access_count, last_accessed FROM memory WHERE category NOT LIKE 'pending_%' ORDER BY id DESC LIMIT ?",
         (limit,),
     ).fetchall()
     conn.close()
     if not rows:
         return ""
-    return "\n".join(f"- [{r['category']}] {r['text']}" for r in rows)
+    # Показываем core/active факты первыми
+    def sort_key(r):
+        rel = _calc_relevance(r["access_count"] or 1, r["category"], r["last_accessed"])
+        order = {"core": 0, "active": 1, "warm": 2, "cold": 3, "archive": 4}
+        return order.get(_get_tier(rel), 5)
+    sorted_rows = sorted(rows, key=sort_key)
+    return "\n".join(f"- [{r['category']}] {r['text']}" for r in sorted_rows)
 
 
 # ── Обновление файлов базы знаний ─────────────────────────────

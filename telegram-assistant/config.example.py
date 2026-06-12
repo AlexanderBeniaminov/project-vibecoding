@@ -13,6 +13,7 @@ GROQ_API_KEY = "YOUR_GROQ_API_KEY"
 
 DB_PATH = "/home/parser/bots/assistant/data/assistant.db"
 KNOWLEDGE_DIR = "/home/parser/bots/assistant/knowledge"
+VAULT_DIR = "/home/parser/bots/assistant/vault"
 
 # Google Sheets — Задачи недели (aihotel ВК Губаха)
 STRATEGY_SHEET_ID = "11eaWcbY1pFMfniACcpZkodJgLOzTRpbXmyejSK9LEQ4"

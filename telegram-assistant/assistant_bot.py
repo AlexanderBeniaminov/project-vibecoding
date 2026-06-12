@@ -136,7 +136,7 @@ import openai
 
 import config
 from tools.db import init_db
-from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, team_tasks, email_tool, contacts as contacts_tool
+from tools import notes, reminders as rem_tool, calendar, web, memory as mem_tool, team_tasks, email_tool, contacts as contacts_tool, vault as vault_tool
 
 # ── Инициализация ─────────────────────────────────────────────
 bot = Bot(token=config.TELEGRAM_TOKEN)
@@ -629,6 +629,59 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_card",
+            "description": (
+                "Сохранить знание, идею, решение или вывод как карточку во vault. "
+                "Используй когда: 'запомни идею', 'сохрани мысль', 'зафиксируй решение', "
+                "'записал вывод', 'сохрани это в базу знаний'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "card_type": {
+                        "type": "string",
+                        "description": "Тип: idea, learning, decision, note, contact_card",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Краткий заголовок (3-7 слов)",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Содержание карточки",
+                    },
+                    "tags": {
+                        "type": "string",
+                        "description": "Теги через запятую, например: 'ai, автоматизация, проект'",
+                    },
+                },
+                "required": ["card_type", "title", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_vault",
+            "description": (
+                "Поиск по базе знаний (vault): идеи, решения, выводы, заметки. "
+                "Используй когда: 'найди идею про X', 'что я думал о Y', 'поищи в базе знаний'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Поисковый запрос",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 # ── Выполнение инструментов ───────────────────────────────────
@@ -746,6 +799,15 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
                 args.get("result", ""),
                 args.get("how_to_check", ""),
             )
+        elif name == "save_card":
+            return vault_tool.save_card(
+                args["card_type"],
+                args["title"],
+                args["content"],
+                args.get("tags", ""),
+            )
+        elif name == "search_vault":
+            return vault_tool.search_vault(args["query"])
         else:
             return f"Неизвестный инструмент: {name}"
     except Exception as e:
@@ -1781,6 +1843,13 @@ async def handle_message(message: Message):
     else:
         text = message.text
 
+    # Пишем в daily vault для ночной обработки
+    try:
+        label = "🎙" if message.voice else "💬"
+        vault_tool.append_daily(f"{label} {text}")
+    except Exception:
+        pass
+
     # Перехват «переделай» — reply на мой ответ
     if (message.reply_to_message
             and message.reply_to_message.from_user
@@ -1940,81 +2009,6 @@ async def weekly_review():
 
 
 
-
-# ── Авто-резюме дня (21:00 МСК) ──────────────────────────────
-async def daily_summary():
-    """Отправляет дайджест дня в 21:00 МСК."""
-    for user_id in config.ALLOWED_USER_IDS:
-        try:
-            from tools.db import get_conn as _db_conn
-            conn = _db_conn()
-            today_iso = datetime.now(_MSK).strftime("%Y-%m-%d")
-            today_label = datetime.now(_MSK).strftime("%d.%m.%Y")
-
-            # Заметки созданные сегодня
-            rows_notes = conn.execute(
-                "SELECT text FROM notes WHERE created_at LIKE ? ORDER BY id DESC",
-                (f"{today_iso}%",)
-            ).fetchall()
-
-            # Напоминания на сегодня (выполненные и активные)
-            rows_rem = conn.execute(
-                """SELECT text, done FROM reminders
-                   WHERE user_id=? AND remind_at LIKE ?
-                   ORDER BY done, remind_at""",
-                (user_id, f"{today_iso}%",)
-            ).fetchall()
-
-            # Идеи добавленные сегодня
-            rows_ideas = conn.execute(
-                "SELECT text FROM memory WHERE category IN ('idea','ideas') AND created_at LIKE ? ORDER BY id DESC",
-                (f"{today_iso}%",)
-            ).fetchall()
-            conn.close()
-
-            if not rows_notes and not rows_rem and not rows_ideas:
-                await bot.send_message(user_id, f"🌙 *Итоги {today_label}*\n\nСегодня ничего не записано.", parse_mode="Markdown")
-                continue
-
-            # Собираем данные для AI-саммари
-            data_lines = []
-            if rows_notes:
-                data_lines.append(f"Заметки ({len(rows_notes)}): " + " | ".join(r['text'][:80] for r in rows_notes[:10]))
-            if rows_rem:
-                done = [r['text'] for r in rows_rem if r['done']]
-                pending = [r['text'] for r in rows_rem if not r['done']]
-                if done:
-                    data_lines.append(f"Выполнено: {chr(10).join(done[:5])}")
-                if pending:
-                    data_lines.append(f"Не выполнено: {chr(10).join(pending[:5])}")
-            if rows_ideas:
-                data_lines.append(f"Новые идеи: " + " | ".join(r['text'][:60] for r in rows_ideas[:5]))
-
-            data_text = "\n".join(data_lines)
-
-            # AI саммари через RouterAI
-            user_prompt = (
-                f"Данные за сегодня:\n{data_text}\n\n"
-                "Сделай краткое резюме дня в 4-5 строках: что сделано, что не сделано, что запланировано, ключевые заметки."
-            )
-            resp = await ai_client.chat.completions.create(
-                model=config.MODEL,
-                messages=[
-                    {"role": "system", "content": f"Ты личный помощник. Сегодня {today_label}. Отвечай по-русски, кратко."},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=2000,
-                temperature=0.3,
-            )
-            msg = resp.choices[0].message
-            summary = (msg.content or "").strip()
-            if not summary and hasattr(msg, 'reasoning'):
-                summary = (msg.reasoning or "")[-600:]
-
-            text = f"🌙 *Итоги {today_label}*\n\n{summary}"
-            await bot.send_message(user_id, text, parse_mode="Markdown")
-        except Exception as e:
-            print(f"[daily_summary] ошибка для {user_id}: {e}")
 
 # ── Команда /schedule ─────────────────────────────────────────
 @dp.message(Command("schedule"))
