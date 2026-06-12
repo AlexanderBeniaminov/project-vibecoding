@@ -156,6 +156,53 @@ def _find_cities(text: str) -> list[str]:
     return [c for _, c in hits]
 
 
+def _find_origin_dest(query: str) -> tuple:
+    """
+    Определяет откуда (origin) и куда (dest) по предлогам.
+    'из/от [город]' → origin, 'в/до/во [город]' → dest.
+    Возвращает (origin_code, dest_code) — любой может быть None.
+    """
+    q = query.lower()
+    origin = dest = None
+    seen: set[str] = set()
+
+    for city, code in sorted(_IATA.items(), key=lambda x: -len(x[0])):
+        pos = q.find(city)
+        if pos < 0 or code in seen:
+            continue
+        seen.add(code)
+        # 10 символов перед городом — ищем предлог
+        prefix = q[max(0, pos - 10):pos]
+        if re.search(r'\b(из|от)\s*$', prefix.rstrip()):
+            if origin is None:
+                origin = code
+        elif re.search(r'\b(в|во|до)\s*$', prefix.rstrip()):
+            if dest is None:
+                dest = code
+
+    # Если предлоги не нашли — берём все города и назначаем по позиции
+    # В русском языке "найди билеты В Пермь из Москвы": Пермь первая → dest
+    if origin is None and dest is None:
+        cities = _find_cities(query)
+        if len(cities) >= 2:
+            dest, origin = cities[0], cities[1]
+        elif len(cities) == 1:
+            dest = cities[0]
+    elif origin is None:
+        # dest известен, ищем другой город как origin
+        for c in _find_cities(query):
+            if c != dest:
+                origin = c
+                break
+    elif dest is None:
+        for c in _find_cities(query):
+            if c != origin:
+                dest = c
+                break
+
+    return origin, dest
+
+
 def _find_dates(text: str) -> list[tuple[str, str]]:
     """Все даты вида '22 июня' → [(DDMM, YYYY-MM-DD), ...]."""
     pat = re.compile(
@@ -219,15 +266,20 @@ def build_deep_links(query: str, kind: str | None = None) -> list[dict]:
     links: list[dict] = []
 
     if kind == "flights":
-        cities = _find_cities(query)
+        origin, dest = _find_origin_dest(query)
         dates = _find_dates(query)
-        if len(cities) >= 2 and dates:
-            o, d = cities[0], cities[1]
+        if origin and dest and dates:
             d1 = dates[0][0]
             back = dates[1][0] if len(dates) >= 2 else ""
             links.append({
                 "name": "✈️ Авиасейлс",
-                "url": f"https://www.aviasales.ru/search/{o}{d1}{d}{back}1",
+                "url": f"https://www.aviasales.ru/search/{origin}{d1}{dest}{back}1",
+            })
+        elif dest and dates:
+            d1 = dates[0][0]
+            links.append({
+                "name": "✈️ Авиасейлс",
+                "url": f"https://www.aviasales.ru/search/MOW{d1}{dest}1",
             })
         else:
             links.append({"name": "✈️ Авиасейлс", "url": "https://www.aviasales.ru"})
@@ -288,14 +340,17 @@ async def smart_search_and_answer(
     ai_client,
     search_model: str,
     kind: str | None = None,
-) -> str:
-    """Perplexity Sonar Pro → структурированный ответ + прямые ссылки."""
+) -> tuple:
+    """
+    Perplexity Sonar Pro → (answer_text, links).
+    links — список {'name': ..., 'url': ...} для inline-кнопок в Telegram.
+    """
     if kind is None:
         kind = detect_type(query)
 
     system_prompt = {
-        "flights": _FLIGHT_SYSTEM,
-        "hotels":  _HOTEL_SYSTEM,
+        "flights":  _FLIGHT_SYSTEM,
+        "hotels":   _HOTEL_SYSTEM,
         "products": _PRODUCT_SYSTEM,
     }.get(kind, _PRODUCT_SYSTEM)
 
@@ -310,17 +365,10 @@ async def smart_search_and_answer(
             temperature=0.1,
         )
         answer = (resp.choices[0].message.content or "").strip()
-        # Убираем цитаты Perplexity [1],[2] — они ломают Telegram Markdown
-        answer = re.sub(r'\[\d+\]', '', answer)
-        answer = answer.strip()
+        # Убираем цитаты Perplexity [1][2] — они ломают Telegram Markdown
+        answer = re.sub(r'\[\d+\]', '', answer).strip()
     except Exception as e:
         answer = f"⚠️ Ошибка поиска: {e}"
 
     links = build_deep_links(query, kind)
-    if links:
-        link_lines = ["", "🔗 *Проверить напрямую:*"]
-        for lnk in links:
-            link_lines.append(f"[{lnk['name']}]({lnk['url']})")
-        answer += "\n" + "\n".join(link_lines)
-
-    return answer
+    return answer, links

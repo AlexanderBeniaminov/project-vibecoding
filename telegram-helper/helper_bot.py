@@ -173,6 +173,23 @@ async def _safe_answer(message: Message, text: str, parse_mode: str = "Markdown"
         # Если Markdown сломан — отправляем plain text
         await message.answer(text, parse_mode=None)
 
+
+async def _send_smart_result(message: Message, result: tuple) -> None:
+    """Отправляет ответ умного поиска: текст + inline-кнопки со ссылками."""
+    text, links = result
+    # Perplexity-ответ — без Markdown (может содержать форматирование несовместимое с TG)
+    await _safe_answer(message, text, parse_mode=None)
+    if links:
+        # Кнопки по 2 в ряд
+        rows = []
+        for i in range(0, len(links), 2):
+            row = [InlineKeyboardButton(text=links[i]["name"], url=links[i]["url"])]
+            if i + 1 < len(links):
+                row.append(InlineKeyboardButton(text=links[i + 1]["name"], url=links[i + 1]["url"]))
+            rows.append(row)
+        kb = InlineKeyboardMarkup(inline_keyboard=rows)
+        await message.answer("🔗 Проверить напрямую:", reply_markup=kb)
+
 # ── Typing indicator ──────────────────────────────────────────────
 async def _keep_typing(chat_id: int, stop: asyncio.Event):
     while not stop.is_set():
@@ -1236,7 +1253,6 @@ async def handle_message(message: Message):
         kind = detect_type(combined)
         clarification = get_clarification(combined, kind)
         if clarification:
-            # Всё ещё не хватает данных — задаём следующий вопрос
             _pending_searches[user_id] = combined
             await message.answer(clarification)
             return
@@ -1248,7 +1264,7 @@ async def handle_message(message: Message):
             stop.set(); typing.cancel()
             try: await typing
             except asyncio.CancelledError: pass
-        await _safe_answer(message, result)
+        await _send_smart_result(message, result)
         return
 
     # ── 1. Проектные заметки ──────────────────────────────────────
@@ -1352,6 +1368,7 @@ async def handle_message(message: Message):
                 stop.set(); typing.cancel()
                 try: await typing
                 except asyncio.CancelledError: pass
+            await _send_smart_result(message, result)
         else:
             stop = asyncio.Event()
             typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
@@ -1361,7 +1378,7 @@ async def handle_message(message: Message):
                 stop.set(); typing.cancel()
                 try: await typing
                 except asyncio.CancelledError: pass
-        await _safe_answer(message, result)
+            await _safe_answer(message, result)
         return
 
     # ── 9. AI-чат (fallback) ──────────────────────────────────────
@@ -1396,11 +1413,13 @@ async def handle_message(message: Message):
                 stop2 = asyncio.Event()
                 typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
                 try:
-                    response = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
+                    smart_result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
                 finally:
                     stop2.set(); typing2.cancel()
                     try: await typing2
                     except asyncio.CancelledError: pass
+                await _send_smart_result(message, smart_result)
+                return
         else:
             stop2 = asyncio.Event()
             typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
