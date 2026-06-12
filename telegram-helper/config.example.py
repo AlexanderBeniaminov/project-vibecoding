@@ -5,6 +5,7 @@ ROUTERAI_BASE_URL = "https://routerai.ru/api/v1"
 ROUTERAI_API_KEY = "sk-f61V-MK6PAPbGrYSYFAMEnU4i9AtrP0-"
 MODEL = "deepseek/deepseek-v4-pro"
 VISION_MODEL = "anthropic/claude-sonnet-4.6"  # для фото и таблиц
+SEARCH_MODEL = "perplexity/sonar-pro"         # умный поиск: билеты, отели, товары
 
 GROQ_API_KEY = "gsk_YOUR_GROQ_KEY_HERE"
 

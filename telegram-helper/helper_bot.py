@@ -35,6 +35,7 @@ from groq import Groq
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
+from smart_search import COMMERCIAL_RE, smart_search_and_answer
 
 # ── Инициализация ─────────────────────────────────────────────────
 _MSK = ZoneInfo("Europe/Moscow")
@@ -1310,11 +1311,16 @@ async def handle_message(message: Message):
         return
 
     # ── 8. Веб-поиск ─────────────────────────────────────────────
-    if _SEARCH_RE.match(text.strip()) or any(k in q for k in ["расписание", "онлайн табло", "курс валют", "погода", "новости"]):
+    # Сначала проверяем коммерческие запросы (билеты/отели/товары) → Perplexity
+    _is_commercial = COMMERCIAL_RE.search(text.strip())
+    if _is_commercial or _SEARCH_RE.match(text.strip()) or any(k in q for k in ["расписание", "онлайн табло", "курс валют", "погода", "новости"]):
         stop = asyncio.Event()
         typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
         try:
-            result = await web_search_and_answer(text)
+            if _is_commercial:
+                result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL)
+            else:
+                result = await web_search_and_answer(text)
         finally:
             stop.set(); typing.cancel()
             try: await typing
@@ -1347,7 +1353,10 @@ async def handle_message(message: Message):
         stop2 = asyncio.Event()
         typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
         try:
-            response = await web_search_and_answer(text)
+            if COMMERCIAL_RE.search(text):
+                response = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL)
+            else:
+                response = await web_search_and_answer(text)
         finally:
             stop2.set(); typing2.cancel()
             try: await typing2
