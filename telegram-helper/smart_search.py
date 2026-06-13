@@ -308,15 +308,16 @@ def build_deep_links(query: str, kind: str | None = None) -> list[dict]:
             checkout = f"2026-{m2}-{d2}"
 
         cn = quote_plus(city_name or "")
-        ci = f"&checkin={checkin}&checkout={checkout}" if checkin else ""
+        ci_path  = f"?checkin={checkin}&checkout={checkout}" if checkin else ""  # для path-URL
+        ci_param = f"&checkin={checkin}&checkout={checkout}" if checkin else ""  # для query-URL
         ci_sutochno = f"/{checkin}/{checkout}" if checkin else ""
         city_slug = city_name.replace(" ", "-") if city_name else ""
 
         links += [
-            {"name": "🏨 Яндекс.Путешествия", "url": f"https://travel.yandex.ru/hotels/{cn}/{ci}"},
-            {"name": "🏨 Островок",            "url": f"https://ostrovok.ru/hotel/{cn}/{ci}"},
+            {"name": "🏨 Яндекс.Путешествия", "url": f"https://travel.yandex.ru/hotels/{cn}/{ci_path}"},
+            {"name": "🏨 Островок",            "url": f"https://ostrovok.ru/hotel/{cn}/{ci_path}"},
             {"name": "🏠 Суточно.ру",          "url": f"https://sutochno.ru/{city_slug}{ci_sutochno}"},
-            {"name": "🌐 Booking.com",         "url": f"https://www.booking.com/searchresults.html?ss={cn}{ci}"},
+            {"name": "🌐 Booking.com",         "url": f"https://www.booking.com/searchresults.html?ss={cn}{ci_param}"},
         ]
 
     else:  # products

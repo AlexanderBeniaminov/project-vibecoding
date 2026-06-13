@@ -784,6 +784,31 @@ async def cmd_start(message: Message):
         parse_mode="Markdown"
     )
 
+@dp.message(Command("help"))
+async def cmd_help(message: Message):
+    if not is_allowed(message.from_user.id):
+        return
+    await message.answer(
+        "*Помощник — шпаргалка*\n\n"
+        "✈️ *Умный поиск*\n"
+        "• Найди авиабилеты в Пермь 22 июня утром из Москвы\n"
+        "• Найди отели в Баку с 1 по 3 ноября\n"
+        "• Где дешевле молоко Пармалат с доставкой в Химки\n"
+        "→ Бот уточнит если чего-то не хватает, даст ссылки\n\n"
+        "📋 *Задачи команде Губаха*\n"
+        "• «Задача Виктору: проверить инженера» → в Sheets\n"
+        "• Голосовое тоже работает\n\n"
+        "📊 *Данные из таблиц*\n"
+        "• Выручка Монблан за май\n"
+        "• Загрузка отеля за апрель\n\n"
+        "👤 *CRM*: /crm Фамилия\n"
+        "📬 *Почта*: /mail — дайджест ab@entens.ru\n"
+        "📷 *Фото* — анализ чека, задача из скрина\n"
+        "🔄 /new — очистить контекст диалога\n\n"
+        "📌 Идеи и мысли голосом → сохраняются в Google Sheets",
+        parse_mode="Markdown"
+    )
+
 @dp.message(Command("new", "reset"))
 async def cmd_reset(message: Message):
     if not is_allowed(message.from_user.id):
