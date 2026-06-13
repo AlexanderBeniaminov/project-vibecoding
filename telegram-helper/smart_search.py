@@ -220,11 +220,11 @@ def _find_dates(text: str) -> list[tuple[str, str]]:
 
 
 def detect_type(text: str) -> str:
-    """Тип запроса: 'flights' | 'hotels' | 'products'."""
+    """Тип запроса: 'flights' | 'hotels' | 'products'. Ищет корни слов."""
     q = text.lower()
     if any(w in q for w in ["билет", "рейс", "авиа", "самолёт", "перелёт", "авиабилет"]):
         return "flights"
-    if any(w in q for w in ["отель", "гостиниц", "забронир", "суточ", "ночёвк",
+    if any(w in q for w in ["отел", "гостиниц", "забронир", "суточ", "ночёвк",
                              "переночев", "проживан", "где остановить"]):
         return "hotels"
     return "products"
