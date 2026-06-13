@@ -371,4 +371,15 @@ async def smart_search_and_answer(
         answer = f"⚠️ Ошибка поиска: {e}"
 
     links = build_deep_links(query, kind)
+
+    # Для авиабилетов — Aviasales URL сразу в тексте (авторезерв, если кнопки не отобразятся)
+    if kind == "flights":
+        origin, dest = _find_origin_dest(query)
+        dates = _find_dates(query)
+        if origin and dest and dates:
+            d1 = dates[0][0]
+            back = dates[1][0] if len(dates) >= 2 else ""
+            avia_url = f"https://www.aviasales.ru/search/{origin}{d1}{dest}{back}1"
+            answer += f"\n\n✈️ Открыть на Авиасейлс:\n{avia_url}"
+
     return answer, links

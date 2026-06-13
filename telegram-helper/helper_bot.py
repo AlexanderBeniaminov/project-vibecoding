@@ -176,19 +176,21 @@ async def _safe_answer(message: Message, text: str, parse_mode: str = "Markdown"
 
 async def _send_smart_result(message: Message, result: tuple) -> None:
     """Отправляет ответ умного поиска: текст + inline-кнопки со ссылками."""
+    import logging
     text, links = result
-    # Perplexity-ответ — без Markdown (может содержать форматирование несовместимое с TG)
     await _safe_answer(message, text, parse_mode=None)
     if links:
-        # Кнопки по 2 в ряд
-        rows = []
-        for i in range(0, len(links), 2):
-            row = [InlineKeyboardButton(text=links[i]["name"], url=links[i]["url"])]
-            if i + 1 < len(links):
-                row.append(InlineKeyboardButton(text=links[i + 1]["name"], url=links[i + 1]["url"]))
-            rows.append(row)
-        kb = InlineKeyboardMarkup(inline_keyboard=rows)
-        await message.answer("🔗 Проверить напрямую:", reply_markup=kb)
+        try:
+            rows = []
+            for i in range(0, len(links), 2):
+                row = [InlineKeyboardButton(text=links[i]["name"], url=links[i]["url"])]
+                if i + 1 < len(links):
+                    row.append(InlineKeyboardButton(text=links[i + 1]["name"], url=links[i + 1]["url"]))
+                rows.append(row)
+            kb = InlineKeyboardMarkup(inline_keyboard=rows)
+            await message.answer("🔗 Проверить напрямую:", reply_markup=kb)
+        except Exception as exc:
+            logging.getLogger(__name__).error("inline keyboard send failed: %s", exc)
 
 # ── Typing indicator ──────────────────────────────────────────────
 async def _keep_typing(chat_id: int, stop: asyncio.Event):
