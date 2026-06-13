@@ -197,6 +197,10 @@ def _find_origin_dest(query: str) -> tuple:
                 dest = c
                 break
 
+    # Если origin так и не определён — по умолчанию Москва
+    if origin is None and dest is not None:
+        origin = "MOW"
+
     return origin, dest
 
 
@@ -235,13 +239,8 @@ def get_clarification(query: str, kind: str) -> str | None:
 
     if kind == "flights":
         if len(cities) == 0:
-            return "✈️ Куда летите? И откуда? (например: «из Москвы в Пермь»)"
-        if len(cities) == 1:
-            origin, dest = _find_origin_dest(query)
-            if origin and not dest:
-                return "✈️ Куда летите?"
-            return "✈️ Откуда вылетаете? (Москва, Шереметьево, другой город)"
-        # Есть оба города — дата опциональна, можно искать
+            return "✈️ Куда летите? (например: «в Баку», «в Пермь»)"
+        # Если хотя бы одно направление известно — Москва по умолчанию, не спрашиваем
         return None
 
     if kind == "hotels":
@@ -353,14 +352,21 @@ async def smart_search_and_answer(
         "products": _PRODUCT_SYSTEM,
     }.get(kind, _PRODUCT_SYSTEM)
 
+    # Для рейсов: если origin не указан явно — добавляем "из Москвы" в запрос к Perplexity
+    user_query = query
+    if kind == "flights":
+        origin_check, _ = _find_origin_dest(query)
+        if origin_check == "MOW" and "москв" not in query.lower() and "шереметьев" not in query.lower():
+            user_query = query + " из Москвы"
+
     try:
         resp = await ai_client.chat.completions.create(
             model=search_model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": query},
+                {"role": "user", "content": user_query},
             ],
-            max_tokens=1500,
+            max_tokens=600,
             temperature=0.1,
         )
         answer = (resp.choices[0].message.content or "").strip()
@@ -371,11 +377,11 @@ async def smart_search_and_answer(
 
     links = build_deep_links(query, kind)
 
-    # Для авиабилетов — Aviasales URL сразу в тексте (авторезерв, если кнопки не отобразятся)
+    # Для авиабилетов — Aviasales URL сразу в тексте
     if kind == "flights":
         origin, dest = _find_origin_dest(query)
         dates = _find_dates(query)
-        if origin and dest and dates:
+        if dest and dates:
             d1 = dates[0][0]
             back = dates[1][0] if len(dates) >= 2 else ""
             avia_url = f"https://www.aviasales.ru/search/{origin}{d1}{dest}{back}1"

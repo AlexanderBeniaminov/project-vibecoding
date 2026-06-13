@@ -1263,13 +1263,17 @@ async def handle_message(message: Message):
 
     # ── 0. Ожидающий коммерческий поиск (пользователь ответил на уточнение) ──
     if user_id in _pending_searches:
-        combined = _pending_searches.pop(user_id) + " " + text
+        prev_query, attempts = _pending_searches.pop(user_id)
+        combined = prev_query + " " + text
         kind = detect_type(combined)
         clarification = get_clarification(combined, kind)
-        if clarification:
-            _pending_searches[user_id] = combined
+        if clarification and attempts < 2:
+            _pending_searches[user_id] = (combined, attempts + 1)
             await message.answer(clarification)
             return
+        elif clarification:
+            # Исчерпали попытки — ищем с тем что есть
+            pass
         stop = asyncio.Event()
         typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
         try:
@@ -1371,7 +1375,7 @@ async def handle_message(message: Message):
             clarification = get_clarification(text, kind)
             if clarification:
                 # Не хватает данных — сохраняем запрос и задаём вопрос
-                _pending_searches[user_id] = text
+                _pending_searches[user_id] = (text, 0)
                 await message.answer(clarification)
                 return
             stop = asyncio.Event()
@@ -1421,7 +1425,7 @@ async def handle_message(message: Message):
             kind = detect_type(text)
             clarification = get_clarification(text, kind)
             if clarification:
-                _pending_searches[user_id] = text
+                _pending_searches[user_id] = (text, 0)
                 response = clarification
             else:
                 stop2 = asyncio.Event()
