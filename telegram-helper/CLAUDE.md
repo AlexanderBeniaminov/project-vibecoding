@@ -1,0 +1,98 @@
+# CLAUDE.md — Telegram Помощник (telegram-helper)
+
+Бот `@pomoshniknamac_bot`. Живёт на VPS `/home/parser/bots/helper/`.
+Деплой: `bash telegram-helper/deploy.sh`
+
+---
+
+## Умный поиск (smart_search.py)
+
+Подключён Perplexity Sonar Pro через RouterAI (`SEARCH_MODEL = "perplexity/sonar-pro"`).
+Срабатывает на коммерческие запросы раньше DuckDuckGo.
+
+### Поведение по типам
+
+#### Авиабилеты (`kind = "flights"`)
+- Триггеры: авиабилет, билет, рейс, авиа, самолёт, перелёт (все падежные формы)
+- **Откуда по умолчанию — Москва (MOW).** Спрашивать "Откуда?" только если вообще нет ни одного города
+- **Диапазон дат** "с 3 по 10 января" = первая дата вылет, вторая обратно
+- **Aviasales URL**: `MOW{DDMM_OUT}{DEST}{DDMM_BACK}1` — всегда с обратной датой если она есть
+- **Цена**: туда-обратно если две даты, в одну сторону если одна дата
+- **НЕ указывать** время суток (утро/вечер/до 12:00) — только если пользователь явно попросил
+- Ответ: 2–3 строки максимум, никаких кнопок
+
+Формат ответа:
+```
+✈️ Рейсы Москва → Баку, 3 января / обратно 10 января
+
+Типичные цены в январе: от 26 000 до 52 000 руб туда и обратно (эконом).
+
+✈️ Открыть на Авиасейлс:
+https://www.aviasales.ru/search/MOW0301GYD10011
+```
+
+#### Отели (`kind = "hotels"`)
+- Триггеры: отел, гостиниц, забронир, суточн, ночёвк, переночев, проживан
+- Ответ: таблица 3–5 вариантов с ценой/ночь, рейтингом, источником
+- Ссылки: Яндекс.Путешествия, Островок, Суточно.ру, Booking.com
+
+#### Товары (`kind = "products"`)
+- Триггеры: с доставкой в, самое дешёвое, дешевл
+- Еда: Viberis, Маркет, Ozon, Перекрёсток, Лента, Ашан, Пятёрочка
+- Остальное: Viberis, Маркет, Ozon, Wildberries, СберМегаМаркет
+- Ответ: таблица топ-5 с прямыми ссылками на товар
+
+### Уточнения (_pending_searches)
+- Хранит `(query, attempts)` — максимум 2 попытки уточнить, потом ищет с тем что есть
+- Для авиабилетов спрашивает только если нет ни одного города
+
+### COMMERCIAL_RE
+Использует корни слов + `[а-яёА-ЯЁ]*` суффикс — ловит все падежные формы.
+НЕ использует `\b` в конце (иначе "авиабилеты" не совпадёт с "авиабилет").
+
+### detect_type
+Использует подстроки-корни: `"отел"` (не `"отель"`), `"авиа"`, `"билет"`, `"рейс"`.
+
+---
+
+## Ключевые файлы
+
+| Файл | Роль |
+|------|------|
+| `smart_search.py` | COMMERCIAL_RE, detect_type, get_clarification, build_deep_links, smart_search_and_answer |
+| `helper_bot.py` | Блок 0 (pending), блок 8 (COMMERCIAL_RE → Perplexity / DuckDuckGo) |
+| `config.example.py` | Шаблон с SEARCH_MODEL |
+| `/home/parser/bots/helper/config.py` | Серверный конфиг (не в git) |
+
+---
+
+## Маршрутизация в helper_bot.py
+
+```
+Блок 0: если user_id в _pending_searches → объединяем с предыдущим запросом → ищем
+Блок 8: COMMERCIAL_RE.search(text) → smart_search_and_answer (Perplexity)
+         _SEARCH_RE.match(text)    → web_search_and_answer (DuckDuckGo)
+Блок 9: fallback → LLM → если ответ "ПОИСК" → снова блок 8
+```
+
+---
+
+## Aviasales URL формат
+
+```
+Туда:          /search/{ORIGIN}{DDMM}{DEST}{ADULTS}       → MOW2206PEE1
+Туда-обратно:  /search/{ORIGIN}{DDMM}{DEST}{DDMM_BACK}{ADULTS} → MOW0301GYD10011
+```
+
+DDMM = день+месяц без разделителей: 22 июня → 2206, 3 января → 0301.
+
+---
+
+## На сервере
+
+```
+systemctl status telegram-helper
+journalctl -u telegram-helper -n 50
+```
+
+Python venv: `/home/parser/venv` (Python 3.12)
