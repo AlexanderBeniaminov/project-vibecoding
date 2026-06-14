@@ -1,10 +1,12 @@
 """
-Шопинг-агент: параллельный поиск цен через Perplexity с site: оператором.
-7 одновременных запросов — каждый ищет товар строго на одном домене.
-Прямой scraping невозможен: магазины блокируют VPS-IP через PoW/429/403.
+Шопинг-агент: параллельный поиск цен через Perplexity.
+Цену берём из Perplexity (text-only, 30 токенов — быстро).
+Ссылку генерируем сами → всегда рабочая страница поиска магазина.
+Прямые API магазинов недоступны с VPS (PoW/429/403).
 """
 import asyncio
 import re
+from urllib.parse import quote_plus
 
 STORES = [
     ("Wildberries", "wildberries.ru",   "бесплатно",           0),
@@ -16,105 +18,98 @@ STORES = [
     ("Metro",       "metro-cc.ru",      "299 ₽",             299),
 ]
 
-# Таблица транслитерации кириллицы для брендов, которые часто пишут по-русски
+# Рабочие поисковые URL для каждого домена (генерируем сами — всегда работают)
+def _search_url(domain: str, query: str) -> str:
+    q = quote_plus(query)
+    return {
+        "wildberries.ru": f"https://www.wildberries.ru/catalog/0/search.aspx?search={q}",
+        "ozon.ru":        f"https://www.ozon.ru/search/?text={q}",
+        "5ka.ru":         f"https://5ka.ru/search/?search={q}",
+        "perekrestok.ru": f"https://www.perekrestok.ru/cat/search?search={q}",
+        "lenta.com":      f"https://lenta.com/search/?q={q}",
+        "auchan.ru":      f"https://www.auchan.ru/s/{q}",
+        "metro-cc.ru":    f"https://online.metro-cc.ru/search?query={q}",
+    }.get(domain, f"https://www.{domain}/search?q={q}")
+
+
+# Таблица транслитерации брендов: кириллица → латиница
 _TRANSLIT = {
     "давыдофф": "davidoff", "давидофф": "davidoff",
-    "нескафе": "nescafe", "якобс": "jacobs", "лавацца": "lavazza",
-    "тефаль": "tefal", "бош": "bosch", "самсунг": "samsung",
-    "фарфалле": "farfalle", "барилла": "barilla",
+    "нескафе":  "nescafe",  "якобс":    "jacobs",
+    "лавацца":  "lavazza",  "тефаль":   "tefal",
 }
 
-def _enrich_query(query: str, domain: str) -> str:
-    """Добавляет латинский вариант бренда и уточнения для лучшего поиска."""
-    q = query
+def _enrich(query: str) -> str:
+    """Добавляет латинский вариант бренда если найдена кириллическая форма."""
     q_lower = query.lower()
-
-    # Добавляем латинский вариант бренда если есть в таблице
     for ru, en in _TRANSLIT.items():
         if ru in q_lower and en not in q_lower:
-            q = f"{q} {en}"
-            break
-
-    # Для WB явно запрашиваем что товар есть в наличии
-    if "wildberries" in domain:
-        return f"{q} site:{domain} купить в наличии добавить в корзину"
-
-    return f"{q} site:{domain} купить цена в наличии"
+            return f"{query} {en}"
+    return query
 
 
-async def _search_one(query: str, store_name: str, domain: str,
-                      delivery: str, delivery_cost: int,
-                      ai_client, model: str) -> dict | None:
-    """Один Perplexity-запрос с site: для конкретного магазина."""
+async def _get_price(query: str, domain: str, ai_client, model: str) -> float | None:
+    """Запрашивает у Perplexity ТОЛЬКО цену на конкретном домене."""
+    enriched = _enrich(query)
     try:
-        enriched = _enrich_query(query, domain)
         resp = await ai_client.chat.completions.create(
             model=model,
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        f"Ищешь товар НА САЙТЕ {domain}.\n"
-                        f"ЖЁСТКОЕ ПРАВИЛО: возвращай ТОЛЬКО если:\n"
-                        f"  1. Товар ЕСТЬ В НАЛИЧИИ прямо сейчас\n"
-                        f"  2. Есть активная кнопка 'Добавить в корзину' или 'Купить'\n"
-                        f"  3. НЕТ надписей: 'Нет в наличии', 'Товар закончился', "
-                        f"     'Доставка недоступна', 'Нет на складе'\n\n"
-                        f"Верни ОДНУ строку: ЦЕНА|URL\n"
-                        f"Цена — только число (рублей, без знаков).\n"
-                        f"URL — полная ссылка https://... на {domain} на конкретный товар.\n\n"
-                        f"Если товар НЕ НАЙДЕН или НЕТ В НАЛИЧИИ — верни ровно: НЕТ"
+                        f"Найди актуальную цену товара на {domain}.\n"
+                        f"Верни ТОЛЬКО одно число — цену в рублях (например: 705).\n"
+                        f"Только если товар ЕСТЬ В НАЛИЧИИ (кнопка 'Купить' активна).\n"
+                        f"Если не найдено или нет в наличии — верни: НЕТ"
                     ),
                 },
-                {"role": "user", "content": enriched},
+                {
+                    "role": "user",
+                    "content": f"{enriched} site:{domain} цена в наличии купить",
+                },
             ],
-            max_tokens=150,
+            max_tokens=30,
             temperature=0.0,
         )
         text = (resp.choices[0].message.content or "").strip()
-        text = re.sub(r'\[\d+\]', '', text).strip()  # убираем цитаты Perplexity
+        text = re.sub(r'\[\d+\]', '', text).strip()
 
-        if not text or text.upper().startswith("НЕТ") or "|" not in text:
+        if not text or "НЕТ" in text.upper():
             return None
 
-        price_str, url = text.split("|", 1)
-        url = url.strip()
-
-        # Валидация цены
-        price_clean = re.sub(r"[^\d.,]", "", price_str).replace(",", ".")
-        if not price_clean:
+        # Извлекаем число из ответа
+        nums = re.findall(r'[\d\s]+[.,]?\d*', text)
+        if not nums:
             return None
-        price = float(price_clean)
-        if price <= 0:
-            return None
-
-        # Валидация URL — должен содержать домен магазина
-        if not url.startswith("http") or domain not in url:
-            return None
-
-        return {
-            "store": store_name,
-            "price": price,
-            "delivery": delivery,
-            "delivery_cost": delivery_cost,
-            "url": url,
-        }
+        price_str = nums[0].replace(" ", "").replace(",", ".")
+        price = float(price_str)
+        return price if price > 0 else None
     except Exception:
         return None
 
 
 async def search_all_stores(query: str, ai_client=None, model: str = "perplexity/sonar-pro") -> list[dict]:
-    """Параллельный поиск во всех 7 магазинах."""
-    tasks = [
-        _search_one(query, name, domain, delivery, dcost, ai_client, model)
-        for name, domain, delivery, dcost in STORES
-    ]
+    """Параллельный поиск цен во всех 7 магазинах."""
+    async def _one(name, domain, delivery, dcost):
+        price = await _get_price(query, domain, ai_client, model)
+        if price is None:
+            return None
+        return {
+            "store": name,
+            "price": price,
+            "delivery": delivery,
+            "delivery_cost": dcost,
+            "url": _search_url(domain, query),  # всегда рабочая ссылка
+        }
+
+    tasks = [_one(name, domain, delivery, dcost) for name, domain, delivery, dcost in STORES]
     raw = await asyncio.gather(*tasks, return_exceptions=True)
     return [r for r in raw if isinstance(r, dict)]
 
 
 def format_results(query: str, results: list[dict]) -> str:
-    """Форматирует результаты в текст для Telegram. Магазины без цены не показываем."""
+    """Форматирует результаты в текст для Telegram."""
     found = [r for r in results if r.get("price")]
 
     if not found:
