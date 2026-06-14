@@ -36,6 +36,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
 from smart_search import COMMERCIAL_RE, detect_type, get_clarification, smart_search_and_answer
+from shopping import search_all_stores, format_results as format_shopping
 
 # ── Инициализация ─────────────────────────────────────────────────
 _MSK = ZoneInfo("Europe/Moscow")
@@ -1372,11 +1373,24 @@ async def handle_message(message: Message):
         return
 
     # ── 8. Веб-поиск ─────────────────────────────────────────────
-    # Коммерческие запросы (билеты/отели/товары) → Perplexity; общие → DuckDuckGo
+    # Продукты → прямые API магазинов; билеты/отели → Perplexity; общее → DuckDuckGo
     _is_commercial = COMMERCIAL_RE.search(text.strip())
     if _is_commercial or _SEARCH_RE.match(text.strip()) or any(k in q for k in ["расписание", "онлайн табло", "курс валют", "погода", "новости"]):
         if _is_commercial:
             kind = detect_type(text)
+            if kind == "products":
+                # Прямой поиск по API магазинов (WB, Ozon, 5ka, Metro и др.)
+                stop = asyncio.Event()
+                typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
+                try:
+                    shop_results = await search_all_stores(text)
+                    response_text = format_shopping(text, shop_results)
+                finally:
+                    stop.set(); typing.cancel()
+                    try: await typing
+                    except asyncio.CancelledError: pass
+                await _safe_answer(message, response_text, parse_mode=None)
+                return
             clarification = get_clarification(text, kind)
             if clarification:
                 # Не хватает данных — сохраняем запрос и задаём вопрос
@@ -1428,21 +1442,32 @@ async def handle_message(message: Message):
     if response.strip() == "ПОИСК":
         if COMMERCIAL_RE.search(text):
             kind = detect_type(text)
-            clarification = get_clarification(text, kind)
-            if clarification:
-                _pending_searches[user_id] = (text, 0)
-                response = clarification
-            else:
+            if kind == "products":
                 stop2 = asyncio.Event()
                 typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
                 try:
-                    smart_result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
+                    shop_results = await search_all_stores(text)
+                    response = format_shopping(text, shop_results)
                 finally:
                     stop2.set(); typing2.cancel()
                     try: await typing2
                     except asyncio.CancelledError: pass
-                await _send_smart_result(message, smart_result)
-                return
+            else:
+                clarification = get_clarification(text, kind)
+                if clarification:
+                    _pending_searches[user_id] = (text, 0)
+                    response = clarification
+                else:
+                    stop2 = asyncio.Event()
+                    typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
+                    try:
+                        smart_result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
+                    finally:
+                        stop2.set(); typing2.cancel()
+                        try: await typing2
+                        except asyncio.CancelledError: pass
+                    await _send_smart_result(message, smart_result)
+                    return
         else:
             stop2 = asyncio.Event()
             typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
