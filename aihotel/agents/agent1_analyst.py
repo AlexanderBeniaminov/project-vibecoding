@@ -218,6 +218,13 @@ def parse_number(value):
         return None
 
 
+def _metric_num(results, label_substr, exact=False):
+    for r in results:
+        if (r['label'] == label_substr) if exact else (label_substr in r['label']):
+            return parse_number(r['display'])
+    return None
+
+
 def call_claude(system_prompt, user_message):
     client = Groq(api_key=os.environ['GROQ_API_KEY'])
     for attempt in range(3):
@@ -665,8 +672,8 @@ def main():
 
     # Средний чек на гостя = Доход НФ / Гостей всего → добавляем в секцию income
     # revenue_val и guests_val переиспользуются ниже для расчёта OTA и F&B конверсии
-    revenue_val = parse_number(next((r['display'] for r in metric_results if 'Доход НФ' in r['label']), ''))
-    guests_val  = parse_number(next((r['display'] for r in metric_results if r['label'] == 'Гостей всего'), ''))
+    revenue_val = _metric_num(metric_results, 'Доход НФ')
+    guests_val  = _metric_num(metric_results, 'Гостей всего', exact=True)
     avg_check_str = '—'
     if revenue_val and guests_val and guests_val > 0:
         avg_check_str = str(round(revenue_val / guests_val))
@@ -710,17 +717,17 @@ def main():
     if task_stats.get('pct') is not None:
         calcs.append(f'Выполнение задач пр. недели = {task_stats["pct"]}% ({task_stats["done"]}/{task_stats["total"]})')
 
-    ota_val = parse_number(next((r['display'] for r in metric_results if 'OTA' in r['label']), ''))
+    ota_val = _metric_num(metric_results, 'OTA')
     if revenue_val and ota_val and ota_val > 0:
         ota_loss = round(revenue_val * ota_val / 100 * 0.20)
         calcs.append(f'Потери на OTA-комиссии (~20%) = {int(ota_loss):,} руб.'.replace(',', ' '))
 
-    fb_cheques = parse_number(next((r['display'] for r in metric_results if 'Чеков Монблан' in r['label']), ''))
+    fb_cheques = _metric_num(metric_results, 'Чеков Монблан')
     if fb_cheques and guests_val and guests_val > 0:
         calcs.append(f'F&B конверсия (чеков/гостей) = {round(fb_cheques / guests_val * 100, 1)}%')
 
-    styk_val      = parse_number(next((r['display'] for r in metric_results if 'стыковочных' in r['label']), ''))
-    cleanings_val = parse_number(next((r['display'] for r in metric_results if r['label'] == 'Уборки коттеджи'), ''))
+    styk_val      = _metric_num(metric_results, 'стыковочных')
+    cleanings_val = _metric_num(metric_results, 'Уборки коттеджи', exact=True)
     if styk_val and cleanings_val and cleanings_val > 0:
         calcs.append(f'Стыковочные уборки = {round(styk_val / cleanings_val * 100, 1)}% от всех уборок кот.')
 
