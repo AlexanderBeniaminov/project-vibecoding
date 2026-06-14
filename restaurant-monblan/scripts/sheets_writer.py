@@ -7,7 +7,7 @@ sheets_writer.py — запись данных в Google Sheets.
 import json
 import logging
 import os
-from datetime import date
+from datetime import date, timedelta
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -86,11 +86,6 @@ METRICS_WEEKLY = [
     "Мероприятия — выручка",
     "З/п итого за неделю",
 ]
-
-# Для обратной совместимости с main.py
-HEADERS_DAILY = METRICS_DAILY
-HEADERS_WEEKLY = METRICS_WEEKLY
-
 
 # ---------------------------------------------------------------------------
 # Подключение
@@ -238,8 +233,7 @@ def _excel_serial_to_date(serial: int) -> str:
     строку «2026-03-30» в число (серийный номер дня).
     Эпоха Excel: 30 декабря 1899 (с учётом ошибки Lotus 1-2-3).
     """
-    from datetime import date as _date, timedelta
-    base = _date(1899, 12, 30)
+    base = date(1899, 12, 30)
     return (base + timedelta(days=int(serial))).strftime("%Y-%m-%d")
 
 
@@ -379,15 +373,13 @@ def write_weekly_row(service, spreadsheet_id: str, data: dict):
     Строка 2 — период («23.03.2026 – 29.03.2026»).
     Строки 3..N — значения параметров (порядок = METRICS_WEEKLY).
     """
-    from datetime import date as _date
-
     week_num = data.get("week_num", "?")
     week_title = f"Неделя {week_num}"
 
     # Форматируем период пн–вс
     try:
-        d_from = _date.fromisoformat(data.get("date_from", ""))
-        d_to   = _date.fromisoformat(data.get("date_to", ""))
+        d_from = date.fromisoformat(data.get("date_from", ""))
+        d_to   = date.fromisoformat(data.get("date_to", ""))
         period = f"{d_from.strftime('%d.%m.%Y')} – {d_to.strftime('%d.%m.%Y')}"
     except ValueError:
         period = f"{data.get('date_from', '')} – {data.get('date_to', '')}"
@@ -491,9 +483,8 @@ def delete_columns_before_date(service, spreadsheet_id: str, cutoff_date) -> int
     строго раньше cutoff_date (тип datetime.date или строка YYYY-MM-DD).
     Возвращает количество удалённых столбцов.
     """
-    from datetime import date as _date
     if isinstance(cutoff_date, str):
-        cutoff_date = _date.fromisoformat(cutoff_date)
+        cutoff_date = date.fromisoformat(cutoff_date)
 
     meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     sheet_id = None
@@ -561,14 +552,6 @@ def delete_columns_before_date(service, spreadsheet_id: str, cutoff_date) -> int
 def _v(val):
     """Заменить None на пустую строку."""
     return val if val is not None else ""
-
-
-def _find_category(cats: dict, keywords: list) -> float:
-    """Найти сумму по категории iiko по ключевым словам (регистронезависимо)."""
-    for key, val in cats.items():
-        if any(kw in (key or "").lower() for kw in keywords):
-            return val
-    return 0.0
 
 
 # ---------------------------------------------------------------------------
