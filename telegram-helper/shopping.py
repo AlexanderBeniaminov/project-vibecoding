@@ -50,16 +50,7 @@ def _wb(query: str) -> dict | None:
 # ── Ozon ─────────────────────────────────────────────────────────
 def _ozon(query: str) -> dict | None:
     # Ozon не отдаёт данные без авторизованных cookies — сайт на JS
-    # Возвращаем поисковую ссылку как fallback
-    q = quote_plus(query)
-    return {
-        "store": "Ozon",
-        "name": None,  # нет прямых данных
-        "price": None,
-        "delivery": "от 99 ₽ (бесплатно от 2499 ₽)",
-        "delivery_cost": 99,
-        "url": f"https://www.ozon.ru/search/?text={q}&from_global=true",
-    }
+    return None
 
 
 # ── Пятёрочка ────────────────────────────────────────────────────
@@ -233,39 +224,30 @@ async def search_all_stores(query: str) -> list[dict]:
 # ── Форматирование ────────────────────────────────────────────────
 
 def format_results(query: str, results: list[dict]) -> str:
-    """Форматирует результаты в текст для Telegram."""
-    # Разделяем: у кого есть реальная цена, у кого только ссылка (fallback)
-    with_price = [r for r in results if r.get("price")]
-    links_only = [r for r in results if not r.get("price")]
+    """Форматирует результаты в текст для Telegram. Магазины без цены не показываем."""
+    found = [r for r in results if r.get("price")]
 
-    if not with_price and not links_only:
+    if not found:
         return (
-            f"❌ По запросу «{query}» ничего не найдено.\n"
+            f"❌ По запросу «{query}» ничего не найдено в доступных магазинах.\n"
             "Попробуй уточнить название товара или бренд."
         )
 
+    sorted_res = sorted(found, key=lambda r: r["price"] + r["delivery_cost"])
+
     lines = [f"🛒 {query}\n"]
-
-    if with_price:
-        sorted_res = sorted(with_price, key=lambda r: r["price"] + r["delivery_cost"])
-        for r in sorted_res:
-            total = r["price"] + r["delivery_cost"]
-            if r["delivery_cost"] == 0:
-                d_str = f"доставка {r['delivery']}"
-            else:
-                d_str = f"доставка {r['delivery']}, итого {total:.0f} ₽"
-            lines.append(f"📦 {r['store']} — {r['price']:.0f} ₽ ({d_str})")
-            lines.append(r["url"])
-            lines.append("")
-
-        best = sorted_res[0]
-        best_total = best["price"] + best["delivery_cost"]
-        lines.append(f"✅ Дешевле всего: {best['store']} — {best_total:.0f} ₽ с доставкой")
-
-    if links_only:
+    for r in sorted_res:
+        total = r["price"] + r["delivery_cost"]
+        if r["delivery_cost"] == 0:
+            d_str = f"доставка {r['delivery']}"
+        else:
+            d_str = f"доставка {r['delivery']}, итого {total:.0f} ₽"
+        lines.append(f"📦 {r['store']} — {r['price']:.0f} ₽ ({d_str})")
+        lines.append(r["url"])
         lines.append("")
-        lines.append("🔍 Проверь вручную (цены не удалось получить):")
-        for r in links_only:
-            lines.append(f"  {r['store']}: {r['url']}")
+
+    best = sorted_res[0]
+    best_total = best["price"] + best["delivery_cost"]
+    lines.append(f"✅ Дешевле всего: {best['store']} — {best_total:.0f} ₽ с доставкой")
 
     return "\n".join(lines)
