@@ -318,14 +318,18 @@ def calculate(bookings: list, cancelled_count: int,
             dep = rs["stayDates"]["departureDateTime"]
             ov  = overlap_nights(arr, dep, week_start, week_end)
 
+            # Парсим rt_id один раз — используется и для уборок, и для категорий ночей
+            rt_id_str = rs["roomType"]["id"]
+            rt_id     = int(rt_id_str) if rt_id_str.isdigit() else rt_id_str
+            rt_name   = rs["roomType"]["name"]
+
             # Считаем уборки ДО фильтра по ov: любой выезд в неделю = уборка.
             # Проверяем до ov==0, чтобы не пропустить гостей с заездом в прошлой неделе.
             dep_date = date.fromisoformat(dep[:10])
             if week_start <= dep_date <= week_end:
-                rt_id_clean = int(rs["roomType"]["id"]) if rs["roomType"]["id"].isdigit() else rs["roomType"]["id"]
-                if rt_id_clean in COTTAGE_TYPES:
+                if rt_id in COTTAGE_TYPES:
                     cottage_departures += 1
-                elif rt_id_clean in DANIELLE_TYPES or rt_id_clean in ALEN_TYPES:
+                elif rt_id in DANIELLE_TYPES or rt_id in ALEN_TYPES:
                     hostel_departures += 1
 
             if ov == 0:
@@ -335,10 +339,6 @@ def calculate(bookings: list, cancelled_count: int,
                 date.fromisoformat(dep[:10]) - date.fromisoformat(arr[:10])
             ).days)
             ratio = ov / total_nights
-
-            rt_id_str = rs["roomType"]["id"]
-            rt_id     = int(rt_id_str) if rt_id_str.isdigit() else rt_id_str
-            rt_name   = rs["roomType"]["name"]
 
             # Выделяем только нехлебные платные сервисы из цены номера (строки 17-19)
             rs_svc_to_extract = 0.0

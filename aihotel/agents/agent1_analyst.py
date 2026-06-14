@@ -22,8 +22,6 @@ ROW_WEEK_NUMBERS  = 1
 ROW_DATE_LABELS   = 2
 ROW_REVENUE_CHECK = 5
 
-DYNAMICS_ROWS = {}  # В «2026» нет отдельных строк динамики — формулы в самом листе
-
 # Ячейки которые Виктор заполняет вручную — проверяются перед анализом
 MANUAL_ROWS_CHECK = {
     54: 'NPS',
@@ -265,8 +263,11 @@ def read_column_data(ws, col_idx):
     return {row_num: row[col_idx] for row_num, row in enumerate(all_data, 1) if col_idx < len(row)}
 
 
+# Статусы, которые считаются невыполненными (используется в get_failed_tasks)
+NOT_DONE = {'нет', 'не выполнено', 'не выполнена', ''}
+
+
 def get_failed_tasks(strategy_sheet_id, client_gs):
-    NOT_DONE = {'нет', 'не выполнено', 'не выполнена', ''}
 
     try:
         ws_archive = get_worksheet(client_gs, strategy_sheet_id, 'Архив')
@@ -324,7 +325,7 @@ def get_failed_tasks(strategy_sheet_id, client_gs):
             continue
         name    = r.get('Исполнитель', 'Неизвестный')
         status  = str(r.get('Статус', '')).lower().strip()
-        is_done = status not in NOT_DONE
+        is_done = status not in NOT_DONE  # константа на уровне модуля
 
         if name not in by_person:
             by_person[name] = {'total': 0, 'done': 0}
@@ -348,7 +349,6 @@ def get_failed_tasks(strategy_sheet_id, client_gs):
 
     repeated = []
     if archive and len(archive) > 2:
-        NOT_DONE_ARCHIVE = {'нет', 'не выполнено', 'не выполнена', ''}
         archive_tasks, failed_keys = [], {(t['исполнитель'], t['задача']) for t in failed}
         for row in reversed(archive):
             if row and row[0].startswith('Неделя'):
@@ -360,7 +360,7 @@ def get_failed_tasks(strategy_sheet_id, client_gs):
             {'исполнитель': r[0], 'задача': r[2]}
             for r in archive_tasks
             if len(r) >= 3 and (r[0], r[2]) in failed_keys
-            and (len(r) <= 7 or str(r[7]).lower().strip() in NOT_DONE_ARCHIVE)
+            and (len(r) <= 7 or str(r[7]).lower().strip() in NOT_DONE)
         ]
 
     return failed, repeated, task_stats
@@ -664,11 +664,12 @@ def main():
                 print(f'  RevPAC: {revpac} руб. (расчётный)')
 
     # Средний чек на гостя = Доход НФ / Гостей всего → добавляем в секцию income
-    _revenue = parse_number(next((r['display'] for r in metric_results if 'Доход НФ' in r['label']), ''))
-    _guests  = parse_number(next((r['display'] for r in metric_results if r['label'] == 'Гостей всего'), ''))
+    # revenue_val и guests_val переиспользуются ниже для расчёта OTA и F&B конверсии
+    revenue_val = parse_number(next((r['display'] for r in metric_results if 'Доход НФ' in r['label']), ''))
+    guests_val  = parse_number(next((r['display'] for r in metric_results if r['label'] == 'Гостей всего'), ''))
     avg_check_str = '—'
-    if _revenue and _guests and _guests > 0:
-        avg_check_str = str(round(_revenue / _guests))
+    if revenue_val and guests_val and guests_val > 0:
+        avg_check_str = str(round(revenue_val / guests_val))
         print(f'  Средний чек на гостя: {avg_check_str} руб. (расчётный)')
         idx = next((i for i, r in enumerate(metric_results) if 'Доход НФ' in r['label']), -1)
         if idx >= 0:
@@ -687,18 +688,6 @@ def main():
 
     if target_week is None:
         set_flag(ws_status, 'анализ_готов', 'да')
-
-    # Динамика к предыдущему периоду
-    dynamics = {}
-    for drow, dlabel in DYNAMICS_ROWS.items():
-        raw = col_data.get(drow, '').strip()
-        if raw:
-            val = parse_number(raw)
-            if val is not None:
-                sign = '+' if val > 0 else ''
-                dynamics[dlabel] = f'{sign}{val:.1f}%'
-            else:
-                dynamics[dlabel] = raw
 
     # Невыполненные задачи
     print('Читаю статусы прошлой недели...')
@@ -721,14 +710,12 @@ def main():
     if task_stats.get('pct') is not None:
         calcs.append(f'Выполнение задач пр. недели = {task_stats["pct"]}% ({task_stats["done"]}/{task_stats["total"]})')
 
-    revenue_val = parse_number(next((r['display'] for r in metric_results if 'Доход НФ' in r['label']), ''))
-    ota_val     = parse_number(next((r['display'] for r in metric_results if 'OTA' in r['label']), ''))
+    ota_val = parse_number(next((r['display'] for r in metric_results if 'OTA' in r['label']), ''))
     if revenue_val and ota_val and ota_val > 0:
         ota_loss = round(revenue_val * ota_val / 100 * 0.20)
         calcs.append(f'Потери на OTA-комиссии (~20%) = {int(ota_loss):,} руб.'.replace(',', ' '))
 
     fb_cheques = parse_number(next((r['display'] for r in metric_results if 'Чеков Монблан' in r['label']), ''))
-    guests_val = parse_number(next((r['display'] for r in metric_results if r['label'] == 'Гостей всего'), ''))
     if fb_cheques and guests_val and guests_val > 0:
         calcs.append(f'F&B конверсия (чеков/гостей) = {round(fb_cheques / guests_val * 100, 1)}%')
 
@@ -743,9 +730,6 @@ def main():
         (f' (к пр.году: {m["delta_pct"]:+.1f}%)' if m.get('delta_pct') is not None else '')
         for m in metric_results
     ]
-    if dynamics:
-        lines.append('\n[ДИНАМИКА К ПРЕД. ПЕРИОДУ]')
-        lines += [f'{k}: {v}' for k, v in dynamics.items()]
     if calcs:
         lines.append('\n[РАСЧЁТНЫЕ ПОКАЗАТЕЛИ]')
         lines += calcs
