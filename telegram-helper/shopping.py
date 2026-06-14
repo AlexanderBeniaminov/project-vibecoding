@@ -1,20 +1,45 @@
 """
 Шопинг-агент: параллельный поиск цен через Perplexity с site: оператором.
 7 одновременных запросов — каждый ищет товар строго на одном домене.
-Прямой scraping невозможен: все магазины блокируют VPS-IP (429/403).
+Прямой scraping невозможен: магазины блокируют VPS-IP через PoW/429/403.
 """
 import asyncio
 import re
 
 STORES = [
-    ("Wildberries", "wildberries.ru",   "бесплатно",          0),
-    ("Ozon",        "ozon.ru",          "от 99 ₽",           99),
-    ("Пятёрочка",  "5ka.ru",           "бесплатно от 500 ₽", 0),
-    ("Перекрёсток", "perekrestok.ru",   "бесплатно от 700 ₽", 0),
-    ("Лента",       "lenta.com",        "бесплатно от 1500 ₽",0),
-    ("Ашан",        "auchan.ru",        "199 ₽",            199),
-    ("Metro",       "metro-cc.ru",      "299 ₽",            299),
+    ("Wildberries", "wildberries.ru",   "бесплатно",           0),
+    ("Ozon",        "ozon.ru",          "от 99 ₽",            99),
+    ("Пятёрочка",  "5ka.ru",           "бесплатно от 500 ₽",  0),
+    ("Перекрёсток", "perekrestok.ru",   "бесплатно от 700 ₽",  0),
+    ("Лента",       "lenta.com",        "бесплатно от 1500 ₽", 0),
+    ("Ашан",        "auchan.ru",        "199 ₽",             199),
+    ("Metro",       "metro-cc.ru",      "299 ₽",             299),
 ]
+
+# Таблица транслитерации кириллицы для брендов, которые часто пишут по-русски
+_TRANSLIT = {
+    "давыдофф": "davidoff", "давидофф": "davidoff",
+    "нескафе": "nescafe", "якобс": "jacobs", "лавацца": "lavazza",
+    "тефаль": "tefal", "бош": "bosch", "самсунг": "samsung",
+    "фарфалле": "farfalle", "барилла": "barilla",
+}
+
+def _enrich_query(query: str, domain: str) -> str:
+    """Добавляет латинский вариант бренда и уточнения для лучшего поиска."""
+    q = query
+    q_lower = query.lower()
+
+    # Добавляем латинский вариант бренда если есть в таблице
+    for ru, en in _TRANSLIT.items():
+        if ru in q_lower and en not in q_lower:
+            q = f"{q} {en}"
+            break
+
+    # Для WB явно запрашиваем что товар есть в наличии
+    if "wildberries" in domain:
+        return f"{q} site:{domain} купить в наличии добавить в корзину"
+
+    return f"{q} site:{domain} купить цена в наличии"
 
 
 async def _search_one(query: str, store_name: str, domain: str,
@@ -22,23 +47,28 @@ async def _search_one(query: str, store_name: str, domain: str,
                       ai_client, model: str) -> dict | None:
     """Один Perplexity-запрос с site: для конкретного магазина."""
     try:
+        enriched = _enrich_query(query, domain)
         resp = await ai_client.chat.completions.create(
             model=model,
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        f"Ищешь товар ТОЛЬКО на сайте {domain}. "
+                        f"Ищешь товар НА САЙТЕ {domain}.\n"
+                        f"ЖЁСТКОЕ ПРАВИЛО: возвращай ТОЛЬКО если:\n"
+                        f"  1. Товар ЕСТЬ В НАЛИЧИИ прямо сейчас\n"
+                        f"  2. Есть активная кнопка 'Добавить в корзину' или 'Купить'\n"
+                        f"  3. НЕТ надписей: 'Нет в наличии', 'Товар закончился', "
+                        f"     'Доставка недоступна', 'Нет на складе'\n\n"
                         f"Верни ОДНУ строку: ЦЕНА|URL\n"
-                        f"Пример: 485|https://www.{domain}/catalog/12345/detail.aspx\n"
-                        f"Цена — только цифры, без пробелов и символов.\n"
-                        f"URL — полная прямая ссылка на конкретный товар на {domain}.\n"
-                        f"Если товар не найден или нет в наличии — верни: НЕТ"
+                        f"Цена — только число (рублей, без знаков).\n"
+                        f"URL — полная ссылка https://... на {domain} на конкретный товар.\n\n"
+                        f"Если товар НЕ НАЙДЕН или НЕТ В НАЛИЧИИ — верни ровно: НЕТ"
                     ),
                 },
-                {"role": "user", "content": f"{query} site:{domain} купить цена"},
+                {"role": "user", "content": enriched},
             ],
-            max_tokens=120,
+            max_tokens=150,
             temperature=0.0,
         )
         text = (resp.choices[0].message.content or "").strip()
