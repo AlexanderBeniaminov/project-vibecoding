@@ -150,7 +150,7 @@ def _clean(text: str) -> str:
 
 # ── Транскрипция голоса ───────────────────────────────────────────
 async def transcribe_voice(message: Message) -> str:
-    voice = message.voice or message.audio
+    voice = message.voice
     if not voice:
         return ""
     file = await bot.get_file(voice.file_id)
@@ -200,8 +200,6 @@ async def run_llm(messages: list, model: str = None) -> str:
     )
     msg = resp.choices[0].message
     content = (msg.content or "").strip()
-    if not content and hasattr(msg, "reasoning"):
-        content = (msg.reasoning or "")[-600:]
     return _clean(content)
 
 
@@ -240,7 +238,7 @@ def _add_gubaha_task_sync(executor: str, task: str, deadline: str = "") -> str:
     return f"✅ Задача добавлена: *{executor_clean}* — {task}{deadline_str}"
 
 async def add_gubaha_task(executor: str, task: str, deadline: str = "") -> str:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _add_gubaha_task_sync, executor, task, deadline)
 
 # Детектор задачи в тексте
@@ -497,7 +495,7 @@ def _load_sheets_data(question: str) -> tuple:
 
 async def query_sheets(question: str) -> str:
     """Async: грузит данные → прямой поиск → если не нашли, спрашивает Claude."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     rows_kv, context = await loop.run_in_executor(None, _load_sheets_data, question)
 
     if rows_kv is None:
@@ -669,7 +667,7 @@ def _web_search(query: str, max_results: int = 6) -> str:
 
 async def web_search_and_answer(query: str) -> str:
     """Ищет в интернете и суммаризирует ответ через LLM."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     raw = await loop.run_in_executor(None, _web_search, query)
     if raw.startswith("Ошибка") or raw.startswith("По этому"):
         return raw
@@ -823,7 +821,7 @@ async def cmd_crm(message: Message):
 async def cmd_mail(message: Message):
     if not is_allowed(message.from_user.id):
         return
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     await message.answer("📬 Загружаю...")
     result = await loop.run_in_executor(None, mail_digest_sync)
     await message.answer(result, parse_mode="Markdown")
@@ -837,7 +835,7 @@ async def cb_mail_send(call: CallbackQuery):
         await call.answer("Черновик не найден.")
         return
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _smtp_send, draft["to"], draft["subject"], draft["body"])
         await call.message.edit_text(f"✅ Письмо отправлено!\nКому: {draft['to']}\nТема: {draft['subject']}")
     except Exception as e:
@@ -856,21 +854,15 @@ async def handle_photo(message: Message):
     if not is_allowed(message.from_user.id):
         return
     caption = message.caption or ""
-    stop = asyncio.Event()
-    typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-    try:
+    async with _typing(message.chat.id):
         result = await analyze_photo(message, caption)
-    finally:
-        stop.set(); typing.cancel()
-        try: await typing
-        except asyncio.CancelledError: pass
 
     # Если упомянута задача и исполнитель → предложить записать
     task_m = _TASK_RE.search(caption)
     if task_m:
         executor = task_m.group(1)
         task_text = task_m.group(2) or result[:100]
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         task_result = await loop.run_in_executor(None, _add_gubaha_task_sync, executor, task_text, "")
         await message.answer(f"{result}\n\n{task_result}", parse_mode="Markdown")
     else:
@@ -1018,45 +1010,40 @@ async def handle_document(message: Message):
         )
         return
 
-    stop = asyncio.Event()
-    typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-    try:
-        await message.answer(f"📄 Читаю «{filename}»…")
-        raw = await _download_doc(doc)
-        if raw is None:
-            await message.answer("Не удалось скачать файл.")
-            return
+    async with _typing(message.chat.id):
+        try:
+            await message.answer(f"📄 Читаю «{filename}»…")
+            raw = await _download_doc(doc)
+            if raw is None:
+                await message.answer("Не удалось скачать файл.")
+                return
 
-        if ext == ".pdf" or "pdf" in mime:
-            result = await _analyze_pdf(raw, hint)
-        elif ext in (".docx", ".doc") or "word" in mime or "officedocument.word" in mime:
-            result = await _analyze_docx(raw, hint)
-        elif ext in (".xlsx", ".xls") or "excel" in mime or "spreadsheet" in mime:
-            result = await _analyze_xlsx(raw, hint)
-        elif ext == ".csv":
-            text = raw.decode("utf-8", errors="replace")[:8000]
-            prompt = hint or "Проанализируй CSV-данные. Выдели ключевые показатели."
-            resp = await ai_client.chat.completions.create(
-                model=config.MODEL,
-                messages=[{"role": "user", "content": f"{prompt}\n\n{text}"}],
-                max_tokens=1500,
-            )
-            result = _clean((resp.choices[0].message.content or "").strip())
-        elif mime.startswith("image/") or ext in (".jpg", ".jpeg", ".png", ".webp"):
-            result = await _analyze_image_as_doc(raw, mime or "image/jpeg", hint)
-        else:
-            await message.answer(
-                f"❓ Формат «{ext or mime}» не поддерживается.\n"
-                f"Поддерживаю: PDF, Word (.docx), Excel (.xlsx), CSV, JPEG/PNG."
-            )
-            return
-    except Exception as e:
-        logging.error(f"[doc] ошибка анализа {filename}: {e}")
-        result = f"Ошибка при анализе файла: {e}"
-    finally:
-        stop.set(); typing.cancel()
-        try: await typing
-        except asyncio.CancelledError: pass
+            if ext == ".pdf" or "pdf" in mime:
+                result = await _analyze_pdf(raw, hint)
+            elif ext in (".docx", ".doc") or "word" in mime or "officedocument.word" in mime:
+                result = await _analyze_docx(raw, hint)
+            elif ext in (".xlsx", ".xls") or "excel" in mime or "spreadsheet" in mime:
+                result = await _analyze_xlsx(raw, hint)
+            elif ext == ".csv":
+                text = raw.decode("utf-8", errors="replace")[:8000]
+                prompt = hint or "Проанализируй CSV-данные. Выдели ключевые показатели."
+                resp = await ai_client.chat.completions.create(
+                    model=config.MODEL,
+                    messages=[{"role": "user", "content": f"{prompt}\n\n{text}"}],
+                    max_tokens=1500,
+                )
+                result = _clean((resp.choices[0].message.content or "").strip())
+            elif mime.startswith("image/") or ext in (".jpg", ".jpeg", ".png", ".webp"):
+                result = await _analyze_image_as_doc(raw, mime or "image/jpeg", hint)
+            else:
+                await message.answer(
+                    f"❓ Формат «{ext or mime}» не поддерживается.\n"
+                    f"Поддерживаю: PDF, Word (.docx), Excel (.xlsx), CSV, JPEG/PNG."
+                )
+                return
+        except Exception as e:
+            logging.error(f"[doc] ошибка анализа {filename}: {e}")
+            result = f"Ошибка при анализе файла: {e}"
 
     # Добавляем в историю — можно задавать уточняющие вопросы без повторной отправки
     history = histories.setdefault(user_id, [])
@@ -1233,6 +1220,24 @@ async def cmd_delete_rule(message: Message):
     await message.answer(f"Удалить правило #{rule_id}?", reply_markup=kb)
 
 
+# ── Typing context manager ────────────────────────────────────────
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def _typing(chat_id: int):
+    stop = asyncio.Event()
+    task = asyncio.create_task(_keep_typing(chat_id, stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
 # ── Главный обработчик текст/голос ───────────────────────────────
 @dp.message(F.text | F.voice)
 async def handle_message(message: Message):
@@ -1280,21 +1285,15 @@ async def handle_message(message: Message):
         elif clarification:
             # Исчерпали попытки — ищем с тем что есть
             pass
-        stop = asyncio.Event()
-        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-        try:
+        async with _typing(message.chat.id):
             result = await smart_search_and_answer(combined, ai_client, config.SEARCH_MODEL, kind)
-        finally:
-            stop.set(); typing.cancel()
-            try: await typing
-            except asyncio.CancelledError: pass
         await _send_smart_result(message, result)
         return
 
     # ── 1. Проектные заметки ──────────────────────────────────────
     proj_m = _PROJ_RE.match(text.strip())
     if proj_m:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, _save_proj_note_sync, proj_m.group(1), proj_m.group(2))
         await message.answer(result, parse_mode="Markdown")
         return
@@ -1327,31 +1326,20 @@ async def handle_message(message: Message):
     # ── 5. Данные из таблиц ───────────────────────────────────────
     if any(k in q for k in _SHEETS_KEYWORDS):
         await message.answer("📊 Загружаю данные...")
-        stop = asyncio.Event()
-        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-        try:
-            result = await query_sheets(text)
-        except Exception as e:
-            result = f"Ошибка загрузки данных: {e}"
-        finally:
-            stop.set(); typing.cancel()
-            try: await typing
-            except asyncio.CancelledError: pass
+        async with _typing(message.chat.id):
+            try:
+                result = await query_sheets(text)
+            except Exception as e:
+                result = f"Ошибка загрузки данных: {e}"
         await _safe_answer(message, result, parse_mode=None)
         return
 
     # ── 6. Почта — дайджест ───────────────────────────────────────
     if any(k in q for k in ["почта", "письм", "входящ", "пришло на почту"]):
         await message.answer("📬 Загружаю...")
-        stop = asyncio.Event()
-        typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-        try:
-            loop = asyncio.get_event_loop()
+        async with _typing(message.chat.id):
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, mail_digest_sync)
-        finally:
-            stop.set(); typing.cancel()
-            try: await typing
-            except asyncio.CancelledError: pass
         await _safe_answer(message, result)
         return
 
@@ -1380,15 +1368,9 @@ async def handle_message(message: Message):
             kind = detect_type(text)
             if kind == "products":
                 # Параллельный поиск через Perplexity site: по каждому магазину
-                stop = asyncio.Event()
-                typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-                try:
+                async with _typing(message.chat.id):
                     shop_results = await search_all_stores(text, ai_client, config.SEARCH_MODEL)
                     response_text = format_shopping(text, shop_results)
-                finally:
-                    stop.set(); typing.cancel()
-                    try: await typing
-                    except asyncio.CancelledError: pass
                 await _safe_answer(message, response_text, parse_mode=None)
                 return
             clarification = get_clarification(text, kind)
@@ -1397,24 +1379,12 @@ async def handle_message(message: Message):
                 _pending_searches[user_id] = (text, 0)
                 await message.answer(clarification)
                 return
-            stop = asyncio.Event()
-            typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-            try:
+            async with _typing(message.chat.id):
                 result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
-            finally:
-                stop.set(); typing.cancel()
-                try: await typing
-                except asyncio.CancelledError: pass
             await _send_smart_result(message, result)
         else:
-            stop = asyncio.Event()
-            typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-            try:
+            async with _typing(message.chat.id):
                 result = await web_search_and_answer(text)
-            finally:
-                stop.set(); typing.cancel()
-                try: await typing
-                except asyncio.CancelledError: pass
             await _safe_answer(message, result)
         return
 
@@ -1427,56 +1397,33 @@ async def handle_message(message: Message):
         histories[user_id] = history[:1] + history[-20:]
         history = histories[user_id]
 
-    stop = asyncio.Event()
-    typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
-    try:
-        response = await run_llm(history)
-    except Exception as e:
-        response = f"Ошибка: {e}"
-    finally:
-        stop.set(); typing.cancel()
-        try: await typing
-        except asyncio.CancelledError: pass
+    async with _typing(message.chat.id):
+        try:
+            response = await run_llm(history)
+        except Exception as e:
+            response = f"Ошибка: {e}"
 
     # LLM сигнализирует что нужен веб-поиск
     if response.strip() == "ПОИСК":
         if COMMERCIAL_RE.search(text):
             kind = detect_type(text)
             if kind == "products":
-                stop2 = asyncio.Event()
-                typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
-                try:
+                async with _typing(message.chat.id):
                     shop_results = await search_all_stores(text, ai_client, config.SEARCH_MODEL)
                     response = format_shopping(text, shop_results)
-                finally:
-                    stop2.set(); typing2.cancel()
-                    try: await typing2
-                    except asyncio.CancelledError: pass
             else:
                 clarification = get_clarification(text, kind)
                 if clarification:
                     _pending_searches[user_id] = (text, 0)
                     response = clarification
                 else:
-                    stop2 = asyncio.Event()
-                    typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
-                    try:
+                    async with _typing(message.chat.id):
                         smart_result = await smart_search_and_answer(text, ai_client, config.SEARCH_MODEL, kind)
-                    finally:
-                        stop2.set(); typing2.cancel()
-                        try: await typing2
-                        except asyncio.CancelledError: pass
                     await _send_smart_result(message, smart_result)
                     return
         else:
-            stop2 = asyncio.Event()
-            typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
-            try:
+            async with _typing(message.chat.id):
                 response = await web_search_and_answer(text)
-            finally:
-                stop2.set(); typing2.cancel()
-                try: await typing2
-                except asyncio.CancelledError: pass
 
     try:
         from rule_engine import apply_rules as _apply_rules
@@ -1567,7 +1514,7 @@ def _scrape_channel_page(before_id: int | None = None) -> tuple[list[dict], int 
 
 async def _fetch_channel_posts(since_date: datetime, limit: int = 500) -> list[dict]:
     """Читает посты из @HotelierPRO через публичный веб-превью t.me/s/."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     all_posts: list[dict] = []
     before_id = None
     while len(all_posts) < limit:
@@ -1642,6 +1589,24 @@ async def _filter_posts_by_topics(posts: list[dict]) -> dict[int, list[str]]:
             logging.warning(f"[hotelier] filter batch error: {e}")
     return result
 
+def _save_posts(conn, posts: list, relevance: dict) -> int:
+    """INSERT OR IGNORE релевантных постов; возвращает число сохранённых."""
+    saved = 0
+    for p in posts:
+        if p["message_id"] in relevance:
+            topics = json.dumps(relevance[p["message_id"]], ensure_ascii=False)
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO channel_posts (channel, message_id, date, text, is_relevant, topics) "
+                    "VALUES (?, ?, ?, ?, 1, ?)",
+                    ("HotelierPRO", p["message_id"], p["date"], p["text"], topics),
+                )
+                saved += 1
+            except Exception:
+                pass
+    return saved
+
+
 async def hotelier_fetch_and_store():
     """Сбор новых постов каждые 4 часа."""
     try:
@@ -1661,19 +1626,7 @@ async def hotelier_fetch_and_store():
             logging.info(f"[hotelier] fetched {len(posts)} posts, 0 relevant")
             return
         conn = _hotelier_conn()
-        saved = 0
-        for p in posts:
-            if p["message_id"] in relevance:
-                topics = json.dumps(relevance[p["message_id"]], ensure_ascii=False)
-                try:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO channel_posts (channel, message_id, date, text, is_relevant, topics) "
-                        "VALUES (?, ?, ?, ?, 1, ?)",
-                        ("HotelierPRO", p["message_id"], p["date"], p["text"], topics),
-                    )
-                    saved += 1
-                except Exception:
-                    pass
+        saved = _save_posts(conn, posts, relevance)
         conn.commit()
         conn.close()
         logging.info(f"[hotelier] fetched {len(posts)} posts, {saved} relevant saved")
@@ -1783,14 +1736,7 @@ async def hotelier_initial_load():
             relevance = await _filter_posts_by_topics(posts)
             logging.info(f"[hotelier] initial: {len(relevance)} relevant")
             conn = _hotelier_conn()
-            for p in posts:
-                if p["message_id"] in relevance:
-                    topics = json.dumps(relevance[p["message_id"]], ensure_ascii=False)
-                    conn.execute(
-                        "INSERT OR IGNORE INTO channel_posts (channel, message_id, date, text, is_relevant, topics) "
-                        "VALUES (?, ?, ?, ?, 1, ?)",
-                        ("HotelierPRO", p["message_id"], p["date"], p["text"], topics),
-                    )
+            _save_posts(conn, posts, relevance)
             conn.execute("INSERT OR REPLACE INTO bot_flags VALUES ('hotelier_initial_done', '1')")
             conn.commit()
             conn.close()

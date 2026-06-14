@@ -18,6 +18,8 @@ _MSK = ZoneInfo("Europe/Moscow")
 sys.path.insert(0, "/home/parser/bots/assistant")
 
 
+_MAX_TOKENS = 2000
+
 # Один или больше пайпов с опциональными пробелами — ASCII | (U+007C) и полноширинный ｜ (U+FF5C)
 # Важно: (?:...) non-capturing, иначе group-индексы в parse-функции сдвигаются
 _D = r'(?:[|｜]\s*)+'
@@ -60,7 +62,6 @@ _PROJECT_MAP = {
 
 async def _save_project_note(project_raw: str, text: str) -> str:
     """Асинхронная обёртка — запускает синхронный Sheets API в executor."""
-    import asyncio
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _save_project_note_sync, project_raw, text)
 
@@ -846,15 +847,6 @@ def _fact_approval_keyboard(fact_id: int) -> InlineKeyboardMarkup:
     ]])
 
 
-async def _send_fact_approval(chat_id: int, fact_id: int, text: str):
-    """Отправляет сообщение с запросом подтверждения факта."""
-    await bot.send_message(
-        chat_id,
-        f"📝 *Запомнить этот факт?*\n\n{text}",
-        parse_mode="Markdown",
-        reply_markup=_fact_approval_keyboard(fact_id),
-    )
-
 async def _execute_and_notify(name: str, args: dict, user_id: int, chat_id: int) -> str:
     """Выполняет инструмент."""
     result = execute_tool(name, args, user_id)
@@ -942,7 +934,7 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
     for _ in range(12):
         # Защита от бесконечного цикла: после 10 tool_calls — только текстовый ответ
         force_text = total_tool_calls >= 10
-        create_kwargs: dict = {"model": config.MODEL, "messages": messages, "max_tokens": 2000}
+        create_kwargs: dict = {"model": config.MODEL, "messages": messages, "max_tokens": _MAX_TOKENS}
         if not force_text:
             create_kwargs["tools"] = TOOLS
             create_kwargs["tool_choice"] = "auto"
@@ -1011,6 +1003,37 @@ def _is_whisper_hallucination(text: str) -> bool:
         return True
     return False
 
+async def _transcribe_with_fallback(
+    groq_client, audio_path: str, audio_name: str, mime: str, ru_prompt: str
+) -> str | None:
+    """Транскрибирует аудио: сначала turbo, при галлюцинации — large-v3.
+    Возвращает текст или None если оба варианта дали галлюцинацию."""
+    with open(audio_path, "rb") as f:
+        tr = groq_client.audio.transcriptions.create(
+            model="whisper-large-v3-turbo",
+            file=(audio_name, f, mime),
+            language="ru",
+            prompt=ru_prompt,
+        )
+    result = tr.text.strip()
+
+    # Если галлюцинация — повторяем через whisper-large-v3 (точнее, но медленнее)
+    if _is_whisper_hallucination(result):
+        logging.warning(f"[Whisper] turbo галлюцинация: {repr(result)}, пробуем whisper-large-v3")
+        with open(audio_path, "rb") as f:
+            tr2 = groq_client.audio.transcriptions.create(
+                model="whisper-large-v3",
+                file=(audio_name, f, mime),
+                language="ru",
+                prompt=ru_prompt,
+            )
+        result = tr2.text.strip()
+
+    if _is_whisper_hallucination(result):
+        return None
+    return result
+
+
 async def transcribe_voice(message: Message) -> str:
     from groq import Groq
     voice = message.voice
@@ -1030,30 +1053,10 @@ async def transcribe_voice(message: Message) -> str:
         # Prompt подсказывает модели что это русская речь — снижает галлюцинации
         ru_prompt = "Это голосовое сообщение на русском языке."
 
-        # Первая попытка — turbo
-        with open(tmp_path, "rb") as f:
-            tr = groq_client.audio.transcriptions.create(
-                model="whisper-large-v3-turbo",
-                file=("voice.ogg", f, "audio/ogg"),
-                language="ru",
-                prompt=ru_prompt,
-            )
-        result = tr.text.strip()
+        result = await _transcribe_with_fallback(groq_client, tmp_path, "voice.ogg", "audio/ogg", ru_prompt)
 
-        # Если галлюцинация — повторяем через whisper-large-v3 (точнее, но медленнее)
-        if _is_whisper_hallucination(result):
-            logging.warning(f"[Whisper] turbo галлюцинация: {repr(result)}, пробуем whisper-large-v3")
-            with open(tmp_path, "rb") as f:
-                tr2 = groq_client.audio.transcriptions.create(
-                    model="whisper-large-v3",
-                    file=("voice.ogg", f, "audio/ogg"),
-                    language="ru",
-                    prompt=ru_prompt,
-                )
-            result = tr2.text.strip()
-
-        # Если и повтор галлюцинация — сообщаем пользователю
-        if _is_whisper_hallucination(result):
+        # Если оба варианта дали галлюцинацию — сообщаем пользователю
+        if result is None:
             logging.warning(f"[Whisper] оба варианта дали галлюцинацию, файл {file_size} байт")
             return "[Не удалось распознать голос: Whisper не смог разобрать аудио. Попробуй отправить ещё раз или напиши текстом.]"
 
@@ -1109,24 +1112,8 @@ async def transcribe_audio_file(file_id: str, filename: str = "audio.m4a") -> st
 
         groq_client = Groq(api_key=config.GROQ_API_KEY)
         ru_prompt = "Это запись телефонного разговора на русском языке."
-        with open(audio_path, "rb") as f:
-            tr = groq_client.audio.transcriptions.create(
-                model="whisper-large-v3-turbo",
-                file=(audio_name, f, mime),
-                language="ru",
-                prompt=ru_prompt,
-            )
-        result = tr.text.strip()
-        if _is_whisper_hallucination(result):
-            with open(audio_path, "rb") as f:
-                tr2 = groq_client.audio.transcriptions.create(
-                    model="whisper-large-v3",
-                    file=(audio_name, f, mime),
-                    language="ru",
-                    prompt=ru_prompt,
-                )
-            result = tr2.text.strip()
-        if _is_whisper_hallucination(result):
+        result = await _transcribe_with_fallback(groq_client, audio_path, audio_name, mime, ru_prompt)
+        if result is None:
             return "[Не удалось распознать запись звонка. Попробуй переслать файл ещё раз.]"
         return result
     except Exception as e:
@@ -1414,7 +1401,7 @@ async def _analyze_pdf(raw: bytes, hint: str) -> str:
                 {"role": "system", "content": "Анализируй юридический/деловой документ. Отвечай структурированно по-русски."},
                 {"role": "user", "content": f"{prompt}\n\n---\n{text[:12000]}"},
             ],
-            max_tokens=2000,
+            max_tokens=_MAX_TOKENS,
         )
         return (resp.choices[0].message.content or "").strip()
 
@@ -1438,7 +1425,7 @@ async def _analyze_pdf(raw: bytes, hint: str) -> str:
         resp = await ai_client.chat.completions.create(
             model=config.MODEL,
             messages=[{"role": "user", "content": content}],
-            max_tokens=2000,
+            max_tokens=_MAX_TOKENS,
         )
         return (resp.choices[0].message.content or "").strip()
     finally:
@@ -1458,7 +1445,7 @@ async def _analyze_docx(raw: bytes, hint: str) -> str:
             {"role": "system", "content": "Анализируй документ. Отвечай структурированно по-русски."},
             {"role": "user", "content": f"{prompt}\n\n---\n{text[:12000]}"},
         ],
-        max_tokens=2000,
+        max_tokens=_MAX_TOKENS,
     )
     return (resp.choices[0].message.content or "").strip()
 
@@ -1719,7 +1706,7 @@ async def _do_reformat(message: Message, text: str) -> None:
                 {"role": "system", "content": "Переформатируй текст согласно инструкции. Верни только результат."},
                 {"role": "user", "content": f"Инструкция: {instruction}\n\nТекст:\n{original}"},
             ],
-            max_tokens=2000,
+            max_tokens=_MAX_TOKENS,
         )
         reformatted = (resp.choices[0].message.content or original).strip()
     except Exception as e:
@@ -1953,8 +1940,6 @@ async def handle_message(message: Message):
     # Ядерная страховка: если DSML всё ещё есть — не отправлять мусор
     if _has_dsml(response):
         response = _strip_dsml(response)
-    if _has_dsml(response):
-        response = "Ищу информацию... попробуй повторить запрос."
 
     try:
         from rule_engine import apply_rules
