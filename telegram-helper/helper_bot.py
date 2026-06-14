@@ -1379,11 +1379,11 @@ async def handle_message(message: Message):
         if _is_commercial:
             kind = detect_type(text)
             if kind == "products":
-                # Прямой поиск по API магазинов (WB, Ozon, 5ka, Metro и др.)
+                # Параллельный поиск через Perplexity site: по каждому магазину
                 stop = asyncio.Event()
                 typing = asyncio.create_task(_keep_typing(message.chat.id, stop))
                 try:
-                    shop_results = await search_all_stores(text)
+                    shop_results = await search_all_stores(text, ai_client, config.SEARCH_MODEL)
                     response_text = format_shopping(text, shop_results)
                 finally:
                     stop.set(); typing.cancel()
@@ -1446,7 +1446,7 @@ async def handle_message(message: Message):
                 stop2 = asyncio.Event()
                 typing2 = asyncio.create_task(_keep_typing(message.chat.id, stop2))
                 try:
-                    shop_results = await search_all_stores(text)
+                    shop_results = await search_all_stores(text, ai_client, config.SEARCH_MODEL)
                     response = format_shopping(text, shop_results)
                 finally:
                     stop2.set(); typing2.cancel()
