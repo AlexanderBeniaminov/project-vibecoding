@@ -8,6 +8,20 @@ import asyncio
 import re
 from urllib.parse import quote_plus
 
+# Слова-триггеры покупки, которые чистятся перед отправкой в магазины
+_INTENT_PREFIXES = re.compile(
+    r"^(?:где\s+(?:купить|найти|дешевле)\s*|"
+    r"(?:хочу\s+)?купить\s+|найди\s+(?:дешевле\s+)?|"
+    r"сколько\s+стоит\s+|цена\s+на\s+|стоимость\s+|"
+    r"дешевл[её]\s+|самый?\s+дешёв\w*\s+)+",
+    re.IGNORECASE,
+)
+
+def _clean_query(raw: str) -> str:
+    """Убирает слова-намерения ('где купить', 'сколько стоит' и т.п.) — оставляет название товара."""
+    cleaned = _INTENT_PREFIXES.sub("", raw.strip())
+    return cleaned.strip() or raw.strip()
+
 STORES = [
     ("Wildberries", "wildberries.ru",   "бесплатно",           0),
     ("Ozon",        "ozon.ru",          "от 99 ₽",            99),
@@ -91,8 +105,10 @@ async def _get_price(query: str, domain: str, ai_client, model: str) -> float | 
 
 async def search_all_stores(query: str, ai_client=None, model: str = "perplexity/sonar-pro") -> list[dict]:
     """Параллельный поиск цен во всех 7 магазинах."""
+    product = _clean_query(query)  # убираем 'где купить' и т.п. перед поиском
+
     async def _one(name, domain, delivery, dcost):
-        price = await _get_price(query, domain, ai_client, model)
+        price = await _get_price(product, domain, ai_client, model)
         if price is None:
             return None
         return {
@@ -100,7 +116,7 @@ async def search_all_stores(query: str, ai_client=None, model: str = "perplexity
             "price": price,
             "delivery": delivery,
             "delivery_cost": dcost,
-            "url": _search_url(domain, query),  # всегда рабочая ссылка
+            "url": _search_url(domain, product),  # чистое название товара в URL
         }
 
     tasks = [_one(name, domain, delivery, dcost) for name, domain, delivery, dcost in STORES]
@@ -110,17 +126,18 @@ async def search_all_stores(query: str, ai_client=None, model: str = "perplexity
 
 def format_results(query: str, results: list[dict]) -> str:
     """Форматирует результаты в текст для Telegram."""
+    product = _clean_query(query)
     found = [r for r in results if r.get("price")]
 
     if not found:
         return (
-            f"❌ По запросу «{query}» ничего не найдено в 7 магазинах.\n"
+            f"❌ По запросу «{product}» ничего не найдено в 7 магазинах.\n"
             "Попробуй уточнить название или бренд."
         )
 
     sorted_res = sorted(found, key=lambda r: r["price"] + r["delivery_cost"])
 
-    lines = [f"🛒 {query}\n"]
+    lines = [f"🛒 {product}\n"]
     for r in sorted_res:
         total = r["price"] + r["delivery_cost"]
         if r["delivery_cost"] == 0:

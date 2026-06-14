@@ -311,12 +311,10 @@ def build_requests(data):
     # Колонки B, C: форматируем по типу KPI
     for i, (label, kpi_row, fmt) in enumerate(KPIS):
         row = R_D0 + i
-        if fmt == 'money':
-            pat = {'type': 'NUMBER', 'pattern': '#,##0'}
-        elif fmt == 'count':
-            pat = {'type': 'NUMBER', 'pattern': '#,##0'}
-        else:
+        if fmt == 'decimal':
             pat = {'type': 'NUMBER', 'pattern': '0.##'}
+        else:  # 'money' и 'count' — одинаковый паттерн
+            pat = {'type': 'NUMBER', 'pattern': '#,##0'}
         for col in [2, 3]:
             reqs.append({'repeatCell': {
                 'range': rng(row, col, row, col),
@@ -390,17 +388,15 @@ def build_values(data):
     rows += [sig(R_GRN1,'>0,05',1), sig(R_GRN2,'>0,05',2), sig(R_GRN3,'>0,05',3)]
 
     # AI блоки — заглушки (заполнит GAS-скрипт)
-    row(R_CAUSE, ['🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI-анализ)'])
-    for r in [R_C1, R_C2, R_C3]:
-        row(r, ['← Нажмите «Обновить AI-анализ» для заполнения'])
-
-    row(R_REC, ['💡  РЕКОМЕНДАЦИИ  (AI)'])
-    for r in [R_R1, R_R2, R_R3]:
-        row(r, ['← Нажмите «Обновить AI-анализ» для заполнения'])
-
-    row(R_MGMT, ['📋  УПРАВЛЕНЧЕСКИЕ ВЫВОДЫ  (AI)'])
-    for r in [R_M1, R_M2, R_M3]:
-        row(r, ['← Нажмите «Обновить AI-анализ» для заполнения'])
+    _AI_PLACEHOLDER = ['← Нажмите «Обновить AI-анализ» для заполнения']
+    for r_hdr, r_hdr_text, detail_rows in [
+        (R_CAUSE, ['🔍  ВОЗМОЖНЫЕ ПРИЧИНЫ  (AI-анализ)'], [R_C1, R_C2, R_C3]),
+        (R_REC,   ['💡  РЕКОМЕНДАЦИИ  (AI)'],             [R_R1, R_R2, R_R3]),
+        (R_MGMT,  ['📋  УПРАВЛЕНЧЕСКИЕ ВЫВОДЫ  (AI)'],   [R_M1, R_M2, R_M3]),
+    ]:
+        row(r_hdr, r_hdr_text)
+        for r in detail_rows:
+            row(r, _AI_PLACEHOLDER)
 
     # ── Скрытые данные (строки 50-73) ────────────────────────────
     for i, (label, kpi_row, fmt) in enumerate(KPIS):

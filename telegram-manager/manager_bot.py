@@ -125,6 +125,18 @@ async def cmd_start(message: Message):
     )
 
 
+def _format_rules_list(rules: list) -> str:
+    """Форматирует список правил в строку для ответа."""
+    lines = []
+    for r in rules:
+        status = "✅" if r["active"] else "❌"
+        bot_label = BOT_NAMES.get(r["target_bot"], r["target_bot"])
+        type_label = RULE_TYPE_NAMES.get(r["rule_type"], r["rule_type"])
+        desc = r["description"] or r["instruction"][:60]
+        lines.append(f"{status} #{r['id']} [{bot_label}] {type_label}\n    {desc}")
+    return "📋 *Правила:*\n\n" + "\n\n".join(lines)
+
+
 @dp.callback_query(F.data.startswith("start_rules:"))
 async def cb_start_rules(callback: CallbackQuery):
     bot_filter = callback.data.split(":")[1]
@@ -134,39 +146,33 @@ async def cb_start_rules(callback: CallbackQuery):
         await callback.message.edit_text(f"Правил для «{target}» нет.\n\nНапиши команду, например:\n_«Помощник, всегда отвечай кратко»_", parse_mode="Markdown")
         await callback.answer()
         return
-    lines = []
-    for r in rules:
-        status = "✅" if r["active"] else "❌"
-        bot_label = BOT_NAMES.get(r["target_bot"], r["target_bot"])
-        type_label = RULE_TYPE_NAMES.get(r["rule_type"], r["rule_type"])
-        desc = r["description"] or r["instruction"][:60]
-        lines.append(f"{status} #{r['id']} [{bot_label}] {type_label}\n    {desc}")
-    await callback.message.edit_text("📋 *Правила:*\n\n" + "\n\n".join(lines), parse_mode="Markdown")
+    await callback.message.edit_text(_format_rules_list(rules), parse_mode="Markdown")
     await callback.answer()
 
 
 @dp.callback_query(F.data == "start_help")
 async def cb_start_help(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "🤖 *Управляющий бот*\n\n"
-        "*Команды:*\n"
-        "/rules — все правила\n"
-        "/rules assistant — правила Напоминатора\n"
-        "/rules helper — правила Помощника\n"
-        "/rule 5 — детали правила №5\n"
-        "/delete\\_rule 5 — удалить правило\n"
-        "/toggle\\_rule 5 — вкл/выкл правило\n"
-        "/history 5 — когда применялось\n\n"
-        "*NLP-команды:*\n"
-        "Напоминатор, сделай ответы короче\n"
-        "Помощник, всегда уточняй дедлайн\n"
-        "добавь правило для всех: отвечай по-русски\n\n"
-        "*Переделай:*\n"
-        "Процитируй сообщение бота → напиши «переделай — инструкция»",
-        parse_mode="Markdown",
-    )
+    await callback.message.edit_text(_HELP_TEXT, parse_mode="Markdown")
     await callback.answer()
 
+
+_HELP_TEXT = (
+    "🤖 *Управляющий бот*\n\n"
+    "*Команды:*\n"
+    "/rules — все правила\n"
+    "/rules assistant — правила Напоминатора\n"
+    "/rules helper — правила Помощника\n"
+    "/rule 5 — детали правила №5\n"
+    "/delete\\_rule 5 — удалить правило\n"
+    "/toggle\\_rule 5 — вкл/выкл правило\n"
+    "/history 5 — когда применялось\n\n"
+    "*NLP-команды:*\n"
+    "Напоминатор, сделай ответы короче\n"
+    "Помощник, всегда уточняй дедлайн\n"
+    "добавь правило для всех: отвечай по-русски\n\n"
+    "*Переделай:*\n"
+    "Процитируй сообщение бота → напиши «переделай — инструкция»"
+)
 
 # ── /help ─────────────────────────────────────────────────────────────────────
 
@@ -174,24 +180,7 @@ async def cb_start_help(callback: CallbackQuery):
 async def cmd_help(message: Message):
     if not _auth(message):
         return
-    await message.answer(
-        "🤖 *Управляющий бот*\n\n"
-        "*Команды:*\n"
-        "/rules — все правила\n"
-        "/rules assistant — правила Напоминатора\n"
-        "/rules helper — правила Помощника\n"
-        "/rule 5 — детали правила №5\n"
-        "/delete\\_rule 5 — удалить правило\n"
-        "/toggle\\_rule 5 — вкл/выкл правило\n"
-        "/history 5 — когда применялось\n\n"
-        "*NLP-команды:*\n"
-        "Напоминатор, сделай ответы короче\n"
-        "Помощник, всегда уточняй дедлайн\n"
-        "добавь правило для всех: отвечай по-русски\n\n"
-        "*Переделай:*\n"
-        "Процитируй сообщение бота → напиши «переделай — инструкция»",
-        parse_mode="Markdown",
-    )
+    await message.answer(_HELP_TEXT, parse_mode="Markdown")
 
 
 # ── /rules ────────────────────────────────────────────────────────────────────
@@ -212,15 +201,7 @@ async def cmd_rules(message: Message):
         await message.answer(f"Правил для «{target}» нет.")
         return
 
-    lines = []
-    for r in rules:
-        status = "✅" if r["active"] else "❌"
-        bot_label = BOT_NAMES.get(r["target_bot"], r["target_bot"])
-        type_label = RULE_TYPE_NAMES.get(r["rule_type"], r["rule_type"])
-        desc = r["description"] or r["instruction"][:60]
-        lines.append(f"{status} #{r['id']} [{bot_label}] {type_label}\n    {desc}")
-
-    await message.answer("📋 *Правила:*\n\n" + "\n\n".join(lines), parse_mode="Markdown")
+    await message.answer(_format_rules_list(rules), parse_mode="Markdown")
 
 
 # ── /rule <id> ────────────────────────────────────────────────────────────────
