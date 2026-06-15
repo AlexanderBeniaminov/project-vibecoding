@@ -155,7 +155,12 @@ async def search_all_stores(query: str, ai_client=None, model: str = "perplexity
                 },
                 {
                     "role": "user",
-                    "content": f"Сколько стоит {product_en} в Wildberries, Ozon и Яндекс.Маркет?",
+                    "content": (
+                        f"Сколько стоит {product_en} "
+                        f"в Wildberries, Ozon, Яндекс.Маркет, "
+                        f"Лента, Пятёрочка, Перекрёсток, Ашан, Metro? "
+                        f"Цены с доставкой в Химки или Москву."
+                    ),
                 },
             ],
             max_tokens=400,
