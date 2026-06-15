@@ -62,7 +62,7 @@ _PROJECT_MAP = {
 
 async def _save_project_note(project_raw: str, text: str) -> str:
     """Асинхронная обёртка — запускает синхронный Sheets API в executor."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _save_project_note_sync, project_raw, text)
 
 
@@ -1940,6 +1940,8 @@ async def handle_message(message: Message):
     # Ядерная страховка: если DSML всё ещё есть — не отправлять мусор
     if _has_dsml(response):
         response = _strip_dsml(response)
+    if _has_dsml(response):
+        response = "Ищу информацию... попробуй повторить запрос."
 
     try:
         from rule_engine import apply_rules
