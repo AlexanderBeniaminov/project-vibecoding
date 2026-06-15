@@ -126,14 +126,22 @@ async def cmd_start(message: Message):
 
 
 def _format_rules_list(rules: list) -> str:
-    """Форматирует список правил в строку для ответа."""
     lines = []
     for r in rules:
         status = "✅" if r["active"] else "❌"
         bot_label = BOT_NAMES.get(r["target_bot"], r["target_bot"])
         type_label = RULE_TYPE_NAMES.get(r["rule_type"], r["rule_type"])
-        desc = r["description"] or r["instruction"][:60]
-        lines.append(f"{status} #{r['id']} [{bot_label}] {type_label}\n    {desc}")
+        # Первая строка description как заголовок, затем полная инструкция
+        raw = (r["description"] or r["instruction"]).strip()
+        title = raw.split("\n")[0].strip()
+        instr = r["instruction"].strip()
+        if len(instr) > 300:
+            instr = instr[:300] + "…"
+        lines.append(
+            f"{status} #{r['id']} [{bot_label}] {type_label}\n"
+            f"    *{title}*\n"
+            f"{instr}"
+        )
     return "📋 *Правила:*\n\n" + "\n\n".join(lines)
 
 
