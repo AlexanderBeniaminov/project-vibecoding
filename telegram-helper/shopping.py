@@ -1,17 +1,15 @@
 """
-Шопинг-агент v4:
-- Гарантированная база: WB + Ozon + Яндекс.Маркет всегда показываются (эти URL работают без логина/города)
-- 1 вызов Perplexity без site: → ищет по всем источникам (Маркет, price.ru, otzovik и др.)
-  Локация: Химки / Москва / Московская область
-- Из ответа обновляем цены базы и добавляем grocery stores если Perplexity подтвердил
-- Сортировка: с ценой сначала (по возрастанию), без цены — снизу
-- Цена всегда «от X ₽» — честно отражает приблизительность данных
+Шопинг-агент v5:
+- Гарантированная база: WB + Ozon + Яндекс.Маркет всегда (без логина/города)
+- 1 Perplexity-вызов с НАТУРАЛЬНЫМ промптом (без жёсткого формата → не возвращает НЕТ)
+- Парсер свободного текста → извлекает магазин + минимальную цену из любого ответа
+- Локация: Химки / Москва / Московская область
+- Сортировка: с ценой ↑, без цены — снизу
 """
 import asyncio
 import re
 from urllib.parse import quote_plus
 
-# Транслитерация: добавляет EN-вариант бренда для лучшего поиска в WB/Ozon
 _TRANSLIT = {
     "давыдофф": "davidoff", "давидофф": "davidoff",
     "нескафе":  "nescafe",  "якобс":    "jacobs",
@@ -41,7 +39,6 @@ def _clean_query(raw: str) -> str:
 
 
 def _search_url(domain: str, q_ru: str, q_en: str) -> str:
-    """Поисковый URL магазина. WB/Ozon/Маркет получают EN-вариант."""
     r = quote_plus(q_ru)
     e = quote_plus(q_en)
     return {
@@ -56,43 +53,91 @@ def _search_url(domain: str, q_ru: str, q_en: str) -> str:
     }.get(domain, f"https://www.{domain}/search?q={r}")
 
 
-# Маппинг: как Perplexity называет магазин → наши данные
-_STORE_MAP = {
-    "wildberries":  ("Wildberries",    "wildberries.ru",   "бесплатно",           0),
-    "вайлдберриз":  ("Wildberries",    "wildberries.ru",   "бесплатно",           0),
-    "wb":           ("Wildberries",    "wildberries.ru",   "бесплатно",           0),
-    "ozon":         ("Ozon",           "ozon.ru",          "от 99 ₽",            99),
-    "озон":         ("Ozon",           "ozon.ru",          "от 99 ₽",            99),
-    "яндекс":       ("Яндекс.Маркет", "market.yandex.ru", "от 99 ₽",            99),
-    "market":       ("Яндекс.Маркет", "market.yandex.ru", "от 99 ₽",            99),
-    "маркет":       ("Яндекс.Маркет", "market.yandex.ru", "от 99 ₽",            99),
-    "пятёрочка":    ("Пятёрочка",     "5ka.ru",           "бесплатно от 500 ₽",  0),
-    "пятерочка":    ("Пятёрочка",     "5ka.ru",           "бесплатно от 500 ₽",  0),
-    "перекрёсток":  ("Перекрёсток",   "perekrestok.ru",   "бесплатно от 700 ₽",  0),
-    "перекресток":  ("Перекрёсток",   "perekrestok.ru",   "бесплатно от 700 ₽",  0),
-    "лента":        ("Лента",         "lenta.com",        "бесплатно от 1500 ₽", 0),
-    "ашан":         ("Ашан",          "auchan.ru",        "199 ₽",             199),
-    "metro":        ("Metro",         "metro-cc.ru",      "299 ₽",             299),
-    "метро":        ("Metro",         "metro-cc.ru",      "299 ₽",             299),
-}
+# Шаблоны для распознавания магазинов в свободном тексте
+_STORE_PATTERNS = [
+    ("Wildberries",    r"wildberries|вайлдберриз|\bwb\b",      "wildberries.ru",   "бесплатно",           0),
+    ("Ozon",           r"\bozon\b|озон",                        "ozon.ru",          "от 99 ₽",            99),
+    ("Яндекс.Маркет", r"яндекс[.\s]маркет|яндекс-маркет|\bмаркет\b", "market.yandex.ru", "от 99 ₽",   99),
+    ("Пятёрочка",     r"пятёрочка|пятерочка",                  "5ka.ru",           "бесплатно от 500 ₽",  0),
+    ("Перекрёсток",   r"перекрёсток|перекресток",              "perekrestok.ru",   "бесплатно от 700 ₽",  0),
+    ("Лента",         r"\bлента\b",                             "lenta.com",        "бесплатно от 1500 ₽", 0),
+    ("Ашан",          r"\bашан\b",                              "auchan.ru",        "199 ₽",             199),
+    ("Metro",         r"\bmetro\b|\bметро\b",                   "metro-cc.ru",      "299 ₽",             299),
+]
+
+# Фразы, указывающие на отсутствие товара в строке
+_UNAVAILABLE_RE = re.compile(
+    r"нет в наличии|не нахожу|не найден|недоступен|нет данных|"
+    r"sold out|нет на сайте|не продаётся|не продается|отсутствует",
+    re.IGNORECASE,
+)
+
+# Цена: число (возможно с пробелами-разделителями тысяч) перед ₽ или руб
+_PRICE_RE = re.compile(r"(\d[\d\s]{0,6}\d|\d)\s*(?:₽|руб\.?)", re.IGNORECASE)
+
+
+def _parse_prices(text: str) -> dict[str, float]:
+    """
+    Извлекает цены из свободного текста Perplexity.
+    Обрабатывает строки вида: 'Ozon — 1 405 ₽', 'Wildberries: ~705 руб' и т.п.
+    Если в строке магазина написано 'нет в наличии' — пропускаем.
+    """
+    # Убираем сноски вида [1], [12]
+    text = re.sub(r"\[\d+\]", "", text)
+
+    prices: dict[str, float] = {}
+
+    for line in text.splitlines():
+        line_clean = line.strip()
+        if not line_clean:
+            continue
+
+        # Определяем магазин для этой строки
+        matched_name = None
+        for name, pattern, *_ in _STORE_PATTERNS:
+            if re.search(pattern, line_clean, re.IGNORECASE):
+                matched_name = name
+                break
+        if not matched_name:
+            continue
+
+        # Если строка говорит о недоступности — пропускаем
+        if _UNAVAILABLE_RE.search(line_clean):
+            continue
+
+        # Ищем цену в строке
+        found = _PRICE_RE.findall(line_clean)
+        if not found:
+            continue
+
+        nums = []
+        for p in found:
+            try:
+                nums.append(float(p.replace(" ", "").replace(" ", "")))
+            except ValueError:
+                pass
+
+        if nums and matched_name not in prices:
+            prices[matched_name] = min(nums)  # берём минимальную цену из строки
+
+    return prices
 
 
 async def search_all_stores(query: str, ai_client=None, model: str = "perplexity/sonar-pro") -> list[dict]:
     """
-    Гарантированная база WB+Ozon+Маркет всегда в результатах.
-    Perplexity (1 вызов, без site:) добавляет цены и grocery stores если подтвердил.
+    Гарантированная база WB+Ozon+Маркет + Perplexity с натуральным промптом.
     """
     product_ru = _clean_query(query)
     product_en = _enrich(product_ru)
 
-    # Гарантированная база — эти 3 всегда в списке
+    # 1. Гарантированная база — всегда в результатах, даже без цен
     results: dict[str, dict] = {
-        "Wildberries":    {"store": "Wildberries",    "price": None, "delivery": "бесплатно",  "delivery_cost": 0,  "url": _search_url("wildberries.ru",   product_ru, product_en)},
-        "Ozon":           {"store": "Ozon",           "price": None, "delivery": "от 99 ₽",    "delivery_cost": 99, "url": _search_url("ozon.ru",          product_ru, product_en)},
-        "Яндекс.Маркет": {"store": "Яндекс.Маркет", "price": None, "delivery": "от 99 ₽",    "delivery_cost": 99, "url": _search_url("market.yandex.ru", product_ru, product_en)},
+        "Wildberries":    {"store": "Wildberries",    "price": None, "delivery": "бесплатно", "delivery_cost": 0,  "url": _search_url("wildberries.ru",   product_ru, product_en)},
+        "Ozon":           {"store": "Ozon",           "price": None, "delivery": "от 99 ₽",   "delivery_cost": 99, "url": _search_url("ozon.ru",          product_ru, product_en)},
+        "Яндекс.Маркет": {"store": "Яндекс.Маркет", "price": None, "delivery": "от 99 ₽",   "delivery_cost": 99, "url": _search_url("market.yandex.ru", product_ru, product_en)},
     }
 
-    # Perplexity: 1 вызов без site: ограничения, локация — Химки/Москва
+    # 2. Perplexity с натуральным промптом (без жёсткого формата → не возвращает НЕТ)
     try:
         resp = await ai_client.chat.completions.create(
             model=model,
@@ -100,78 +145,49 @@ async def search_all_stores(query: str, ai_client=None, model: str = "perplexity
                 {
                     "role": "system",
                     "content": (
-                        "Найди актуальные цены на товар в интернет-магазинах "
-                        "с доставкой в Химки, Москва или Московская область.\n"
-                        "Для каждого магазина где товар ЕСТЬ В НАЛИЧИИ — верни строку:\n"
-                        "МАГАЗИН|ЦЕНА\n"
-                        "Нас интересуют только: "
-                        "Wildberries, Ozon, Яндекс.Маркет, Пятёрочка, Перекрёсток, Лента, Ашан, Metro.\n"
-                        "ЦЕНА — минимальная цена в рублях, только число (пример: 705).\n"
-                        "Не включай магазины где написано 'Нет в наличии', 'Под заказ' или нет кнопки Купить.\n"
-                        "Если нигде не найдено — верни: НЕТ\n"
-                        "Только строки МАГАЗИН|ЦЕНА, никаких пояснений."
+                        "Ты помощник по поиску цен в российских интернет-магазинах. "
+                        "Ищи товары с доставкой в Химки или Москву. "
+                        "Отвечай кратко: для каждого магазина — название и цена в рублях. "
+                        "Если в магазине нет или нет в наличии — так и напиши. "
+                        "Интересуют: Wildberries, Ozon, Яндекс.Маркет, "
+                        "Пятёрочка, Перекрёсток, Лента, Ашан, Metro."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": f"Где купить с доставкой в Химки или Москву: {product_en}? Укажи цены.",
+                    "content": f"Сколько стоит {product_en} в Wildberries, Ozon и Яндекс.Маркет?",
                 },
             ],
-            max_tokens=300,
+            max_tokens=400,
             temperature=0.0,
         )
 
-        text = (resp.choices[0].message.content or "").strip()
-        text = re.sub(r"\[\d+\]", "", text).strip()  # убираем сноски вида [1]
+        text = resp.choices[0].message.content or ""
+        prices = _parse_prices(text)
 
-        if text and not ("НЕТ" in text.upper() and "|" not in text):
-            seen = set(results.keys())  # для дедупликации grocery stores
-
-            for line in text.splitlines():
-                line = line.strip()
-                if "|" not in line:
-                    continue
-                parts = line.split("|", 1)
-                store_raw = parts[0].strip().lower()
-                price_raw = re.sub(r"[^\d]", "", parts[1].strip()) if len(parts) > 1 else ""
-                if not price_raw:
-                    continue
-                try:
-                    price = float(price_raw)
-                except ValueError:
-                    continue
-                if price <= 0:
-                    continue
-
-                # Найти магазин в маппинге
-                matched = None
-                for key, info in _STORE_MAP.items():
-                    if key in store_raw:
-                        matched = info
+        seen = set(results.keys())
+        for name, price in prices.items():
+            if name in results:
+                # Обновляем цену базового магазина
+                results[name]["price"] = price
+            elif name not in seen:
+                # Добавляем grocery store — только если Perplexity подтвердил цену
+                for store_name, pattern, domain, delivery, dcost in _STORE_PATTERNS:
+                    if store_name == name:
+                        seen.add(name)
+                        results[name] = {
+                            "store":         name,
+                            "price":         price,
+                            "delivery":      delivery,
+                            "delivery_cost": dcost,
+                            "url":           _search_url(domain, product_ru, product_en),
+                        }
                         break
-                if not matched:
-                    continue
-
-                name, domain, delivery, dcost = matched
-
-                if name in results:
-                    # Обновляем цену для базовых магазинов (WB/Ozon/Маркет)
-                    results[name]["price"] = price
-                elif name not in seen:
-                    # Добавляем grocery store подтверждённый Perplexity
-                    seen.add(name)
-                    results[name] = {
-                        "store":         name,
-                        "price":         price,
-                        "delivery":      delivery,
-                        "delivery_cost": dcost,
-                        "url":           _search_url(domain, product_ru, product_en),
-                    }
 
     except Exception:
-        pass  # Используем только базу без цен
+        pass  # Используем базу без цен
 
-    # Сортировка: с ценой (по возрастанию суммы с доставкой) → без цены
+    # 3. Сортировка: с ценой (по возрастанию с учётом доставки) → без цены
     def sort_key(r: dict):
         if r["price"] is None:
             return (1, 0)
