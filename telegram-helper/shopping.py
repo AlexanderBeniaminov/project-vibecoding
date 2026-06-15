@@ -26,16 +26,25 @@ def _enrich(query: str) -> str:
 
 
 _INTENT_PREFIXES = re.compile(
-    r"^(?:где\s+(?:купить|найти|дешевле)\s*|"
-    r"(?:хочу\s+)?купить\s+|найди\s+(?:дешевле\s+)?|"
-    r"сколько\s+стоит\s+|цена\s+на\s+|стоимость\s+|"
-    r"дешевл[её]\s+|самый?\s+дешёв\w*\s+)+",
+    r"^(?:"
+    r"где\s+дешевле\s+всего\s+(?:купить\s+)?|"   # где дешевле всего купить
+    r"где\s+(?:купить|найти|дешевле)\s*|"          # где купить / где найти / где дешевле
+    r"(?:хочу\s+)?купить\s+|"                       # купить / хочу купить
+    r"найди\s+(?:дешевле\s+)?|"                     # найди / найди дешевле
+    r"сколько\s+стоит\s+|"                           # сколько стоит
+    r"цена\s+на\s+|"                                 # цена на
+    r"стоимость\s+|"                                 # стоимость
+    r"дешевл[её]\s+всего\s+(?:купить\s+)?|"         # дешевле всего купить
+    r"дешевл[её]\s+|"                                # дешевле
+    r"самый?\s+дешёв\w*\s+"                          # самый дешёвый
+    r")+",
     re.IGNORECASE,
 )
 
 def _clean_query(raw: str) -> str:
     cleaned = _INTENT_PREFIXES.sub("", raw.strip())
-    return cleaned.strip() or raw.strip()
+    cleaned = cleaned.strip().rstrip("?!.").strip()  # убираем хвостовую пунктуацию
+    return cleaned or raw.strip()
 
 
 def _search_url(domain: str, q_ru: str, q_en: str) -> str:
@@ -49,7 +58,7 @@ def _search_url(domain: str, q_ru: str, q_en: str) -> str:
         "perekrestok.ru":   f"https://www.perekrestok.ru/cat/search?search={r}",
         "lenta.com":        f"https://lenta.com/search/?q={r}",
         "auchan.ru":        f"https://www.auchan.ru/catalog/search/?q={r}",
-        "metro-cc.ru":      f"https://online.metro-cc.ru/search?query={r}",
+        "metro-cc.ru":      f"https://online.metro-cc.ru/search?q={r}",
     }.get(domain, f"https://www.{domain}/search?q={r}")
 
 
