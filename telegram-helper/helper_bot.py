@@ -261,8 +261,8 @@ async def add_gubaha_task(executor: str, task: str, deadline: str = "") -> str:
 _NAMES_PAT = r"(виктор\w{0,3}|евгени\w{0,2}|жен\w{0,2}|надежд\w{0,2}|над[еяюьи]|управляющ\w{0,4}|технич\w+\s+директор\w{0,2}|техдиректор\w{0,2}|тех\.директор\w{0,2})"
 # «задача для Надежды: текст [дедлайн X]» — executor=group(1), task=group(2), deadline=group(3)
 _TASK_FOR_RE = re.compile(
-    r"задач[ауие]?\s+для\s+" + _NAMES_PAT +
-    r"[:\s,]+(.+?)(?:\s+(?:до|срок|дедлайн)\s+(.+))?$",
+    r"задач[ауие]?\s+(?:для\s+)?" + _NAMES_PAT +
+    r"[:\s,–-]+(.+?)(?:\s+(?:до|срок|дедлайн)\s+(.+))?$",
     re.IGNORECASE | re.DOTALL
 )
 # «Надежда задача: текст [дедлайн X]» — executor=group(1), task=group(2), deadline=group(3)
