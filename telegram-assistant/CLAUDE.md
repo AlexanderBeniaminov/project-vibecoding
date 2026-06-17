@@ -34,8 +34,11 @@
 ```
 telegram-assistant/
 ├── assistant_bot.py        # Главный файл: handlers, run_llm(), инициализация
+├── helper_bot_server.py    # Бизнес-помощник → деплоится как helper_bot.py в /home/parser/bots/helper/
+├── smart_search.py         # Умный поиск (авиа/отели/товары) → деплоится в /home/parser/bots/helper/
+│                           # IATA-словарь здесь; deploy: scp + systemctl restart telegram-helper
 ├── config.example.py       # Шаблон — скопировать в config.py на сервере
-├── deploy.sh               # rsync + ssh restart
+├── deploy.sh               # rsync + ssh restart (только для assistant)
 ├── knowledge/
 │   ├── projects.md         # База знаний о проектах Александра
 │   └── user.md             # Профиль Александра (контакты, предпочтения)
