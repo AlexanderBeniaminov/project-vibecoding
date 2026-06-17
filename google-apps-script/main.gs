@@ -1126,8 +1126,8 @@ function syncSegments_(sh2026, col, weekNum) {
  * Запускать вручную из GAS-редактора.
  */
 function backfillWeeks() {
-  var START_WEEK = 23;  // ← изменить при необходимости
-  var END_WEEK   = 23;  // ← изменить при необходимости
+  var START_WEEK = 24;  // ← изменить при необходимости
+  var END_WEEK   = 24;  // ← изменить при необходимости
   var year       = 2026;
 
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
