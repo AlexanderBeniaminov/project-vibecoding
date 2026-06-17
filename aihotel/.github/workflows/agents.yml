@@ -19,7 +19,7 @@ on:
     # Все времена UTC. Москва = UTC+3
     # ─── Понедельник ───────────────────────────────────────────
     - cron: '0 12 * * 1'   # Пн 12:00 UTC = Пн 15:00 МСК → email Виктору (данные до 22:00)
-    - cron: '0 17 * * 1'   # Пн 17:00 UTC = Пн 20:00 МСК → TravelLine Collector
+    - cron: '50 20 * * 1'  # Пн 20:50 UTC = Пн 23:50 МСК → TravelLine Collector (TL+Монблан+Воронка)
     - cron: '0 19 * * 1'   # Пн 19:00 UTC = Пн 22:00 МСК → Агент 1 попытка 1 (MAX + email если пусто)
     - cron: '0 20 * * 1'   # Пн 20:00 UTC = Пн 23:00 МСК → Агент 1 попытка 2 (email Виктору)
     - cron: '0 21 * * 1'   # Пн 21:00 UTC = Вт 00:00 МСК → Агент 1 попытка 3 (email Виктору)
@@ -69,8 +69,8 @@ jobs:
         if: github.event_name == 'schedule' && github.event.schedule == '0 12 * * 1'
         run: python agents/agent3_dispatcher.py remind
 
-      - name: Пн 20:00 МСК — TravelLine Collector
-        if: github.event_name == 'schedule' && github.event.schedule == '0 17 * * 1'
+      - name: Пн 23:50 МСК — TravelLine Collector (TL + Монблан + Воронка)
+        if: github.event_name == 'schedule' && github.event.schedule == '50 20 * * 1'
         run: python travelline_collector.py
 
       - name: Пн 22:00 МСК — Агент 1 попытка 1 (MAX Александру + email Виктору если пусто)

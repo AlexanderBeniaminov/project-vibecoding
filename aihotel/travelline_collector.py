@@ -83,6 +83,22 @@ TOTAL_COTTAGES = 21   # 123405(1)+152774(2)+152776(2)+183367(1)+183368(2)+
 TOTAL_DANIELLE = 15   # 84928(2)+84929(1)+84934(12) — без 84939, уточнить
 TOTAL_ALEN     = 58   # 82xxx(6)+220392(48)+220405(4) — уточнить
 
+# Монблан — трекинг-таблица (лист «ЕжеНедельно»)
+MONBLAN_SHEET_ID = '1Wcvn2mJFgOfcdm3mUQpYLoU92H3_bhGUJA_NnBwbDNI'
+MONBLAN_GID      = 2051236241   # GID листа «ЕжеНедельно»
+
+# Воронка — файл сегментов Евгении/Надежды
+SEG_SHEET_ID   = '1CdeyCx0VlzqNpUSDhmIdJPZYuR_1nv33bHu5FLnHX_8'
+SEG_SHEET_NAME = '2026 ✓'
+
+# Маппинг: (строка в «2026 ✓», строка в «2026» финансового отчёта)
+SEG_MAPPING = [
+    (6,  51), (9,  52),           # Физики: броней, сумма
+    (14, 40), (16, 41), (17, 42), # ДР: броней, проживаний, сумма
+    (22, 44), (24, 45), (25, 46), # Группы: броней, проживаний, сумма
+    (30, 48), (33, 49),           # Корп: броней, сумма
+]
+
 
 # ============================================================
 # Загрузка ключей — из os.environ (GitHub Actions) или .env (локально)
@@ -430,10 +446,106 @@ def calculate(bookings: list, cancelled_count: int,
 
 
 # ============================================================
+# Google Sheets клиент (общий для чтения и записи)
+# ============================================================
+def _gs_client() -> gspread.Client:
+    creds = Credentials.from_service_account_info(
+        GOOGLE_CREDS, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return gspread.Client(auth=creds)
+
+
+def _clean_num(v) -> str:
+    """Убирает неразрывные пробелы и пробели-разделители из числовых значений ячеек."""
+    return str(v).replace('\xa0', '').replace(' ', '').replace(',', '.').strip()
+
+
+def read_monblan(client: gspread.Client, week_num: int, year: int):
+    """
+    Читает выручку (строка 4) и кол-во чеков (строка 42) из трекинг-листа Монблан.
+    Возвращает (revenue: float, checks: int). При ошибке — (0, 0).
+    """
+    try:
+        mb_ss = client.open_by_key(MONBLAN_SHEET_ID)
+        mb_sh = next((s for s in mb_ss.worksheets() if s.id == MONBLAN_GID), None)
+        if not mb_sh:
+            print(f"  ⚠️ Монблан: лист GID={MONBLAN_GID} не найден")
+            return 0, 0
+
+        year_row = mb_sh.row_values(1)
+        week_row = mb_sh.row_values(2)
+
+        # Год в ячейке может быть «2 026» — убираем нецифры перед сравнением
+        mb_col = None
+        for i, (yr_v, wk_v) in enumerate(zip(year_row[1:], week_row[1:]), start=2):
+            yr = int(re.sub(r'\D', '', str(yr_v))) if re.sub(r'\D', '', str(yr_v)) else 0
+            wk = int(str(wk_v).strip()) if str(wk_v).strip().isdigit() else 0
+            if wk == week_num and yr == year:
+                mb_col = i
+                break
+
+        # Fallback: если ISO-неделя не найдена — берём последнюю заполненную колонку
+        if mb_col is None:
+            print(f"  ⚠️ Монблан: неделя {week_num}/{year} не найдена, берём последнюю")
+            for i in range(len(week_row) - 1, 0, -1):
+                if str(week_row[i]).strip():
+                    mb_col = i + 1
+                    print(f"  ℹ️ Монблан: используем колонку {mb_col} (нед.{week_row[i]})")
+                    break
+
+        if mb_col is None:
+            print("  ⚠️ Монблан: данные не найдены")
+            return 0, 0
+
+        revenue = float(_clean_num(mb_sh.cell(4,  mb_col).value) or 0)
+        checks  = int(float(_clean_num(mb_sh.cell(42, mb_col).value) or 0))
+        return revenue, checks
+
+    except Exception as e:
+        print(f"  ❌ Монблан ошибка: {e}")
+        return 0, 0
+
+
+def read_segments(client: gspread.Client, week_num: int) -> dict:
+    """
+    Читает данные сегментов из листа «2026 ✓» файла Евгении/Надежды.
+    Возвращает {fin_row: value} согласно SEG_MAPPING. При ошибке — {}.
+    """
+    try:
+        seg_ss = client.open_by_key(SEG_SHEET_ID)
+        seg_sh = seg_ss.worksheet(SEG_SHEET_NAME)
+
+        # Строка 1 листа воронки: номера недель начиная с колонки C (1-based = 3)
+        row1 = seg_sh.row_values(1)
+        seg_col = None
+        for i, v in enumerate(row1[2:], start=3):
+            if str(v).strip() == str(week_num):
+                seg_col = i
+                break
+
+        if seg_col is None:
+            print(f"  ⚠️ Воронка: неделя {week_num} не найдена в строке 1")
+            return {}
+
+        result = {}
+        for seg_row, fin_row in SEG_MAPPING:
+            v = seg_sh.cell(seg_row, seg_col).value
+            c = _clean_num(v) if v not in (None, '') else ''
+            result[fin_row] = float(c) if c else 0
+        return result
+
+    except Exception as e:
+        print(f"  ❌ Воронка ошибка: {e}")
+        return {}
+
+
+# ============================================================
 # Запись в Google Sheets
 # ============================================================
 METRIC_LABELS = {
-    5:  "Доход НФ (без Монблан), руб",
+    5:  "Доход общий НФ+Монблан, руб",
+    11: "Выручка Монблан, руб",
+    12: "Чеков Монблан",
     14: "Завтраков (кол-во)",
     17: "Фурако/бани, руб",
     18: "Беседки/мангалы, руб",
@@ -447,27 +559,33 @@ METRIC_LABELS = {
     30: "Загрузка Ален %",
     32: "Доля отмен %",
     33: "Прямые продажи %",
+    40: "ДР: броней",
+    41: "ДР: проживаний",
+    42: "ДР: сумма, руб",
+    44: "Группы: броней",
+    45: "Группы: проживаний",
+    46: "Группы: сумма, руб",
+    48: "Корп: броней",
+    49: "Корп: сумма, руб",
+    51: "Физики: броней",
+    52: "Физики: сумма, руб",
     72: "Уборки коттеджи",
     74: "Уборки хостелы",
 }
 
 
-def write_to_sheet(metrics: dict, week_num: int, week_start: date, week_end: date):
-    creds = Credentials.from_service_account_info(
-        GOOGLE_CREDS, scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    client = gspread.Client(auth=creds)
+def write_to_sheet(
+    client: gspread.Client,
+    metrics: dict,
+    week_num: int,
+    week_start: date,
+    week_end: date,
+    mb_revenue: float = 0,
+    mb_checks: int = 0,
+    seg_metrics: dict = None,
+):
     ss = client.open_by_key(FINANCE_SHEET_ID)
-
-    # Показываем все листы для диагностики
-    all_titles = [w.title for w in ss.worksheets()]
-    print(f"Листы в таблице: {all_titles}")
-
-    SHEET_NAME = "2026"
-    if SHEET_NAME not in all_titles:
-        print(f"❌ Лист '{SHEET_NAME}' не найден. Доступные листы: {all_titles}")
-        return
-    ws = ss.worksheet(SHEET_NAME)
+    ws = ss.worksheet("2026")
 
     # Ищем или создаём колонку недели
     row1 = ws.row_values(1)
@@ -480,18 +598,44 @@ def write_to_sheet(metrics: dict, week_num: int, week_start: date, week_end: dat
     if col is None:
         col = len(row1) + 1
         ws.update_cell(1, col, week_num)
-        date_label = f"{week_start.strftime('%d.%m')}–{week_end.strftime('%d.%m.%Y')}"
+        date_label = f"{week_start.strftime('%d.%m')}–{week_end.strftime('%d.%m')}"
         ws.update_cell(2, col, date_label)
-        print(f"Создана новая колонка {col_letter(col)} для недели {week_num}")
+        print(f"  Создана новая колонка {col_letter(col)} для недели {week_num}")
     else:
-        print(f"Найдена колонка {col_letter(col)} для недели {week_num}")
+        print(f"  Используем колонку {col_letter(col)} для недели {week_num}")
 
-    # Записываем метрики
     cl = col_letter(col)
-    updates = [{"range": f"{cl}{row}", "values": [[val]]}
-               for row, val in metrics.items()]
+    updates = []
+
+    # TravelLine метрики (строка 5 = НФ без Монблан, переопределим ниже)
+    for row, val in metrics.items():
+        updates.append({"range": f"{cl}{row}", "values": [[val]]})
+
+    # Строка 5: суммарный доход = НФ (TravelLine) + Монблан
+    updates.append({"range": f"{cl}5", "values": [[metrics.get(5, 0) + mb_revenue]]})
+
+    # Монблан
+    updates.append({"range": f"{cl}11", "values": [[mb_revenue]]})
+    updates.append({"range": f"{cl}12", "values": [[mb_checks]]})
+
+    # Сегменты (Воронка)
+    for fin_row, val in (seg_metrics or {}).items():
+        updates.append({"range": f"{cl}{fin_row}", "values": [[val]]})
+
     ws.batch_update(updates, value_input_option="USER_ENTERED")
-    print(f"✅ Записано {len(updates)} значений в колонку {cl}")
+
+    # Формулы для расчётных строк
+    formulas = [
+        (9,  f"={cl}8/{cl}7"),    # % к факту прошлого года (нарастающим)
+        (13, f"={cl}11/{cl}5"),   # F&B % от оборота
+        (24, f"={cl}23*{cl}28"),  # RevPAR = ADR × Загрузка коттеджей
+        (25, f"={cl}5/{cl}21"),   # RevPAC = Доход / Гостей
+    ]
+    for frow, formula in formulas:
+        ws.update_acell(f"{cl}{frow}", formula)
+
+    total_written = len(updates) + len(formulas)
+    print(f"  ✅ Записано {len(updates)} значений + {len(formulas)} формулы → колонка {cl}")
 
 
 # ============================================================
@@ -500,16 +644,16 @@ def write_to_sheet(metrics: dict, week_num: int, week_start: date, week_end: dat
 def main():
     week_num, year = _resolve_week_year(WEEK_NUMBER, YEAR)
     week_start, week_end = get_week_dates(year, week_num)
+    date_label = f"{week_start.strftime('%d.%m')}–{week_end.strftime('%d.%m')}"
     print(f"\n{'='*60}")
-    print(f"TravelLine Collector — Неделя {week_num} {year}")
-    print(f"Период: {week_start} – {week_end}")
+    print(f"TravelLine Collector — Неделя {week_num} {year} ({date_label})")
     print(f"Режим: {'DISCOVERY (только просмотр)' if DISCOVERY_MODE else 'ЗАПИСЬ В ТАБЛИЦУ'}")
     print(f"{'='*60}\n")
 
+    # ── 1. TravelLine ────────────────────────────────────────────
     token = get_token()
     print("✅ TravelLine: токен получен\n")
 
-    # Шаг 1: собираем номера броней
     active_nums, cancelled_nums = collect_booking_numbers(token, week_start, week_end)
     print(f"\nИтого: {len(active_nums)} активных, {len(cancelled_nums)} отменённых броней\n")
 
@@ -517,56 +661,64 @@ def main():
         print("⚠️  Броней не найдено. Проверьте WEEK_NUMBER и YEAR.")
         return
 
-
-    # Шаг 2: загружаем детали активных броней
     print(f"Загружаем детали {len(active_nums)} активных броней...")
     bookings = []
     for i, num in enumerate(active_nums, 1):
         bk = fetch_detail(token, num)
         if bk:
             bookings.append(bk)
-        if i % 5 == 0 or i == len(active_nums):
+        if i % 10 == 0 or i == len(active_nums):
             print(f"  {i}/{len(active_nums)} загружено")
 
     print(f"\nДеталей получено: {len(bookings)}\n")
-
-    # Шаг 3: считаем метрики
     metrics, rt_stats = calculate(bookings, len(cancelled_nums), week_start, week_end)
 
-    # Вывод типов номеров (для настройки)
-    print("=== ТИПЫ НОМЕРОВ ===")
+    # ── 2. Монблан + Воронка (один GS-клиент на оба источника и запись) ──
+    client = _gs_client()
+    print("─── Монблан ───")
+    mb_revenue, mb_checks = read_monblan(client, week_num, year)
+    print(f"  Выручка (стр.11): {mb_revenue:,.0f} руб, Чеков (стр.12): {mb_checks}")
+
+    print("─── Воронка (сегменты) ───")
+    seg_metrics = read_segments(client, week_num)
+    if seg_metrics:
+        for fin_row, val in sorted(seg_metrics.items()):
+            label = METRIC_LABELS.get(fin_row, f"Строка {fin_row}")
+            print(f"  Стр.{fin_row:2d} ({label}): {val}")
+    else:
+        print("  (нет данных)")
+
+    # ── Вывод TravelLine ─────────────────────────────────────────
+    print("─── Типы номеров (TravelLine) ───")
     print(f"{'ID':>10} | {'Броней':>6} | {'Ночей':>6} | {'Выручка':>12} | Название")
-    print("-" * 80)
+    print("-" * 78)
     for rt_id, s in sorted(rt_stats.items(), key=lambda x: -x[1]["revenue"]):
         print(f"{rt_id:>10} | {s['stays']:>6} | {s['nights']:>6} | "
               f"{s['revenue']:>12,.0f} | {s['name']}")
 
-    # Вывод метрик
-    print(f"\n=== МЕТРИКИ — Неделя {week_num} ===")
+    print(f"\n─── Метрики TravelLine — Неделя {week_num} ───")
     for row in sorted(metrics):
         val = metrics[row]
         label = METRIC_LABELS.get(row, f"Строка {row}")
-        # Форматирование для читаемости
         if row in {22, 28, 29, 30, 32, 33}:
             display = f"{val*100:.1f}%"
         elif row in {5, 23}:
             display = f"{val:,.0f} руб"
         else:
             display = str(val)
-        print(f"  Строка {row:2d}: {label:<28} = {display}")
+        print(f"  Строка {row:2d}: {label:<32} = {display}")
 
     if DISCOVERY_MODE:
         print("\n" + "="*60)
         print("DISCOVERY_MODE = True — данные НЕ записаны в таблицу.")
-        print("\nЧто делать дальше:")
-        print("1. Посмотрите вывод 'ТИПЫ НОМЕРОВ' выше")
-        print("2. Определите какие ID относятся к Коттеджам, Даниэль, Ален")
-        print("3. Заполните COTTAGE_TYPES, DANIELLE_TYPES, ALEN_TYPES и TOTAL_*")
-        print("4. Поменяйте DISCOVERY_MODE = False")
-        print("5. Запустите снова — данные запишутся в таблицу")
         return
 
-    write_to_sheet(metrics, week_num, week_start, week_end)
+    # ── 3. Запись ────────────────────────────────────────────────
+    print("\n─── Запись в «2026» ───")
+    write_to_sheet(client, metrics, week_num, week_start, week_end,
+                   mb_revenue=mb_revenue, mb_checks=mb_checks, seg_metrics=seg_metrics)
+
+    print(f"\n✅ Готово: неделя {week_num} ({date_label}) — TravelLine + Монблан + Воронка записаны.")
 
 
 if __name__ == "__main__":

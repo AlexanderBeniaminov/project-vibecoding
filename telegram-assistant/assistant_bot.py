@@ -55,6 +55,7 @@ _PROJECT_SA = "/home/parser/config/personal/service_account.json"
 _PROJECT_MAP = {
     "губаха": "Губаха", "губахи": "Губаха", "губахе": "Губаха", "губаху": "Губаха",
     "юникорн": "Юникорн", "unicorn": "Юникорн",
+    "монблан": "Монблан", "монблана": "Монблан", "монблане": "Монблан",
     "прочее": "Без проекта", "проче": "Без проекта", "офис": "Без проекта",
     "разное": "Без проекта", "общее": "Без проекта", "без проекта": "Без проекта",
 }
@@ -635,16 +636,16 @@ TOOLS = [
         "function": {
             "name": "save_card",
             "description": (
-                "Сохранить знание, идею, решение или вывод как карточку во vault. "
-                "Используй когда: 'запомни идею', 'сохрани мысль', 'зафиксируй решение', "
-                "'записал вывод', 'сохрани это в базу знаний'."
+                "Сохранить идею, заметку, решение, вывод в Google Sheets или vault. "
+                "Для card_type='idea': пишет в Google Sheets (таблица проектных заметок). "
+                "Используй когда: 'заметка для проекта', 'идея для Губахи', 'запомни идею', 'сохрани мысль'."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "card_type": {
                         "type": "string",
-                        "description": "Тип: idea, learning, decision, note, contact_card",
+                        "description": "Тип: idea (→ Google Sheets), learning, decision, note, contact_card",
                     },
                     "title": {
                         "type": "string",
@@ -652,7 +653,11 @@ TOOLS = [
                     },
                     "content": {
                         "type": "string",
-                        "description": "Содержание карточки",
+                        "description": "Содержание",
+                    },
+                    "project": {
+                        "type": "string",
+                        "description": "Проект для idea: Губаха, Монблан, Юникорн, Без проекта (по умолчанию)",
                     },
                     "tags": {
                         "type": "string",
@@ -804,10 +809,11 @@ def execute_tool(name: str, args: dict, user_id: int) -> str:
             card_type = args["card_type"]
             title = args["title"]
             content = args["content"]
-            # Идеи → Google Sheets (существующая таблица идей), остальное → vault
+            # Идеи → Google Sheets (таблица проектных заметок), остальное → vault
             if card_type == "idea":
+                project_raw = args.get("project", "Без проекта") or "Без проекта"
                 text_for_sheet = f"{title}: {content}" if title else content
-                return _save_project_note_sync("Без проекта", text_for_sheet)
+                return _save_project_note_sync(project_raw, text_for_sheet)
             return vault_tool.save_card(card_type, title, content, args.get("tags", ""))
         elif name == "search_vault":
             return vault_tool.search_vault(args["query"])
@@ -886,7 +892,11 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             "   «срочно»/«сейчас»=текущее время+2 минуты, «ночь»=22:00.\n"
             "   Если сообщение голосовое — перед созданием покажи эхо:\n"
             "   «Создаю напоминание: [текст] — [дата] в [время]. Верно?» — жди ✅.\n\n"
-            "③ Нет времени, есть дело/идея/мысль → add_note (НЕ напоминание).\n"
+            "③ «Заметка для проекта X» / «Идея для X» → save_card(card_type='idea', title='', content=текст).\n"
+            "   Из project_raw извлеки название проекта (Губаха/Монблан/Юникорн/Без проекта).\n"
+            "   Если проект не назван — project_raw='Без проекта'.\n"
+            "   Это пишет в Google Sheets — НЕ в add_note.\n\n"
+            "③б Нет времени, нет проекта, личное дело/мысль → add_note (НЕ напоминание).\n"
             "   Если голосовое — эхо: «Записываю заметку: [текст]. Верно?»\n\n"
             "④ «каждый день» / «каждую неделю» / «каждый месяц [число]» / «каждый год» →\n"
             "   add_reminder с параметром recurrence (daily/weekly/monthly/yearly).\n"
@@ -1903,9 +1913,22 @@ async def handle_message(message: Message):
         await _do_reformat(message, text)
         return
 
+    # ── Детектор «Заметка/Идея [для проекта X]» → запись в Google Sheets ──
+    _idea_match = re.match(
+        r"(?:заметка|идея)\s+(?:для\s+)?(?:проекта?\s+)?"
+        r"(губах[аиу]?|юникорн|unicorn|монблан[аe]?|прочее?|офис|разное|общее|без\s+проекта)?"
+        r"[\s:—\-]*(.+)",
+        text.strip(), re.IGNORECASE | re.DOTALL
+    )
+    if _idea_match:
+        _proj_raw = (_idea_match.group(1) or "Без проекта").strip()
+        _proj_text = _idea_match.group(2).strip()
+        if _proj_text:
+            await message.answer(await _save_project_note(_proj_raw, _proj_text), parse_mode="Markdown")
+            return
     # ── Детектор «проект X» → запись в Google Sheets ──────────────
     _project_match = re.match(
-        r"(?:для\s+)?(?:проект(?:а|е|у)?\s+)?(губах[аиу]?|юникорн|unicorn|прочее?|офис|разное|общее|без\s+проекта)\W+(.+)",
+        r"(?:для\s+)?(?:проект(?:а|е|у)?\s+)?(губах[аиу]?|юникорн|unicorn|монблан[аe]?|прочее?|офис|разное|общее|без\s+проекта)\W+(.+)",
         text.strip(), re.IGNORECASE | re.DOTALL
     )
     if _project_match:
