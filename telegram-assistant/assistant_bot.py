@@ -19,6 +19,20 @@ sys.path.insert(0, "/home/parser/bots/assistant")
 
 
 _MAX_TOKENS = 2000
+_MAX_HISTORY_TOKENS = 20_000  # ~80 КБ текста; защита от дорогих fallback-моделей
+
+
+def _count_history_tokens(history: list) -> int:
+    """Грубая оценка токенов истории: 1 токен ≈ 4 символа."""
+    total = 0
+    for msg in history:
+        c = msg.get("content", "")
+        if isinstance(c, str):
+            total += len(c)
+        elif isinstance(c, list):
+            for part in c:
+                total += len(str(part))
+    return total // 4
 
 # Один или больше пайпов с опциональными пробелами — ASCII | (U+007C) и полноширинный ｜ (U+FF5C)
 # Важно: (?:...) non-capturing, иначе group-индексы в parse-функции сдвигаются
@@ -1943,9 +1957,10 @@ async def handle_message(message: Message):
     history = histories.setdefault(user_id, [])
     history.append({"role": "user", "content": text})
 
-    if len(history) > 20:
-        histories[user_id] = history[-20:]
-        history = histories[user_id]
+    if _count_history_tokens(history) > _MAX_HISTORY_TOKENS:
+        while len(history) > 4 and _count_history_tokens(history) > _MAX_HISTORY_TOKENS:
+            history = history[1:]
+        histories[user_id] = history
 
     stop_typing = asyncio.Event()
     typing_task = asyncio.create_task(_keep_typing(message.chat.id, stop_typing))
