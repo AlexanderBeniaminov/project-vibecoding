@@ -262,7 +262,7 @@ _NAMES_PAT = r"(виктор\w{0,3}|евгени\w{0,2}|жен\w{0,2}|надеж
 # «задача для Надежды: текст [дедлайн X]» — executor=group(1), task=group(2), deadline=group(3)
 _TASK_FOR_RE = re.compile(
     r"задач[ауие]?\s+(?:для\s+)?" + _NAMES_PAT +
-    r"[:\s,–-]+(.+?)(?:\s+(?:до|срок|дедлайн)\s+(.+))?$",
+    r"\W+(.+?)(?:\s+(?:до|срок|дедлайн)\s+(.+))?$",
     re.IGNORECASE | re.DOTALL
 )
 # «Надежда задача: текст [дедлайн X]» — executor=group(1), task=group(2), deadline=group(3)
