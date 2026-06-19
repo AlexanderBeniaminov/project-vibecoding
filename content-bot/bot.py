@@ -45,6 +45,25 @@ def is_allowed(user_id: int) -> bool:
     return not config.ALLOWED_USER_IDS or user_id in config.ALLOWED_USER_IDS
 
 
+class _Typing:
+    """Пока генерация идёт — Telegram показывает «печатает...» под именем бота."""
+    def __init__(self, chat_id: int):
+        self._chat_id = chat_id
+        self._task: asyncio.Task | None = None
+
+    async def _loop(self):
+        while True:
+            await bot.send_chat_action(self._chat_id, "typing")
+            await asyncio.sleep(4)
+
+    async def __aenter__(self):
+        self._task = asyncio.create_task(self._loop())
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self._task.cancel()
+
+
 # ── Транскрипция голоса (паттерн из assistant_bot.py, упрощённо) ──
 _WHISPER_HALLUCINATIONS = {"", "you", "thank you for watching", "thanks for watching"}
 
@@ -241,7 +260,8 @@ async def _generate_and_render(loading_msg: Message, idea_id: int, idea_text: st
 
 async def _do_generate(loading_msg: Message, idea_id: int, idea_text: str, rubric: str):
     try:
-        variants = await generator.generate_variants(idea_text, rubric)
+        async with _Typing(loading_msg.chat.id):
+            variants = await generator.generate_variants(idea_text, rubric)
     except Exception as e:
         await loading_msg.edit_text(f"Не удалось сгенерировать варианты: {e}")
         return
@@ -308,7 +328,8 @@ async def _handle_correction(message: Message, gen_id: int):
     correction_text = message.text or message.caption or ""
     if message.voice:
         correction_text = await transcribe_voice(message)
-    new_text = await generator.apply_correction(gen["text"], correction_text)
+    async with _Typing(message.chat.id):
+        new_text = await generator.apply_correction(gen["text"], correction_text)
     db.update_generation_text(gen_id, new_text)
     gen = db.get_generation(gen_id)
     idea = db.get_idea(gen["idea_id"])
@@ -384,7 +405,8 @@ async def cb_propose(callback: CallbackQuery):
     published = db.get_published_texts()
     blacklisted = [e["text"] for e in blacklist.list_active()]
     try:
-        topics = await generator.generate_topic_suggestions(search_context, published, blacklisted)
+        async with _Typing(callback.message.chat.id):
+            topics = await generator.generate_topic_suggestions(search_context, published, blacklisted)
     except Exception as e:
         await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
         await callback.answer()
@@ -548,7 +570,8 @@ async def cb_bl_mode(callback: CallbackQuery):
 # ── Сохранение идеи (Режим 2) ───────────────────────────────
 async def _save_idea_flow(message: Message, raw_text: str, source: str):
     try:
-        structured = await generator.structure_idea(raw_text)
+        async with _Typing(message.chat.id):
+            structured = await generator.structure_idea(raw_text)
         title = structured.get("title") or raw_text[:60]
         desc = structured.get("description", "")
     except Exception:
