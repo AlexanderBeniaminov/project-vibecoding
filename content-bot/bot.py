@@ -315,8 +315,14 @@ async def cb_regen(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("corr:"))
 async def cb_correct(callback: CallbackQuery):
     gen_id = int(callback.data.split(":")[-1])
+    gen = db.get_generation(gen_id)
+    if not gen:
+        await callback.answer("Вариант не найден")
+        return
     _awaiting_correction[callback.from_user.id] = gen_id
-    await callback.message.answer("Напиши правку или новый вариант текста:")
+    await callback.message.answer(
+        f"Текущий текст (скопируй, исправь и пришли целиком — или просто напиши что изменить):\n\n{gen['text']}"
+    )
     await callback.answer()
 
 
