@@ -165,6 +165,37 @@ ai_client = openai.AsyncOpenAI(
     timeout=90.0,  # 90 сек максимум; без таймаута бот зависает навсегда
 )
 
+# RouterAI иногда подменяет запрошенную модель на дорогую (например opus) и списывает деньги.
+# Оборачиваем create() для всех вызовов: при подмене на неразрешённую модель — переключаемся
+# на следующую из списка, не падаем с ошибкой и не показываем пользователю сбой.
+_FALLBACK_MODELS = [
+    'deepseek/deepseek-v4-pro',
+    'anthropic/claude-sonnet-4.6',
+    'perplexity/sonar-pro',
+    'qwen/qwen3-next-80b-a3b-thinking',
+]
+_original_create = ai_client.chat.completions.create
+
+
+async def _create_with_fallback(*, model: str, **kwargs):
+    models_to_try = [model] + [m for m in _FALLBACK_MODELS if m != model]
+    last_exc = None
+    for m in models_to_try:
+        try:
+            resp = await _original_create(model=m, **kwargs)
+        except Exception as e:
+            last_exc = e
+            continue
+        actual_model = getattr(resp, 'model', '') or ''
+        if actual_model and not any(allowed in actual_model for allowed in _FALLBACK_MODELS):
+            logging.warning("RouterAI подменил %s на %s — переключаюсь на следующую модель", m, actual_model)
+            continue
+        return resp
+    raise RuntimeError(f"Все разрешённые модели недоступны: {last_exc}")
+
+
+ai_client.chat.completions.create = _create_with_fallback
+
 histories: dict[int, list[dict]] = {}
 _pending_call_summaries: dict[int, str] = {}  # саммари звонков ожидающие действия
 _pending_call_transcripts: dict[int, str] = {}  # транскрипции для повторной генерации
@@ -967,9 +998,6 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             create_kwargs["tools"] = TOOLS
             create_kwargs["tool_choice"] = "auto"
         resp = await ai_client.chat.completions.create(**create_kwargs)
-        actual_model = getattr(resp, 'model', '') or ''
-        if actual_model and 'opus' in actual_model.lower():
-            logging.warning("ALERT: RouterAI использовал %s вместо %s — проверь настройки ключа на routerai.ru", actual_model, config.MODEL)
         msg = resp.choices[0].message
 
         if not msg.tool_calls:

@@ -49,6 +49,37 @@ ai_client = openai.AsyncOpenAI(
     api_key=config.ROUTERAI_API_KEY,
 )
 
+# RouterAI иногда подменяет запрошенную модель на дорогую (например opus) и списывает деньги.
+# Оборачиваем create() для всех вызовов: при подмене на неразрешённую модель — переключаемся
+# на следующую из списка, не падаем с ошибкой и не показываем пользователю сбой.
+_FALLBACK_MODELS = [
+    'deepseek/deepseek-v4-pro',
+    'anthropic/claude-sonnet-4.6',
+    'perplexity/sonar-pro',
+    'qwen/qwen3-next-80b-a3b-thinking',
+]
+_original_create = ai_client.chat.completions.create
+
+
+async def _create_with_fallback(*, model: str, **kwargs):
+    models_to_try = [model] + [m for m in _FALLBACK_MODELS if m != model]
+    last_exc = None
+    for m in models_to_try:
+        try:
+            resp = await _original_create(model=m, **kwargs)
+        except Exception as e:
+            last_exc = e
+            continue
+        actual_model = getattr(resp, 'model', '') or ''
+        if actual_model and not any(allowed in actual_model for allowed in _FALLBACK_MODELS):
+            logging.warning("RouterAI подменил %s на %s — переключаюсь на следующую модель", m, actual_model)
+            continue
+        return resp
+    raise RuntimeError(f"Все разрешённые модели недоступны: {last_exc}")
+
+
+ai_client.chat.completions.create = _create_with_fallback
+
 _HOTELIER_DB = Path(config.DATA_DIR) / "hotelier.db"
 
 histories: dict[int, list] = {}
@@ -198,9 +229,6 @@ async def run_llm(messages: list, model: str = None) -> str:
         max_tokens=2000,
         temperature=0.5,
     )
-    actual_model = getattr(resp, 'model', '') or ''
-    if actual_model and 'opus' in actual_model.lower():
-        logging.warning("ALERT: RouterAI использовал %s вместо %s — проверь настройки ключа на routerai.ru", actual_model, m)
     msg = resp.choices[0].message
     content = (msg.content or "").strip()
     return _clean(content)

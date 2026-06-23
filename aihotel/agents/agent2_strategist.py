@@ -45,8 +45,13 @@ def extract_data_week(digest_rows: list) -> tuple:
     return None, ''
 
 
-_ALLOWED_MODELS = {'deepseek/deepseek-v4-pro', 'deepseek-v4-pro'}
-_REQUESTED_MODEL = 'deepseek/deepseek-v4-pro'
+# RouterAI иногда подменяет запрошенную модель на дорогую (например opus) и списывает деньги.
+# Вместо падения с ошибкой — пробуем по очереди разрешённые модели, пока одна не сработает.
+_FALLBACK_MODELS = [
+    'deepseek/deepseek-v4-pro',
+    'anthropic/claude-sonnet-4.6',
+    'qwen/qwen3-next-80b-a3b-thinking',
+]
 
 
 def call_claude(system_prompt: str, user_message: str) -> str:
@@ -54,35 +59,37 @@ def call_claude(system_prompt: str, user_message: str) -> str:
         base_url=os.environ.get('ROUTERAI_BASE_URL', 'https://routerai.ru/api/v1'),
         api_key=os.environ['ROUTERAI_API_KEY'],
     )
-    for attempt in range(3):
-        try:
-            response = client.chat.completions.create(
-                model=_REQUESTED_MODEL,
-                max_tokens=16000,
-                messages=[
-                    {'role': 'system', 'content': system_prompt},
-                    {'role': 'user', 'content': user_message},
-                ],
-            )
-            # Защита от RouterAI авто-фолбэка на дорогие модели (opus и пр.)
-            actual_model = getattr(response, 'model', '') or ''
-            if actual_model and not any(m in actual_model for m in _ALLOWED_MODELS):
-                raise RuntimeError(
-                    f"RouterAI подменил модель: запросили {_REQUESTED_MODEL}, "
-                    f"использовали {actual_model}. Остановлено чтобы не тратить деньги."
+    last_error = None
+    for model in _FALLBACK_MODELS:
+        for attempt in range(2):
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    max_tokens=16000,
+                    messages=[
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': user_message},
+                    ],
                 )
-            content = response.choices[0].message.content
-            if not content:
-                finish = response.choices[0].finish_reason
-                raise RuntimeError(f"Пустой ответ от API (finish_reason={finish})")
-            print(f"  Модель использована: {actual_model or _REQUESTED_MODEL}")
-            return content
-        except Exception as e:
-            if attempt < 2:
-                print(f"  Ошибка RouterAI API (попытка {attempt + 1}): {e}. Жду 5 сек...")
-                time.sleep(5)
-            else:
-                raise RuntimeError(f"RouterAI API недоступен: {e}")
+                actual_model = getattr(response, 'model', '') or ''
+                if actual_model and not any(m in actual_model for m in _FALLBACK_MODELS):
+                    print(f"  RouterAI подменил {model} на {actual_model}, пробую следующую модель из списка...")
+                    last_error = RuntimeError(f"Подмена модели: {model} -> {actual_model}")
+                    break  # эту модель не повторяем, сразу следующая
+                content = response.choices[0].message.content
+                if not content:
+                    finish = response.choices[0].finish_reason
+                    raise RuntimeError(f"Пустой ответ от API (finish_reason={finish})")
+                print(f"  Модель использована: {actual_model or model}")
+                return content
+            except Exception as e:
+                last_error = e
+                if attempt == 0:
+                    print(f"  Ошибка с моделью {model} (попытка {attempt + 1}): {e}. Жду 5 сек...")
+                    time.sleep(5)
+                else:
+                    print(f"  Модель {model} не сработала: {e}. Пробую следующую модель...")
+    raise RuntimeError(f"Все разрешённые модели не сработали. Последняя ошибка: {last_error}")
 
 
 def archive_current_tasks(ws_tasks: object, ws_archive: object, current_week: str) -> None:
