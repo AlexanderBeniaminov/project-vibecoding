@@ -30,13 +30,10 @@ def init_db():
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             text        TEXT NOT NULL,
             source      TEXT DEFAULT 'text',       -- 'text' | 'voice'
-            status      TEXT DEFAULT 'saved',       -- 'saved' | 'in_progress' | 'scheduled' | 'published' | 'paused'
+            status      TEXT DEFAULT 'saved',       -- 'saved' | 'in_progress' | 'paused'
             rubric      TEXT DEFAULT 'regular',      -- 'regular' | 'lifehack'
             created_at  TEXT NOT NULL,
-            scheduled_at        TEXT,
-            published_at        TEXT,
-            cooldown_until       TEXT,
-            channel_message_id  INTEGER
+            cooldown_until   TEXT                   -- published_at + 30 дней (заполняется при публикации любого варианта)
         );
 
         CREATE TABLE IF NOT EXISTS generations (
@@ -47,10 +44,25 @@ def init_db():
             audience     TEXT NOT NULL,
             format       TEXT NOT NULL,
             revision     INTEGER DEFAULT 0,
-            sheets_hash  TEXT,                      -- MD5(text) на момент последнего push в Sheets
-            created_at   TEXT NOT NULL
+            sheets_hash  TEXT,
+            created_at   TEXT NOT NULL,
+            status       TEXT DEFAULT 'generated', -- 'generated' | 'draft' | 'to_publish' | 'published' | 'delete'
+            scheduled_at TEXT,
+            published_at TEXT,
+            channel_message_id INTEGER
         );
     """)
+    # Миграция: добавляем новые колонки к generations если их нет (для уже существующей БД)
+    for col_def in [
+        "ALTER TABLE generations ADD COLUMN status TEXT DEFAULT 'generated'",
+        "ALTER TABLE generations ADD COLUMN scheduled_at TEXT",
+        "ALTER TABLE generations ADD COLUMN published_at TEXT",
+        "ALTER TABLE generations ADD COLUMN channel_message_id INTEGER",
+    ]:
+        try:
+            conn.execute(col_def)
+        except Exception:
+            pass  # колонка уже существует
     conn.commit()
     conn.close()
 
@@ -96,45 +108,12 @@ def update_idea_status(idea_id: int, status: str):
     conn.close()
 
 
-def schedule_idea(idea_id: int, scheduled_at: str):
-    conn = get_conn()
-    conn.execute(
-        "UPDATE ideas SET status='scheduled', scheduled_at=? WHERE id=?",
-        (scheduled_at, idea_id),
-    )
-    conn.commit()
-    conn.close()
-
-
-def mark_published(idea_id: int, channel_message_id: int | None = None):
-    now = _now()
-    cooldown_until = (datetime.now(_MSK).replace(tzinfo=None) + timedelta(days=config.IDEA_COOLDOWN_DAYS)).isoformat()
-    conn = get_conn()
-    conn.execute(
-        "UPDATE ideas SET status='published', published_at=?, cooldown_until=?, channel_message_id=? WHERE id=?",
-        (now, cooldown_until, channel_message_id, idea_id),
-    )
-    conn.commit()
-    conn.close()
-
-
-def get_scheduled_ideas() -> list[dict]:
-    """Идеи с запланированной публикацией в будущем — для восстановления джобов при старте."""
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT * FROM ideas WHERE status='scheduled' AND scheduled_at > ?",
-        (_now(),),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
 def get_published_texts(limit: int = 50) -> list[str]:
-    """Темы уже опубликованных постов — чтобы не повторяться в Режиме 0."""
+    """Темы публикаций для cooldown-фильтра в Режиме 0 (идеи с cooldown_until в будущем)."""
     conn = get_conn()
     rows = conn.execute(
-        "SELECT text FROM ideas WHERE status='published' ORDER BY published_at DESC LIMIT ?",
-        (limit,),
+        "SELECT text FROM ideas WHERE cooldown_until > ? ORDER BY cooldown_until DESC LIMIT ?",
+        (_now(), limit),
     ).fetchall()
     conn.close()
     return [r["text"] for r in rows]
@@ -142,10 +121,11 @@ def get_published_texts(limit: int = 50) -> list[str]:
 
 # ── Варианты постов ──────────────────────────────────────────
 def add_generation(idea_id: int, variant_num: int, text: str, audience: str, format_: str) -> int:
+    """Сохраняет вариант со статусом 'generated'. Переход в 'draft' — через mark_generation_saved()."""
     conn = get_conn()
     cur = conn.execute(
-        "INSERT INTO generations (idea_id, variant_num, text, audience, format, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO generations (idea_id, variant_num, text, audience, format, created_at, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'generated')",
         (idea_id, variant_num, text, audience, format_, _now()),
     )
     gen_id = cur.lastrowid
@@ -168,6 +148,65 @@ def get_generations_for_idea(idea_id: int) -> list[dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_generations_by_status(status: str) -> list[dict]:
+    """Все варианты с заданным статусом — для восстановления расписания и sync."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM generations WHERE status=?", (status,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def mark_generation_saved(gen_id: int):
+    """'generated' → 'draft': пользователь нажал «Сохранить», вариант отправляется в Sheets."""
+    conn = get_conn()
+    conn.execute("UPDATE generations SET status='draft' WHERE id=?", (gen_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_generation_schedule(gen_id: int, scheduled_at: str):
+    """'draft' → 'to_publish': дата из таблицы разобрана, APScheduler job зарегистрирован."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE generations SET status='to_publish', scheduled_at=? WHERE id=?",
+        (scheduled_at, gen_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def mark_generation_published(gen_id: int, channel_message_id: int | None = None):
+    """Публикация состоялась. Также ставит cooldown на родительскую идею."""
+    now = _now()
+    cooldown_until = (
+        datetime.now(_MSK).replace(tzinfo=None) + timedelta(days=config.IDEA_COOLDOWN_DAYS)
+    ).isoformat()
+    conn = get_conn()
+    conn.execute(
+        "UPDATE generations SET status='published', published_at=?, channel_message_id=? WHERE id=?",
+        (now, channel_message_id, gen_id),
+    )
+    # Проставляем cooldown на уровне идеи чтобы тема не повторялась в Режиме 0
+    gen = conn.execute("SELECT idea_id FROM generations WHERE id=?", (gen_id,)).fetchone()
+    if gen:
+        conn.execute(
+            "UPDATE ideas SET cooldown_until=? WHERE id=?",
+            (cooldown_until, gen["idea_id"]),
+        )
+    conn.commit()
+    conn.close()
+
+
+def delete_generation(gen_id: int):
+    """Удаляет вариант из БД (триггер: статус «🗑 Удалить» в Sheets при 3:00-sync)."""
+    conn = get_conn()
+    conn.execute("DELETE FROM generations WHERE id=?", (gen_id,))
+    conn.commit()
+    conn.close()
 
 
 def update_generation_text(gen_id: int, new_text: str):

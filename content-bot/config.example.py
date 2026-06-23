@@ -20,4 +20,4 @@ IDEA_COOLDOWN_DAYS    = 30
 LIFEHACK_START_DATE   = "2026-06-19"   # Опорная дата первого лайфхак-четверга
 PUBLISH_DAYS          = [0, 3]          # 0=пн, 3=чт
 PUBLISH_HOUR          = 10              # 10:00 МСК
-SHEETS_SYNC_HOURS     = [3, 15]         # Синхронизация Sheets→Бот в 03:00 и 15:00 МСК
+SHEETS_SYNC_HOUR      = 3               # Синхронизация Sheets→Бот в 03:00 МСК

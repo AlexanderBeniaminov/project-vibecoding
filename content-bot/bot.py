@@ -27,18 +27,54 @@ bot = Bot(token=config.TELEGRAM_TOKEN)
 dp = Dispatcher()
 scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
-# ── Состояния в памяти (паттерн как в assistant_bot.py — простые dict, без aiogram FSM) ──
-_awaiting_idea_save: set[int] = set()           # пользователь нажал «Сохранить идею», ждём текст/голос
-_awaiting_correction: dict[int, int] = {}       # user_id → gen_id, ждём текст правки
-_awaiting_blacklist_text: set[int] = set()      # ждём тему для добавления в блэклист
-_awaiting_blacklist_bulk: set[int] = set()      # ждём список тем через перенос строки
-_pending_blacklist_text: dict[int, str] = {}    # user_id → тема, ждём выбор режима
+# ── Состояния в памяти ────────────────────────────────────────
+_awaiting_idea_save: set[int] = set()
+_awaiting_correction: dict[int, int] = {}       # user_id → gen_id
+_awaiting_blacklist_text: set[int] = set()
+_awaiting_blacklist_bulk: set[int] = set()
+_pending_blacklist_text: dict[int, str] = {}
 _pending_blacklist_bulk: dict[int, list[str]] = {}
-_pending_blacklist_confirm: dict[int, dict] = {}  # user_id → {"idea_id":..., "text":..., "rubric":...}
+_pending_blacklist_confirm: dict[int, dict] = {}
 _pending_topics: dict[int, list[dict]] = {}     # user_id → предложенные темы (Режим 0)
-_ideas_page: dict[int, int] = {}
+_content_plan: dict[int, dict] = {}             # user_id → {topics: [...], selected: set()}
 
+# ── Regex-паттерны команд ─────────────────────────────────────
 _IDEA_TRIGGER_RE = re.compile(r'^идея(\s+для\s+поста)?\W*', re.IGNORECASE)
+_LIFEHACK_RE = re.compile(r'лайфхак', re.IGNORECASE)
+# Ссылка на идею по номеру: «тему 2 из идей», «идею №3», «вторую идею» и т.п.
+_IDEA_REF_RE = re.compile(
+    r'(?:тем[аиую]|идею?|пост\s+(?:по\s+)?(?:идее?|теме?))\s*(?:№\s*)?(\d+)\b'
+    r'|(?:тем[аиую]|идею?)\s*(?:№\s*)?(\d+)\s*из\s*(?:листа\s*)?идей',
+    re.IGNORECASE,
+)
+# Порядковые числительные РУ (для «вторую идею» и т.п.)
+_RU_ORDINALS = {
+    "перв": 1, "второ": 2, "второй": 2, "второю": 2, "вторую": 2,
+    "треть": 3, "четвёрт": 4, "четверт": 4, "пят": 5,
+    "шест": 6, "седьм": 7, "восьм": 8, "девят": 9, "десят": 10,
+}
+_ORDINAL_RE = re.compile(
+    r'(перв|второй|второю|вторую|третью?|четвёрт\w*|четверт\w*|пят\w*|шест\w*|седьм\w*|восьм\w*|девят\w*|десят\w*)'
+    r'\s+(?:идею?|тему)',
+    re.IGNORECASE,
+)
+_INVENT_TOPIC_RE = re.compile(r'придумай\s+(?:тему|идею)', re.IGNORECASE)
+
+
+def _extract_idea_index(text: str) -> int | None:
+    """Извлекает номер идеи (0-based) из произвольной фразы. Возвращает None если не нашёл."""
+    m = _IDEA_REF_RE.search(text)
+    if m:
+        n = int(m.group(1) or m.group(2))
+        return n - 1  # 0-based
+    # Порядковые числительные
+    m = _ORDINAL_RE.search(text)
+    if m:
+        word = m.group(1).lower()
+        for prefix, n in _RU_ORDINALS.items():
+            if word.startswith(prefix):
+                return n - 1
+    return None
 
 
 def is_allowed(user_id: int) -> bool:
@@ -64,7 +100,7 @@ class _Typing:
         self._task.cancel()
 
 
-# ── Транскрипция голоса (паттерн из assistant_bot.py, упрощённо) ──
+# ── Транскрипция голоса ──────────────────────────────────────
 _WHISPER_HALLUCINATIONS = {"", "you", "thank you for watching", "thanks for watching"}
 
 
@@ -97,25 +133,30 @@ async def transcribe_voice(message: Message) -> str:
             os.unlink(tmp_path)
 
 
-# ── Главное меню ──────────────────────────────────────────────
+# ── Главное меню ─────────────────────────────────────────────
 def _main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💡 Предложи темы", callback_data="menu:propose"),
          InlineKeyboardButton(text="📋 Мои идеи", callback_data="ideas:page:0")],
-        [InlineKeyboardButton(text="📅 Расписание", callback_data="menu:schedule"),
+        [InlineKeyboardButton(text="🗂 Контент-план", callback_data="menu:content_plan"),
          InlineKeyboardButton(text="🚫 Блэклист", callback_data="menu:blacklist")],
-        [InlineKeyboardButton(text="❓ Помощь", callback_data="menu:help")],
+        [InlineKeyboardButton(text="📅 Расписание", callback_data="menu:schedule"),
+         InlineKeyboardButton(text="❓ Помощь", callback_data="menu:help")],
     ])
 
 
 _HELP_TEXT = (
     "🤖 *Content Bot — шпаргалка*\n\n"
-    "*Сразу написать пост:* наговори или напиши тему — пришлю 3 варианта.\n"
-    "*Сохранить идею на потом:* «идея для поста: ...» или кнопка [📋 Мои идеи].\n"
-    "*Бот сам предложит темы:* кнопка [💡 Предложи темы].\n"
-    "*Расписание публикаций:* /schedule\n"
-    "*Блэклист тем:* /blacklist\n\n"
-    "Публикация — кнопками [✅ Запланировать] или [⚡ Сейчас] под каждым вариантом."
+    "*Написать пост:* наговори или напиши тему.\n"
+    "*Лайфхак:* «придумай лайфхак про X».\n"
+    "*По сохранённой идее:* «напиши пост на тему 2 из идей».\n"
+    "*Сохранить идею:* «идея для поста: ...».\n"
+    "*Предложи тему сам:* «придумай тему».\n\n"
+    "После генерации:\n"
+    "💾 Сохранить → черновик падает в таблицу → правь текст, ставь дату → бот публикует в 3:00.\n"
+    "🚨 СРОЧНО В КАНАЛ → публикуется немедленно.\n\n"
+    "*Контент-план:* [🗂 Контент-план] — темы пачкой → утверди → черновики в таблице.\n"
+    "*Блэклист тем:* /blacklist"
 )
 
 
@@ -125,7 +166,7 @@ async def cmd_start(message: Message):
         return
     await message.answer(
         "Привет! Я помогу писать и публиковать посты для «ИИндустрия Развлечений».\n\n"
-        "Наговори тему — пришлю 3 варианта. Или выбери действие в меню:",
+        "Наговори тему — пришлю 3 варианта. Или выбери действие:",
         reply_markup=_main_menu_kb(),
     )
 
@@ -149,13 +190,16 @@ async def cb_menu_show(callback: CallbackQuery):
     await callback.answer()
 
 
-# ── /schedule ─────────────────────────────────────────────────
+# ── /schedule — расписание публикаций ────────────────────────
 def _schedule_text() -> str:
     lines = []
     for dt in publisher.next_publish_dates(6):
         conn = db.get_conn()
         row = conn.execute(
-            "SELECT text FROM ideas WHERE status='scheduled' AND scheduled_at=?", (dt.isoformat(),)
+            """SELECT i.text FROM generations g
+               JOIN ideas i ON i.id = g.idea_id
+               WHERE g.status='to_publish' AND g.scheduled_at=?""",
+            (dt.isoformat(),),
         ).fetchone()
         conn.close()
         marker = "🔴" if publisher.is_lifehack_thursday(dt) else "📅"
@@ -216,22 +260,28 @@ async def cb_idea_select(callback: CallbackQuery):
         return
     loading = await callback.message.answer("⏳ Обрабатываю, генерирую варианты...")
     db.update_idea_status(idea_id, "in_progress")
-    await _generate_and_render(loading, idea_id, idea["text"], idea["rubric"])
+    recent_formats = _get_recent_formats()
+    await _generate_and_render(loading, idea_id, idea["text"], idea["rubric"], recent_formats)
     await callback.answer()
 
 
-# ── Генерация (общее ядро для Режима 1 и выбора сохранённой идеи) ──
-def _variant_format_label(fmt: str) -> str:
-    return fmt
+def _get_recent_formats() -> list[str]:
+    """Читает недавние форматы из истории Sheets для ротации."""
+    try:
+        history = sheets.get_recent_history(limit=15)
+        return [h["format"] for h in history if h.get("format")]
+    except Exception:
+        return []
 
 
+# ── Генерация (общее ядро) ────────────────────────────────────
 def _result_keyboard(generations: list[dict], idea_id: int) -> InlineKeyboardMarkup:
     rows = []
     for g in generations:
         rows.append([
             InlineKeyboardButton(text="⚙️ Скорректировать", callback_data=f"corr:{g['id']}"),
-            InlineKeyboardButton(text="✅ Запланировать", callback_data=f"sched:{g['id']}"),
-            InlineKeyboardButton(text="⚡ Сейчас", callback_data=f"now:{g['id']}"),
+            InlineKeyboardButton(text="💾 Сохранить", callback_data=f"save:{g['id']}"),
+            InlineKeyboardButton(text="🚨 СРОЧНО В КАНАЛ", callback_data=f"urgent:{g['id']}"),
         ])
     rows.append([InlineKeyboardButton(text="🔄 Другие варианты", callback_data=f"regen:{idea_id}")])
     rows.append([InlineKeyboardButton(text="🔙 Меню", callback_data="menu:show")])
@@ -241,43 +291,51 @@ def _result_keyboard(generations: list[dict], idea_id: int) -> InlineKeyboardMar
 def _render_variants_text(generations: list[dict]) -> str:
     blocks = []
     for g in generations:
-        blocks.append(f"──── Вариант {g['variant_num']} · {_variant_format_label(g['format'])} ────\n{g['text']}")
+        blocks.append(f"──── Вариант {g['variant_num']} · {g['format']} ────\n{g['text']}")
     return "\n\n".join(blocks)
 
 
-async def _generate_and_render(loading_msg: Message, idea_id: int, idea_text: str, rubric: str):
+async def _generate_and_render(
+    loading_msg: Message, idea_id: int, idea_text: str, rubric: str,
+    recent_formats: list[str] | None = None,
+):
     matched = await blacklist.check_against_blacklist(idea_text)
     if matched:
-        _pending_blacklist_confirm[loading_msg.chat.id] = {"idea_id": idea_id, "text": idea_text, "rubric": rubric}
+        _pending_blacklist_confirm[loading_msg.chat.id] = {
+            "idea_id": idea_id, "text": idea_text, "rubric": rubric,
+            "recent_formats": recent_formats,
+        }
         kb = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="Да, генерировать", callback_data="blconfirm:yes"),
             InlineKeyboardButton(text="Нет, отмена", callback_data="blconfirm:no"),
         ]])
-        await loading_msg.edit_text(f"⚠️ Тема похожа на заблокированную: «{matched}». Всё равно генерировать?", reply_markup=kb)
+        await loading_msg.edit_text(
+            f"⚠️ Тема похожа на заблокированную: «{matched}». Всё равно генерировать?", reply_markup=kb
+        )
         return
-    await _do_generate(loading_msg, idea_id, idea_text, rubric)
+    await _do_generate(loading_msg, idea_id, idea_text, rubric, recent_formats)
 
 
-async def _do_generate(loading_msg: Message, idea_id: int, idea_text: str, rubric: str):
+async def _do_generate(
+    loading_msg: Message, idea_id: int, idea_text: str, rubric: str,
+    recent_formats: list[str] | None = None,
+):
     try:
         async with _Typing(loading_msg.chat.id):
-            variants = await generator.generate_variants(idea_text, rubric)
+            variants = await generator.generate_variants(idea_text, rubric, recent_formats)
     except Exception as e:
         await loading_msg.edit_text(f"Не удалось сгенерировать варианты: {e}")
         return
+
+    # Сохраняем варианты в БД со статусом 'generated' (в Sheets НЕ пишем — только после «Сохранить»)
     generations = []
     for v in variants:
         gen_id = db.add_generation(idea_id, v["variant"], v["text"], v["audience"], v["format"])
         generations.append(db.get_generation(gen_id))
 
-    idea = db.get_idea(idea_id)
-    try:
-        sheets.push_idea(idea)
-        sheets.push_generations(idea, generations)
-    except Exception as e:
-        logging.warning(f"[sheets] push не удался: {e}")
-
-    await loading_msg.edit_text(_render_variants_text(generations), reply_markup=_result_keyboard(generations, idea_id))
+    await loading_msg.edit_text(
+        _render_variants_text(generations), reply_markup=_result_keyboard(generations, idea_id)
+    )
 
 
 @dp.callback_query(F.data == "blconfirm:yes")
@@ -286,7 +344,10 @@ async def cb_blconfirm_yes(callback: CallbackQuery):
     if not pending:
         await callback.answer()
         return
-    await _do_generate(callback.message, pending["idea_id"], pending["text"], pending["rubric"])
+    await _do_generate(
+        callback.message, pending["idea_id"], pending["text"], pending["rubric"],
+        pending.get("recent_formats"),
+    )
     await callback.answer()
 
 
@@ -307,11 +368,60 @@ async def cb_regen(callback: CallbackQuery):
         await callback.answer("Идея не найдена")
         return
     loading = await callback.message.answer("⏳ Генерирую другие варианты...")
-    await _do_generate(loading, idea_id, idea["text"], idea["rubric"])
+    await _do_generate(loading, idea_id, idea["text"], idea["rubric"], _get_recent_formats())
     await callback.answer()
 
 
-# ── Корректировка ────────────────────────────────────────────
+# ── Кнопка «Сохранить» ───────────────────────────────────────
+@dp.callback_query(F.data.startswith("save:"))
+async def cb_save(callback: CallbackQuery):
+    gen_id = int(callback.data.split(":")[-1])
+    gen = db.get_generation(gen_id)
+    if not gen:
+        await callback.answer("Вариант не найден")
+        return
+    if gen["status"] in ("draft", "to_publish", "published"):
+        await callback.answer("Уже сохранено")
+        return
+    db.mark_generation_saved(gen_id)
+    idea = db.get_idea(gen["idea_id"])
+    try:
+        sheets.push_generation_draft(idea, db.get_generation(gen_id))
+    except Exception as e:
+        logging.warning(f"[sheets] push_generation_draft не удался: {e}")
+    await callback.answer("💾 Сохранено в таблицу")
+    await callback.message.answer(
+        "💾 Черновик в листе «Посты».\n"
+        "Открой таблицу: правь текст, выбери дату из списка и поставь статус «К публикации» — "
+        "бот опубликует в 3:00."
+    )
+
+
+# ── Кнопка «СРОЧНО В КАНАЛ» ─────────────────────────────────
+@dp.callback_query(F.data.startswith("urgent:"))
+async def cb_urgent(callback: CallbackQuery):
+    gen_id = int(callback.data.split(":")[-1])
+    gen = db.get_generation(gen_id)
+    if not gen:
+        await callback.answer("Вариант не найден")
+        return
+    if gen["status"] == "published":
+        await callback.answer("Уже опубликовано")
+        return
+    # Если ещё не сохранён — сохраняем в Sheets тоже
+    if gen["status"] == "generated":
+        db.mark_generation_saved(gen_id)
+        idea = db.get_idea(gen["idea_id"])
+        try:
+            sheets.push_generation_draft(idea, db.get_generation(gen_id))
+        except Exception as e:
+            logging.warning(f"[sheets] push при СРОЧНО не удался: {e}")
+    result = await publisher.publish_now(gen_id)
+    await callback.message.answer(result)
+    await callback.answer()
+
+
+# ── Корректировка ─────────────────────────────────────────────
 @dp.callback_query(F.data.startswith("corr:"))
 async def cb_correct(callback: CallbackQuery):
     gen_id = int(callback.data.split(":")[-1])
@@ -321,7 +431,7 @@ async def cb_correct(callback: CallbackQuery):
         return
     _awaiting_correction[callback.from_user.id] = gen_id
     await callback.message.answer(
-        f"Текущий текст (скопируй, исправь и пришли целиком — или просто напиши что изменить):\n\n{gen['text']}"
+        f"Текущий текст (скопируй, исправь и пришли целиком — или напиши что изменить):\n\n{gen['text']}"
     )
     await callback.answer()
 
@@ -338,69 +448,15 @@ async def _handle_correction(message: Message, gen_id: int):
         new_text = await generator.apply_correction(gen["text"], correction_text)
     db.update_generation_text(gen_id, new_text)
     gen = db.get_generation(gen_id)
-    idea = db.get_idea(gen["idea_id"])
     kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="⚙️ Скорректировать", callback_data=f"corr:{gen_id}"),
-        InlineKeyboardButton(text="✅ Запланировать", callback_data=f"sched:{gen_id}"),
-        InlineKeyboardButton(text="⚡ Сейчас", callback_data=f"now:{gen_id}"),
+        InlineKeyboardButton(text="💾 Сохранить", callback_data=f"save:{gen_id}"),
+        InlineKeyboardButton(text="🚨 СРОЧНО В КАНАЛ", callback_data=f"urgent:{gen_id}"),
     ]])
     await message.answer(f"Обновлённый вариант:\n\n{new_text}", reply_markup=kb)
 
 
-# ── Публикация ────────────────────────────────────────────────
-@dp.callback_query(F.data.startswith("now:"))
-async def cb_publish_now(callback: CallbackQuery):
-    gen_id = int(callback.data.split(":")[-1])
-    gen = db.get_generation(gen_id)
-    if not gen:
-        await callback.answer("Вариант не найден")
-        return
-    result = await publisher.publish_now(gen["idea_id"], gen_id)
-    idea = db.get_idea(gen["idea_id"])
-    try:
-        sheets.push_published(idea, gen)
-    except Exception as e:
-        logging.warning(f"[sheets] push_published не удался: {e}")
-    await callback.message.answer(result)
-    await callback.answer()
-
-
-@dp.callback_query(F.data.startswith("sched:"))
-async def cb_schedule_pick(callback: CallbackQuery):
-    gen_id = int(callback.data.split(":")[-1])
-    slots = publisher.get_free_slots(3)
-    if not slots:
-        await callback.answer("Нет свободных слотов")
-        return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"{publisher.DAY_NAMES[dt.weekday()]} {dt.strftime('%d.%m')} {dt.strftime('%H:%M')}",
-                               callback_data=f"slot:{gen_id}:{dt.isoformat()}")]
-        for dt in slots
-    ])
-    await callback.message.answer("Выбери слот публикации:", reply_markup=kb)
-    await callback.answer()
-
-
-@dp.callback_query(F.data.startswith("slot:"))
-async def cb_slot_pick(callback: CallbackQuery):
-    _, gen_id_raw, dt_raw = callback.data.split(":", 2)
-    gen_id = int(gen_id_raw)
-    dt = datetime.fromisoformat(dt_raw)
-    gen = db.get_generation(gen_id)
-    if not gen:
-        await callback.answer("Вариант не найден")
-        return
-    publisher.schedule_post(gen["idea_id"], gen_id, dt)
-    idea = db.get_idea(gen["idea_id"])
-    try:
-        sheets.push_scheduled(idea, gen, dt)
-    except Exception as e:
-        logging.warning(f"[sheets] push_scheduled не удался: {e}")
-    await callback.message.answer(f"📅 Запланировано на {dt.strftime('%d.%m.%Y %H:%M')} — можешь редактировать в таблице")
-    await callback.answer()
-
-
-# ── Режим 0 — бот сам предлагает темы ───────────────────────
+# ── Режим 0 — бот сам предлагает темы ─────────────────────────
 @dp.callback_query(F.data == "menu:propose")
 async def cb_propose(callback: CallbackQuery):
     loading = await callback.message.answer("🔍 Ищу тренды и формирую идеи...")
@@ -410,9 +466,12 @@ async def cb_propose(callback: CallbackQuery):
         await loading.edit_text("🔍 Поиск недоступен — генерирую из базы знаний...")
     published = db.get_published_texts()
     blacklisted = [e["text"] for e in blacklist.list_active()]
+    recent_formats = _get_recent_formats()
     try:
         async with _Typing(callback.message.chat.id):
-            topics = await generator.generate_topic_suggestions(search_context, published, blacklisted)
+            topics = await generator.generate_topic_suggestions(
+                search_context, published, blacklisted, recent_formats
+            )
     except Exception as e:
         await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
         await callback.answer()
@@ -442,7 +501,7 @@ async def cb_topic_write(callback: CallbackQuery):
     idea_text = f"{topic['topic']}: {topic['description']}"
     idea_id = db.add_idea(idea_text, source="text", status="in_progress")
     loading = await callback.message.answer("⏳ Обрабатываю, генерирую варианты...")
-    await _generate_and_render(loading, idea_id, idea_text, "regular")
+    await _generate_and_render(loading, idea_id, idea_text, "regular", _get_recent_formats())
     await callback.answer()
 
 
@@ -461,6 +520,110 @@ async def cb_topic_save(callback: CallbackQuery):
     except Exception as e:
         logging.warning(f"[sheets] push_idea не удался: {e}")
     await callback.answer("Сохранено в идеи")
+
+
+# ── Контент-план (пакетная генерация) ────────────────────────
+def _content_plan_kb(topics: list[dict], selected: set) -> InlineKeyboardMarkup:
+    rows = []
+    for i, t in enumerate(topics):
+        mark = "✅" if i in selected else "☐"
+        rows.append([InlineKeyboardButton(
+            text=f"{mark} {i+1}. {t['topic'][:35]}",
+            callback_data=f"cp:toggle:{i}",
+        )])
+    rows.append([
+        InlineKeyboardButton(text="✍️ Написать черновики", callback_data="cp:confirm"),
+        InlineKeyboardButton(text="🔙 Меню", callback_data="menu:show"),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@dp.callback_query(F.data == "menu:content_plan")
+async def cb_content_plan(callback: CallbackQuery):
+    loading = await callback.message.answer("🗂 Формирую контент-план...")
+    free_slots = publisher.get_free_slots(4)
+    count = max(len(free_slots), 3)
+    loop = asyncio.get_running_loop()
+    search_context = await loop.run_in_executor(None, search.search_niche_trends)
+    published = db.get_published_texts()
+    blacklisted = [e["text"] for e in blacklist.list_active()]
+    recent_formats = _get_recent_formats()
+    try:
+        async with _Typing(callback.message.chat.id):
+            topics = await generator.generate_topic_suggestions(
+                search_context, published, blacklisted, recent_formats, count=count
+            )
+    except Exception as e:
+        await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
+        await callback.answer()
+        return
+
+    user_id = callback.from_user.id
+    _content_plan[user_id] = {"topics": topics, "selected": set()}
+
+    lines = [f"{i+1}. «{t['topic']}» — {t['description']}" for i, t in enumerate(topics)]
+    await loading.edit_text(
+        "Выбери темы для черновиков (нажми чтобы отметить ✅), потом «✍️ Написать черновики»:\n\n"
+        + "\n".join(lines),
+        reply_markup=_content_plan_kb(topics, set()),
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("cp:toggle:"))
+async def cb_cp_toggle(callback: CallbackQuery):
+    idx = int(callback.data.split(":")[-1])
+    user_id = callback.from_user.id
+    plan = _content_plan.get(user_id)
+    if not plan:
+        await callback.answer("Сессия устарела — запусти контент-план заново")
+        return
+    selected = plan["selected"]
+    if idx in selected:
+        selected.discard(idx)
+    else:
+        selected.add(idx)
+    await callback.message.edit_reply_markup(reply_markup=_content_plan_kb(plan["topics"], selected))
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "cp:confirm")
+async def cb_cp_confirm(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    plan = _content_plan.pop(user_id, None)
+    if not plan or not plan["selected"]:
+        await callback.answer("Ни одна тема не выбрана")
+        return
+    topics = plan["topics"]
+    approved = [topics[i] for i in sorted(plan["selected"]) if i < len(topics)]
+    recent_formats = _get_recent_formats()
+
+    await callback.message.answer(f"⏳ Пишу черновики для {len(approved)} тем...")
+    await callback.answer()
+
+    for i, topic in enumerate(approved):
+        idea_text = f"{topic['topic']}: {topic['description']}"
+        idea_id = db.add_idea(idea_text, source="text", status="in_progress")
+        idea = db.get_idea(idea_id)
+        try:
+            async with _Typing(callback.message.chat.id):
+                variants = await generator.generate_variants(idea_text, recent_formats=recent_formats)
+        except Exception as e:
+            await callback.message.answer(f"❌ Не удалось сгенерировать для «{topic['topic']}»: {e}")
+            continue
+        for v in variants:
+            gen_id = db.add_generation(idea_id, v["variant"], v["text"], v["audience"], v["format"])
+            db.mark_generation_saved(gen_id)
+            gen = db.get_generation(gen_id)
+            try:
+                sheets.push_generation_draft(idea, gen)
+            except Exception as e:
+                logging.warning(f"[sheets] push_generation_draft для контент-плана не удался: {e}")
+
+    await callback.message.answer(
+        f"✅ {len(approved)} тем → по 3 черновика в листе «Посты».\n"
+        "Открой таблицу: правь тексты, выставляй даты и статус «К публикации»."
+    )
 
 
 # ── Блэклист ──────────────────────────────────────────────────
@@ -573,25 +736,18 @@ async def cb_bl_mode(callback: CallbackQuery):
     await callback.answer()
 
 
-# ── Сохранение идеи (Режим 2) ───────────────────────────────
+# ── Сохранение идеи (Режим 2) ─────────────────────────────────
 async def _save_idea_flow(message: Message, raw_text: str, source: str):
-    try:
-        async with _Typing(message.chat.id):
-            structured = await generator.structure_idea(raw_text)
-        title = structured.get("title") or raw_text[:60]
-        desc = structured.get("description", "")
-    except Exception:
-        title, desc = raw_text[:60], ""
-    idea_text = f"{title}: {desc}" if desc else title
-    idea_id = db.add_idea(idea_text, source=source, status="saved")
+    """Сохраняет идею как есть — без AI-структурирования."""
+    idea_id = db.add_idea(raw_text, source=source, status="saved")
     try:
         sheets.push_idea(db.get_idea(idea_id))
     except Exception as e:
         logging.warning(f"[sheets] push_idea не удался: {e}")
-    await message.answer(f"💾 Сохранено:\n📌 Тема: {title}\n📝 Суть: {desc}" if desc else f"💾 Сохранено:\n📌 Тема: {title}")
+    await message.answer(f"💾 Сохранено:\n{raw_text}")
 
 
-# ── Главный роутер сообщений ─────────────────────────────────
+# ── Главный роутер сообщений ──────────────────────────────────
 @dp.message(F.text | F.voice)
 async def handle_message(message: Message):
     if not is_allowed(message.from_user.id):
@@ -629,6 +785,7 @@ async def handle_message(message: Message):
         await message.answer("Не удалось распознать голос. Попробуй ещё раз или напиши текстом.")
         return
 
+    # 1. Сохранить идею — «идея для поста: ...»
     m = _IDEA_TRIGGER_RE.match(text)
     if m:
         idea_text = text[m.end():].strip()
@@ -640,9 +797,60 @@ async def handle_message(message: Message):
         await _save_idea_flow(message, text, source)
         return
 
+    # 2. Ссылка на сохранённую идею по номеру — «напиши пост на тему 2 из идей»
+    idea_idx = _extract_idea_index(text)
+    if idea_idx is not None:
+        ideas = db.list_ideas(status="saved", limit=50)
+        if idea_idx < len(ideas):
+            idea = ideas[idea_idx]
+            loading = await message.answer(f"⏳ Генерирую по идее #{idea_idx+1}: «{idea['text'][:40]}»...")
+            db.update_idea_status(idea["id"], "in_progress")
+            rubric = "lifehack" if _LIFEHACK_RE.search(text) else idea.get("rubric", "regular")
+            await _generate_and_render(loading, idea["id"], idea["text"], rubric, _get_recent_formats())
+        else:
+            await message.answer(f"Идея #{idea_idx+1} не найдена. Всего сохранено {len(ideas)}.")
+        return
+
+    # 3. Лайфхак — любое сообщение со словом «лайфхак»
+    if _LIFEHACK_RE.search(text):
+        # Извлекаем тему после слова «лайфхак»
+        idea_text = _LIFEHACK_RE.sub("", text).strip()
+        idea_text = re.sub(r'^(придумай|напиши|сделай|про|на\s+тему|как)\s*', '', idea_text, flags=re.IGNORECASE).strip()
+        idea_text = idea_text or "Лайфхак: как использовать ИИ для экономии времени"
+        loading = await message.answer("⏳ Готовлю лайфхак...")
+        idea_id = db.add_idea(idea_text, source=source, rubric="lifehack", status="in_progress")
+        await _generate_and_render(loading, idea_id, idea_text, "lifehack", _get_recent_formats())
+        return
+
+    # 4. «Придумай тему сам» — без конкретики
+    if _INVENT_TOPIC_RE.match(text.strip()):
+        rest = _INVENT_TOPIC_RE.sub("", text, count=1).strip()
+        if not rest or len(rest) < 5:
+            # Бот сам придумывает тему через generate_topic_suggestions и сразу пишет
+            loading = await message.answer("🔍 Придумываю тему и пишу варианты...")
+            published = db.get_published_texts()
+            blacklisted = [e["text"] for e in blacklist.list_active()]
+            recent_formats = _get_recent_formats()
+            try:
+                async with _Typing(message.chat.id):
+                    topics = await generator.generate_topic_suggestions(
+                        "", published, blacklisted, recent_formats, count=1
+                    )
+                if topics:
+                    t = topics[0]
+                    idea_text = f"{t['topic']}: {t['description']}"
+                    idea_id = db.add_idea(idea_text, source=source, status="in_progress")
+                    await _generate_and_render(loading, idea_id, idea_text, "regular", recent_formats)
+                else:
+                    await loading.edit_text("Не удалось придумать тему. Попробуй ещё раз.")
+            except Exception as e:
+                await loading.edit_text(f"Ошибка: {e}")
+            return
+
+    # 5. Обычная генерация — текст как тема
     loading = await message.answer("⏳ Обрабатываю, генерирую варианты...")
     idea_id = db.add_idea(text, source=source, status="in_progress")
-    await _generate_and_render(loading, idea_id, text, "regular")
+    await _generate_and_render(loading, idea_id, text, "regular", _get_recent_formats())
 
 
 # ── Запуск ────────────────────────────────────────────────────
@@ -659,8 +867,10 @@ async def main():
         logging.warning(f"[sheets] инициализация листов не удалась: {e}")
 
     publisher.init(bot, scheduler)
-    for hour in config.SHEETS_SYNC_HOURS:
-        scheduler.add_job(_periodic_sheets_sync, "cron", hour=hour, minute=0, id=f"sheets_sync_{hour}")
+    scheduler.add_job(
+        _periodic_sheets_sync, "cron",
+        hour=config.SHEETS_SYNC_HOUR, minute=0, id="sheets_sync",
+    )
     scheduler.start()
 
     await dp.start_polling(bot)
