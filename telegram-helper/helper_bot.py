@@ -197,6 +197,9 @@ async def run_llm(messages: list, model: str = None) -> str:
         max_tokens=2000,
         temperature=0.5,
     )
+    actual_model = getattr(resp, 'model', '') or ''
+    if actual_model and 'opus' in actual_model.lower():
+        logging.warning("ALERT: RouterAI использовал %s вместо %s — проверь настройки ключа на routerai.ru", actual_model, m)
     msg = resp.choices[0].message
     content = (msg.content or "").strip()
     return _clean(content)
