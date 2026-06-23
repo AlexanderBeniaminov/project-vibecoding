@@ -967,6 +967,9 @@ async def run_llm(history: list[dict], user_id: int, chat_id: int) -> str:
             create_kwargs["tools"] = TOOLS
             create_kwargs["tool_choice"] = "auto"
         resp = await ai_client.chat.completions.create(**create_kwargs)
+        actual_model = getattr(resp, 'model', '') or ''
+        if actual_model and 'opus' in actual_model.lower():
+            logging.warning("ALERT: RouterAI использовал %s вместо %s — проверь настройки ключа на routerai.ru", actual_model, config.MODEL)
         msg = resp.choices[0].message
 
         if not msg.tool_calls:

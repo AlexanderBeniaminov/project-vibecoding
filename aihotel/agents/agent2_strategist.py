@@ -45,6 +45,10 @@ def extract_data_week(digest_rows: list) -> tuple:
     return None, ''
 
 
+_ALLOWED_MODELS = {'deepseek/deepseek-v4-pro', 'deepseek-v4-pro'}
+_REQUESTED_MODEL = 'deepseek/deepseek-v4-pro'
+
+
 def call_claude(system_prompt: str, user_message: str) -> str:
     client = openai.OpenAI(
         base_url=os.environ.get('ROUTERAI_BASE_URL', 'https://routerai.ru/api/v1'),
@@ -53,17 +57,25 @@ def call_claude(system_prompt: str, user_message: str) -> str:
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
-                model='deepseek/deepseek-v4-pro',
+                model=_REQUESTED_MODEL,
                 max_tokens=16000,
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': user_message},
                 ],
             )
+            # Защита от RouterAI авто-фолбэка на дорогие модели (opus и пр.)
+            actual_model = getattr(response, 'model', '') or ''
+            if actual_model and not any(m in actual_model for m in _ALLOWED_MODELS):
+                raise RuntimeError(
+                    f"RouterAI подменил модель: запросили {_REQUESTED_MODEL}, "
+                    f"использовали {actual_model}. Остановлено чтобы не тратить деньги."
+                )
             content = response.choices[0].message.content
             if not content:
                 finish = response.choices[0].finish_reason
                 raise RuntimeError(f"Пустой ответ от API (finish_reason={finish})")
+            print(f"  Модель использована: {actual_model or _REQUESTED_MODEL}")
             return content
         except Exception as e:
             if attempt < 2:
