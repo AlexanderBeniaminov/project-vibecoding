@@ -109,11 +109,22 @@ def update_idea_status(idea_id: int, status: str):
 
 
 def get_published_texts(limit: int = 50) -> list[str]:
-    """Темы публикаций для cooldown-фильтра в Режиме 0 (идеи с cooldown_until в будущем)."""
+    """Темы публикаций для cooldown-фильтра: идеи с активным cooldown_until ИЛИ
+    с опубликованным постом за последние 30 дней (страховка если cooldown_until не проставился)."""
     conn = get_conn()
+    cutoff = (datetime.now(_MSK) - timedelta(days=config.IDEA_COOLDOWN_DAYS)).isoformat()
     rows = conn.execute(
-        "SELECT text FROM ideas WHERE cooldown_until > ? ORDER BY cooldown_until DESC LIMIT ?",
-        (_now(), limit),
+        """SELECT DISTINCT i.text FROM ideas i
+           WHERE i.cooldown_until > ?
+              OR EXISTS (
+                  SELECT 1 FROM generations g
+                  WHERE g.idea_id = i.id
+                    AND g.status = 'published'
+                    AND g.published_at > ?
+              )
+           ORDER BY i.cooldown_until DESC NULLS LAST
+           LIMIT ?""",
+        (_now(), cutoff, limit),
     ).fetchall()
     conn.close()
     return [r["text"] for r in rows]
