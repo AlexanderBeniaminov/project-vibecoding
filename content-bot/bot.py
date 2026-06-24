@@ -492,16 +492,13 @@ async def _handle_correction(message: Message, gen_id: int):
 
 
 # ── Режим 0 — бот сам предлагает темы ─────────────────────────
-@dp.callback_query(F.data == "menu:propose")
-async def cb_propose(callback: CallbackQuery):
-    await callback.answer()  # отвечаем сразу — генерация занимает >10с, Telegram не ждёт
-    loading = await callback.message.answer("🔍 Ищу тренды и формирую идеи...")
-    # _Typing с самого начала — охватывает поиск + генерацию тем
-    async with _Typing(callback.message.chat.id):
+async def _run_propose_topics(msg_to_edit: Message, user_id: int):
+    """Общий код для 'Предложи темы' и 'Предложить ещё темы'."""
+    async with _Typing(msg_to_edit.chat.id):
         loop = asyncio.get_running_loop()
         search_context = await loop.run_in_executor(None, search.search_niche_trends)
         if not search_context:
-            await loading.edit_text("🔍 Поиск недоступен — генерирую из базы знаний...")
+            await msg_to_edit.edit_text("🔍 Поиск недоступен — генерирую из базы знаний...")
         published = db.get_published_texts()
         blacklisted = [e["text"] for e in blacklist.list_active()]
         recent_formats = _get_recent_formats()
@@ -511,15 +508,14 @@ async def cb_propose(callback: CallbackQuery):
             )
         except Exception as e:
             logging.exception("generate_topic_suggestions error")
-            await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
+            await msg_to_edit.edit_text(f"Не удалось сгенерировать темы: {e}")
             return
 
     if not topics:
-        await loading.edit_text("Не удалось получить темы. Попробуй ещё раз.")
+        await msg_to_edit.edit_text("Не удалось получить темы. Попробуй ещё раз.")
         return
 
-    _pending_topics[callback.from_user.id] = topics
-
+    _pending_topics[user_id] = topics
     desc = lambda t: (f" — {t['description']}" if t.get("description") else "")
     lines = [f"{i+1}. «{t['topic']}»{desc(t)}" for i, t in enumerate(topics)]
     rows = []
@@ -528,8 +524,23 @@ async def cb_propose(callback: CallbackQuery):
             InlineKeyboardButton(text=f"📝 Написать #{i+1}", callback_data=f"topic:write:{i}"),
             InlineKeyboardButton(text=f"💾 Сохранить #{i+1}", callback_data=f"topic:save:{i}"),
         ])
+    rows.append([InlineKeyboardButton(text="🔄 Предложить ещё темы", callback_data="topics:refresh")])
     rows.append([InlineKeyboardButton(text="🔙 Меню", callback_data="menu:show")])
-    await loading.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await msg_to_edit.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@dp.callback_query(F.data == "menu:propose")
+async def cb_propose(callback: CallbackQuery):
+    await callback.answer()
+    loading = await callback.message.answer("🔍 Ищу тренды и формирую идеи...")
+    await _run_propose_topics(loading, callback.from_user.id)
+
+
+@dp.callback_query(F.data == "topics:refresh")
+async def cb_topics_refresh(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text("🔍 Ищу новые темы...")
+    await _run_propose_topics(callback.message, callback.from_user.id)
 
 
 @dp.callback_query(F.data.startswith("topic:write:"))
