@@ -31,12 +31,13 @@ _HEADERS = {
 
 # Статусы в Посты
 _STATUS_DRAFT      = "✏️ Черновик"
-_STATUS_TO_PUBLISH = "К публикации"
+_STATUS_ON_REVIEW  = "📬 На согласование"   # Алексей отправил на утверждение Александру
+_STATUS_TO_PUBLISH = "К публикации"          # Александр утвердил — бот поставит в расписание
 _STATUS_PUBLISHED  = "✔️ Опубликован"
 _STATUS_DELETE     = "🗑 Удалить"
 
-# Dropdown для колонки Статус (D)
-_STATUS_OPTIONS = [_STATUS_DRAFT, _STATUS_TO_PUBLISH, _STATUS_PUBLISHED, _STATUS_DELETE]
+# Dropdown для колонки Статус (E)
+_STATUS_OPTIONS = [_STATUS_DRAFT, _STATUS_ON_REVIEW, _STATUS_TO_PUBLISH, _STATUS_PUBLISHED, _STATUS_DELETE]
 
 _IDEA_SOURCE_LABEL = {"text": "✍️ текст", "voice": "🎙 голос", "manual": "✍️ Sheets"}
 _DAY_NAMES = {0: "Пн", 1: "Вт", 2: "Ср", 3: "Чт", 4: "Пт", 5: "Сб", 6: "Вс"}
@@ -99,6 +100,16 @@ def push_generation_draft(idea: dict, gen: dict):
         _apply_sheet_validations()
     except Exception as e:
         logging.warning(f"[sheets] validations после push не удались: {e}")
+
+
+def update_post_status_by_gen_id(gen_id: int, new_status: str) -> bool:
+    """Находит строку по Gen ID в колонке A и обновляет статус (E). Возвращает True если нашёл."""
+    ws = _get_spreadsheet().worksheet(SHEET_POSTS)
+    cell = ws.find(str(gen_id), in_column=1)
+    if cell:
+        ws.update_cell(cell.row, 5, new_status)
+        return True
+    return False
 
 
 def push_blacklist_entry(entry: dict):

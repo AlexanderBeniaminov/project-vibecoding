@@ -1,5 +1,6 @@
 TELEGRAM_TOKEN    = "YOUR_TELEGRAM_BOT_TOKEN"          # Новый токен от @BotFather
-ALLOWED_USER_IDS: set[int] = {994743403}                # Только Александр
+ALLOWED_USER_IDS: set[int] = {994743403}                # Все редакторы
+OWNER_USER_ID     = 994743403                            # Александр — получает уведомления от редакторов
 
 CHANNEL_ID        = "@your_channel"                     # «ИИндустрия Развлечений» — боевой канал
 TEST_CHANNEL_ID   = "@your_test_channel"                # Закрытый тестовый канал (только Александр)
@@ -15,6 +16,7 @@ KNOWLEDGE_DIR     = "/home/parser/bots/content-bot/knowledge"
 
 SERVICE_ACCOUNT_JSON  = "/home/parser/config/personal/service_account.json"
 SPREADSHEET_ID        = "YOUR_GOOGLE_SPREADSHEET_ID"
+SPREADSHEET_URL       = "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SPREADSHEET_ID/"
 
 IDEA_COOLDOWN_DAYS    = 30
 LIFEHACK_START_DATE   = "2026-06-19"   # Опорная дата первого лайфхак-четверга

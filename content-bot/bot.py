@@ -316,6 +316,18 @@ def _render_variants_text(generations: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def _cooldown_overlap(new_text: str, published_texts: list[str]) -> str | None:
+    """Возвращает первую недавно опубликованную тему с пересечением ≥3 значимых слов, иначе None."""
+    new_words = {w.lower() for w in new_text.split() if len(w) > 3}
+    if not new_words:
+        return None
+    for pub in published_texts:
+        pub_words = {w.lower() for w in pub.split() if len(w) > 3}
+        if len(new_words & pub_words) >= 3:
+            return pub
+    return None
+
+
 async def _generate_and_render(
     loading_msg: Message, idea_id: int, idea_text: str, rubric: str,
     recent_formats: list[str] | None = None,
@@ -336,6 +348,26 @@ async def _generate_and_render(
                 f"⚠️ Тема похожа на заблокированную: «{matched}». Всё равно генерировать?", reply_markup=kb
             )
             return
+
+        # Анти-повтор: для рубрик кроме lifehack — проверяем cooldown 30 дней
+        if rubric != "lifehack":
+            recently = db.get_published_texts()
+            overlap = _cooldown_overlap(idea_text, recently)
+            if overlap:
+                _pending_blacklist_confirm[loading_msg.chat.id] = {
+                    "idea_id": idea_id, "text": idea_text, "rubric": rubric,
+                    "recent_formats": recent_formats,
+                }
+                kb = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="Да, генерировать", callback_data="blconfirm:yes"),
+                    InlineKeyboardButton(text="Нет, отмена", callback_data="blconfirm:no"),
+                ]])
+                await loading_msg.edit_text(
+                    f"⚠️ Похожая тема уже публиковалась (30 дней): «{overlap[:60]}». Всё равно?",
+                    reply_markup=kb,
+                )
+                return
+
         await _do_generate(loading_msg, idea_id, idea_text, rubric, recent_formats)
 
 
@@ -443,11 +475,63 @@ async def cb_save(callback: CallbackQuery):
     except Exception as e:
         logging.warning(f"[sheets] push_generation_draft не удался: {e}")
     await callback.answer("💾 Сохранено в таблицу")
-    await callback.message.answer(
-        "💾 Черновик в листе «Посты».\n"
-        "Открой таблицу: правь текст, выбери дату из списка и поставь статус «К публикации» — "
-        "бот опубликует в 3:00."
-    )
+
+    # Для редактора (не владельца) — кнопка отправки на согласование Александру
+    if callback.from_user.id != config.OWNER_USER_ID:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="📬 На согласование → Александру", callback_data=f"review:{gen_id}"),
+        ]])
+        await callback.message.answer(
+            "💾 Черновик в «Посты». Когда готово — отправь на согласование.",
+            reply_markup=kb,
+        )
+    else:
+        await callback.message.answer(
+            "💾 Черновик в листе «Посты».\n"
+            "Открой таблицу: правь текст, выбери дату из списка и поставь статус «К публикации» — "
+            "бот опубликует в 3:00."
+        )
+
+
+# ── Кнопка «На согласование» (редактор → владелец) ──────────
+@dp.callback_query(F.data.startswith("review:"))
+async def cb_review_send(callback: CallbackQuery):
+    gen_id = int(callback.data.split(":")[-1])
+    gen = db.get_generation(gen_id)
+    if not gen:
+        await callback.answer("Вариант не найден")
+        return
+
+    # Обновить статус в Sheets
+    loop = asyncio.get_running_loop()
+    updated = False
+    try:
+        updated = await loop.run_in_executor(
+            None, lambda: sheets.update_post_status_by_gen_id(gen_id, sheets._STATUS_ON_REVIEW)
+        )
+    except Exception as e:
+        logging.warning(f"[sheets] update_post_status_by_gen_id не удался: {e}")
+
+    # Уведомить владельца
+    try:
+        idea = db.get_idea(gen["idea_id"])
+        topic_hint = f"«{idea['text'][:60]}»" if idea else ""
+        kb_owner = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="📊 Открыть таблицу", url=config.SPREADSHEET_URL),
+        ]])
+        await bot.send_message(
+            config.OWNER_USER_ID,
+            f"📬 Алексей отправил пост на согласование {topic_hint}\n\n"
+            f"──── {gen.get('format', '')} ────\n{gen['text']}\n\n"
+            "Открой «Посты», проверь текст и дату → смени статус на «К публикации».",
+            reply_markup=kb_owner,
+        )
+    except Exception as e:
+        logging.warning(f"[bot] уведомление владельцу не удалось: {e}")
+
+    await callback.answer("✅ Отправлено на согласование")
+    status_note = " и статус обновлён в таблице" if updated else ""
+    await callback.message.answer(f"✅ Александр получил уведомление{status_note}.")
 
 
 # ── Кнопка «СРОЧНО В КАНАЛ» ─────────────────────────────────
