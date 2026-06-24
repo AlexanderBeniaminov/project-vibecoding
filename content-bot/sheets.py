@@ -24,7 +24,7 @@ SHEET_BLACKLIST = "🚫 Блэклист"
 
 _HEADERS = {
     SHEET_IDEAS:    ["Дата", "Тема"],
-    SHEET_POSTS:    ["Gen ID", "Формат", "Текст поста", "Статус", "Дата публикации", "Ссылка"],
+    SHEET_POSTS:    ["Gen ID", "Дата", "Формат", "Текст поста", "Статус", "Дата публикации"],
     SHEET_CALENDAR: ["Дата", "День", "Время", "Тема", "Рубрика", "Статус", "Ссылка"],
     SHEET_BLACKLIST: ["Тема", "Режим", "Заблокировано до", "Причина", "Добавлено"],
 }
@@ -84,13 +84,14 @@ def push_idea(idea: dict):
 def push_generation_draft(idea: dict, gen: dict):
     """Записывает вариант в «Посты» со статусом Черновик (нажата кнопка «Сохранить»)."""
     ws = _get_spreadsheet().worksheet(SHEET_POSTS)
+    created = datetime.fromisoformat(gen["created_at"]) if gen.get("created_at") else datetime.now(_MSK)
     ws.append_row([
-        gen["id"],           # A: Gen ID
-        gen["format"],       # B: Формат
-        gen["text"],         # C: Текст поста
-        _STATUS_DRAFT,       # D: Статус
-        "",                  # E: Дата публикации — ставит пользователь
-        "",                  # F: Ссылка — появится после публикации
+        gen["id"],                          # A: Gen ID
+        created.strftime("%d.%m.%Y"),       # B: Дата
+        gen["format"],                      # C: Формат
+        gen["text"],                        # D: Текст поста
+        _STATUS_DRAFT,                      # E: Статус
+        "",                                 # F: Дата публикации — ставит пользователь
     ])
     db.update_generation_hash(gen["id"], _hash(gen["text"]))
     # Обновляем дропдауны после каждого добавления черновика
@@ -126,13 +127,13 @@ def _apply_sheet_validations():
     ]
 
     requests = [
-        # D (индекс 3) — дропдаун Статус
+        # E (индекс 4) — дропдаун Статус
         {
             "setDataValidation": {
                 "range": {
                     "sheetId": sheet_id,
                     "startRowIndex": 1, "endRowIndex": 500,
-                    "startColumnIndex": 3, "endColumnIndex": 4,
+                    "startColumnIndex": 4, "endColumnIndex": 5,
                 },
                 "rule": {
                     "condition": {
@@ -146,14 +147,14 @@ def _apply_sheet_validations():
         },
     ]
 
-    # E (индекс 4) — дропдаун Дата публикации (только если есть слоты)
+    # F (индекс 5) — дропдаун Дата публикации (только если есть слоты)
     if date_options:
         requests.append({
             "setDataValidation": {
                 "range": {
                     "sheetId": sheet_id,
                     "startRowIndex": 1, "endRowIndex": 500,
-                    "startColumnIndex": 4, "endColumnIndex": 5,
+                    "startColumnIndex": 5, "endColumnIndex": 6,
                 },
                 "rule": {
                     "condition": {
@@ -262,7 +263,7 @@ def migrate_posts_sheet():
     conn = db.get_conn()
     rows = conn.execute(
         """SELECT g.id, g.text, g.format, g.status, g.scheduled_at,
-                  g.channel_message_id, g.sheets_hash
+                  g.created_at, g.sheets_hash
            FROM generations g
            WHERE g.status IN ('generated', 'draft', 'to_publish', 'published')
            ORDER BY g.id""",
@@ -280,6 +281,11 @@ def migrate_posts_sheet():
         else:
             status_label = _STATUS_DRAFT
 
+        try:
+            created_label = datetime.fromisoformat(row["created_at"]).strftime("%d.%m.%Y")
+        except Exception:
+            created_label = ""
+
         pub_date = ""
         if row["scheduled_at"]:
             try:
@@ -288,17 +294,13 @@ def migrate_posts_sheet():
             except Exception:
                 pass
 
-        link = ""
-        if row["channel_message_id"]:
-            link = f"https://t.me/c/{str(config.CHANNEL_ID).lstrip('-100')}/{row['channel_message_id']}"
-
         ws.append_row([
             row["id"],       # Gen ID
+            created_label,   # Дата
             row["format"],
             row["text"],
             status_label,
             pub_date,
-            link,
         ])
 
     try:
@@ -331,9 +333,11 @@ def _sync_posts():
         if len(row) < 4:
             continue
         gen_id_raw = row[0]
-        text       = row[2] if len(row) > 2 else ""
-        status     = row[3] if len(row) > 3 else ""
-        pub_date   = row[4] if len(row) > 4 else ""
+        # row[1] = Дата (пропускаем)
+        # row[2] = Формат (пропускаем)
+        text       = row[3] if len(row) > 3 else ""
+        status     = row[4] if len(row) > 4 else ""
+        pub_date   = row[5] if len(row) > 5 else ""
 
         if not gen_id_raw:
             continue
