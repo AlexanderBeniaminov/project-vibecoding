@@ -23,7 +23,7 @@ SHEET_CALENDAR = "📅 Календарь"
 SHEET_BLACKLIST = "🚫 Блэклист"
 
 _HEADERS = {
-    SHEET_IDEAS:    ["ID", "Дата", "Источник", "Тема", "Описание", "Статус", "Рубрика"],
+    SHEET_IDEAS:    ["Дата", "Тема"],
     SHEET_POSTS:    ["Gen ID", "Формат", "Текст поста", "Статус", "Дата публикации", "Ссылка"],
     SHEET_CALENDAR: ["Дата", "День", "Время", "Тема", "Рубрика", "Статус", "Ссылка"],
     SHEET_BLACKLIST: ["Тема", "Режим", "Заблокировано до", "Причина", "Добавлено"],
@@ -75,18 +75,10 @@ def _hash(text: str) -> str:
 
 # ── Push: бот → Sheets (мгновенно при событиях) ──────────────
 def push_idea(idea: dict):
-    """Записывает идею в лист «Идеи» — сырой текст без AI-обработки."""
+    """Записывает идею в лист «Идеи» — только дата и тема."""
     ws = _get_spreadsheet().worksheet(SHEET_IDEAS)
     created = datetime.fromisoformat(idea["created_at"])
-    ws.append_row([
-        idea["id"],
-        created.strftime("%d.%m"),
-        _IDEA_SOURCE_LABEL.get(idea["source"], idea["source"]),
-        idea["text"],
-        "",
-        "💾 Сохранена",
-        idea.get("rubric", "regular"),
-    ])
+    ws.append_row([created.strftime("%d.%m"), idea["text"]])
 
 
 def push_generation_draft(idea: dict, gen: dict):
@@ -242,6 +234,22 @@ def rebuild_calendar():
         ])
 
 
+# ── Миграции (одноразово) ────────────────────────────────────
+def migrate_ideas_sheet():
+    """Очищает «Идеи» и перезаписывает из SQLite в формате Дата / Тема."""
+    ss = _get_spreadsheet()
+    ws = ss.worksheet(SHEET_IDEAS)
+    ws.clear()
+    ws.append_row(_HEADERS[SHEET_IDEAS])
+
+    ideas = db.list_ideas(status="saved", limit=500)
+    for idea in reversed(ideas):  # хронологический порядок
+        created = datetime.fromisoformat(idea["created_at"])
+        ws.append_row([created.strftime("%d.%m"), idea["text"]])
+
+    logging.info(f"[migrate] Идеи: записано {len(ideas)} строк")
+
+
 # ── Миграция листа «Посты» (одноразово) ──────────────────────
 def migrate_posts_sheet():
     """Очищает «Посты» и перезаписывает из SQLite всеми draft/to_publish generations.
@@ -381,15 +389,16 @@ def _sync_posts():
 
 
 def _sync_new_ideas():
-    """Подхватывает идеи, добавленные вручную в лист «Идеи» (без ID)."""
+    """Подхватывает идеи, добавленные вручную в лист «Идеи».
+    Дедупликация по тексту — если тема уже есть в SQLite, пропускаем."""
     ws = _get_spreadsheet().worksheet(SHEET_IDEAS)
     rows = ws.get_all_values()[1:]
+    existing_texts = {i["text"].strip().lower() for i in db.list_ideas(status="saved", limit=500)}
     for row in rows:
-        if len(row) < 4:
+        if len(row) < 2:
             continue
-        idea_id_raw = row[0]
-        text        = row[3]
-        rubric      = row[6] if len(row) > 6 and row[6] else "regular"
-        if idea_id_raw or not text.strip():
+        text = row[1].strip()  # колонка B: Тема
+        if not text or text.lower() in existing_texts:
             continue
-        db.add_idea(text.strip(), source="manual", rubric=rubric)
+        db.add_idea(text, source="manual")
+        existing_texts.add(text.lower())
