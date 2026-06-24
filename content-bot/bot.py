@@ -177,6 +177,12 @@ _HELP_TEXT = (
 )
 
 
+@dp.message(Command("myid"))
+async def cmd_myid(message: Message):
+    """Работает для всех — чтобы узнать свой user_id для добавления в бот."""
+    await message.answer(f"Твой Telegram ID: `{message.from_user.id}`", parse_mode="Markdown")
+
+
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     if not is_allowed(message.from_user.id):
