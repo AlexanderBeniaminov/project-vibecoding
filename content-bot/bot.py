@@ -337,7 +337,6 @@ async def _do_generate(
     loading_msg: Message, idea_id: int, idea_text: str, rubric: str,
     recent_formats: list[str] | None = None,
 ):
-    # Весь блок в одном try/except — включая DB-запись и edit_text
     try:
         variants = await generator.generate_variants(idea_text, rubric, recent_formats)
 
@@ -345,7 +344,7 @@ async def _do_generate(
             await loading_msg.edit_text("Не удалось сгенерировать варианты. Попробуй ещё раз.")
             return
 
-        # Сохраняем варианты в БД со статусом 'generated' (в Sheets НЕ пишем — только после «Сохранить»)
+        # Сохраняем в БД со статусом 'generated' (в Sheets НЕ пишем — только после «Сохранить»)
         generations = []
         for v in variants:
             gen_id = db.add_generation(
@@ -357,12 +356,25 @@ async def _do_generate(
             )
             generations.append(db.get_generation(gen_id))
 
-        result_text = _render_variants_text(generations)
-        if not result_text.strip():
-            await loading_msg.edit_text("⚠️ Получили пустой ответ. Попробуй ещё раз.")
-            return
+        # Каждый вариант — отдельное сообщение (обходим лимит Telegram 4096 символов)
+        for i, gen in enumerate(generations):
+            text = f"──── Вариант {gen['variant_num']} · {gen['format']} ────\n{gen['text']}"
+            is_last = (i == len(generations) - 1)
+            rows = [[InlineKeyboardButton(
+                text=f"💾 Сохранить вар.{gen['variant_num']}",
+                callback_data=f"save:{gen['id']}",
+            )]]
+            if is_last:
+                rows.append([InlineKeyboardButton(
+                    text="🔄 Другие варианты",
+                    callback_data=f"regen:{idea_id}",
+                )])
+            kb = InlineKeyboardMarkup(inline_keyboard=rows)
+            if i == 0:
+                await loading_msg.edit_text(text, reply_markup=kb)
+            else:
+                await loading_msg.answer(text, reply_markup=kb)
 
-        await loading_msg.edit_text(result_text, reply_markup=_result_keyboard(generations, idea_id))
     except Exception as e:
         logging.exception("_do_generate error")
         try:

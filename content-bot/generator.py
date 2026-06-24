@@ -144,7 +144,7 @@ async def generate_variants(
             {"role": "system", "content": _VARIANTS_SYSTEM},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=3000,
+        max_tokens=6000,
         temperature=0.8,
     )
     content = _clean_json_response(resp.choices[0].message.content or "[]")
