@@ -59,6 +59,11 @@ _ORDINAL_RE = re.compile(
     re.IGNORECASE,
 )
 _INVENT_TOPIC_RE = re.compile(r'придумай\s+(?:тему|идею)', re.IGNORECASE)
+# «Запомни/сохрани/добавь идею про X» → сохранить без генерации
+_SAVE_SYNONYM_RE = re.compile(
+    r'^(?:запомни|сохрани|добавь|зафиксируй)\s+(?:идею|тему|мысль)\s*(?:про|об?|для|:)?\s*',
+    re.IGNORECASE,
+)
 
 
 def _extract_idea_index(text: str) -> int | None:
@@ -785,8 +790,8 @@ async def handle_message(message: Message):
         await message.answer("Не удалось распознать голос. Попробуй ещё раз или напиши текстом.")
         return
 
-    # 1. Сохранить идею — «идея для поста: ...»
-    m = _IDEA_TRIGGER_RE.match(text)
+    # 1. Сохранить идею — «идея для поста: ...» / «запомни/сохрани идею про ...»
+    m = _IDEA_TRIGGER_RE.match(text) or _SAVE_SYNONYM_RE.match(text)
     if m:
         idea_text = text[m.end():].strip()
         await _save_idea_flow(message, idea_text, source)

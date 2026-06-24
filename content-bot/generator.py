@@ -24,6 +24,20 @@ _DSML_OPEN_RE   = re.compile(rf'<\s*{_D}DSML\s*{_D}tool_calls\s*>.*', re.DOTALL)
 _DSML_TAG_RE    = re.compile(rf'<\s*/?\s*{_D}DSML\s*{_D}[^>]*>', re.DOTALL)
 
 
+def _safe_json_loads(text: str) -> list:
+    """json.loads с фallback через json_repair — DeepSeek иногда не экранирует кавычки."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    try:
+        from json_repair import repair_json
+        return json.loads(repair_json(text))
+    except Exception:
+        pass
+    return []
+
+
 def _clean_json_response(text: str) -> str:
     text = _DSML_CLOSED_RE.sub('', text)
     text = _DSML_OPEN_RE.sub('', text)
@@ -130,7 +144,7 @@ async def generate_variants(
         temperature=0.8,
     )
     content = _clean_json_response(resp.choices[0].message.content or "[]")
-    return json.loads(content)
+    return _safe_json_loads(content)
 
 
 _TOPICS_SYSTEM = (
@@ -191,7 +205,7 @@ async def generate_topic_suggestions(
         temperature=0.9,
     )
     content = _clean_json_response(resp.choices[0].message.content or "[]")
-    return json.loads(content)
+    return _safe_json_loads(content)
 
 
 _CORRECTION_SYSTEM = (
