@@ -208,8 +208,11 @@ async def generate_topic_suggestions(
         max_tokens=1500,
         temperature=0.9,
     )
-    content = _clean_json_response(resp.choices[0].message.content or "[]")
+    raw_text = resp.choices[0].message.content or "[]"
+    logging.info(f"[generator topics] raw response ({len(raw_text)} chars): {raw_text[:500]}")
+    content = _clean_json_response(raw_text)
     raw = _safe_json_loads(content)
+    logging.info(f"[generator topics] parsed type={type(raw).__name__}, len={len(raw) if isinstance(raw, list) else 'N/A'}")
     # Нормализуем — заполняем отсутствующие поля чтобы не падать в bot.py
     result = []
     for item in raw:
