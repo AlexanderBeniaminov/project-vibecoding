@@ -199,29 +199,43 @@ async def generate_topic_suggestions(
         month=month_name,
         count=count,
     )
-    resp = await ai_client.chat.completions.create(
-        model=config.MODEL,
-        messages=[
-            {"role": "system", "content": _TOPICS_SYSTEM},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=1500,
-        temperature=0.9,
-    )
-    raw_text = resp.choices[0].message.content or "[]"
-    logging.info(f"[generator topics] raw response ({len(raw_text)} chars): {raw_text[:500]}")
-    content = _clean_json_response(raw_text)
-    raw = _safe_json_loads(content)
-    logging.info(f"[generator topics] parsed type={type(raw).__name__}, len={len(raw) if isinstance(raw, list) else 'N/A'}")
-    # Нормализуем — заполняем отсутствующие поля чтобы не падать в bot.py
-    result = []
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        topic = item.get("topic") or item.get("title") or item.get("name") or ""
-        desc  = item.get("description") or item.get("desc") or item.get("text") or ""
-        if topic:
-            result.append({"topic": str(topic).strip(), "description": str(desc).strip()})
+    async def _call_topics(prompt: str) -> list[dict]:
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[
+                {"role": "system", "content": _TOPICS_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1500,
+            temperature=0.9,
+        )
+        raw_text = resp.choices[0].message.content or "[]"
+        logging.info(f"[generator topics] raw response ({len(raw_text)} chars): {raw_text[:500]}")
+        content = _clean_json_response(raw_text)
+        raw = _safe_json_loads(content)
+        result = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            topic = item.get("topic") or item.get("title") or item.get("name") or ""
+            desc  = item.get("description") or item.get("desc") or item.get("text") or ""
+            if topic:
+                result.append({"topic": str(topic).strip(), "description": str(desc).strip()})
+        return result
+
+    result = await _call_topics(user_prompt)
+    # Ретрай без поискового контекста — если модель вернула [] из-за нерелевантного контекста
+    if not result and search_context:
+        logging.warning("[generator topics] пустой ответ с search_context, ретрай без него")
+        fallback_prompt = _TOPICS_USER_TEMPLATE.format(
+            search_context="(поиск недоступен — используй базу знаний)",
+            published="\n".join(f"- {t}" for t in published_history) or "(пока нет)",
+            recent_formats=recent_str,
+            blacklisted="\n".join(f"- {t}" for t in blacklisted) or "(пусто)",
+            month=month_name,
+            count=count,
+        )
+        result = await _call_topics(fallback_prompt)
     return result
 
 
