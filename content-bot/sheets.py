@@ -1,5 +1,9 @@
 """Google Sheets — визуальный слой. Таблица — главный интерфейс управления расписанием.
-Push — мгновенно при событиях бота. Pull — APScheduler раз в сутки (sheets.sync_from_sheets)."""
+Push — мгновенно при событиях бота. Pull — APScheduler раз в сутки (sheets.sync_from_sheets).
+
+Структура листа «Посты»:
+  A: Gen ID  |  B: Формат  |  C: Текст поста  |  D: Статус  |  E: Дата публикации  |  F: Ссылка
+"""
 import hashlib
 import logging
 from datetime import datetime
@@ -20,16 +24,19 @@ SHEET_BLACKLIST = "🚫 Блэклист"
 
 _HEADERS = {
     SHEET_IDEAS:    ["ID", "Дата", "Источник", "Тема", "Описание", "Статус", "Рубрика"],
-    SHEET_POSTS:    ["ID идеи", "ID варианта", "Вариант №", "Формат", "Текст поста", "Статус", "Дата публикации", "Ссылка"],
+    SHEET_POSTS:    ["Gen ID", "Формат", "Текст поста", "Статус", "Дата публикации", "Ссылка"],
     SHEET_CALENDAR: ["Дата", "День", "Время", "Тема", "Рубрика", "Статус", "Ссылка"],
     SHEET_BLACKLIST: ["Тема", "Режим", "Заблокировано до", "Причина", "Добавлено"],
 }
 
-# Статусы в Посты (то, что видит и меняет пользователь)
+# Статусы в Посты
 _STATUS_DRAFT      = "✏️ Черновик"
-_STATUS_TO_PUBLISH = "К публикации"   # пользователь ставит вручную
+_STATUS_TO_PUBLISH = "К публикации"
 _STATUS_PUBLISHED  = "✔️ Опубликован"
-_STATUS_DELETE     = "🗑 Удалить"     # помечает на удаление
+_STATUS_DELETE     = "🗑 Удалить"
+
+# Dropdown для колонки Статус (D)
+_STATUS_OPTIONS = [_STATUS_DRAFT, _STATUS_TO_PUBLISH, _STATUS_PUBLISHED, _STATUS_DELETE]
 
 _IDEA_SOURCE_LABEL = {"text": "✍️ текст", "voice": "🎙 голос", "manual": "✍️ Sheets"}
 _DAY_NAMES = {0: "Пн", 1: "Вт", 2: "Ср", 3: "Чт", 4: "Пт", 5: "Сб", 6: "Вс"}
@@ -76,26 +83,29 @@ def push_idea(idea: dict):
         created.strftime("%d.%m"),
         _IDEA_SOURCE_LABEL.get(idea["source"], idea["source"]),
         idea["text"],
-        "",  # Описание — пустое, пользователь может заполнить вручную
+        "",
         "💾 Сохранена",
         idea.get("rubric", "regular"),
     ])
 
 
 def push_generation_draft(idea: dict, gen: dict):
-    """Записывает один вариант в лист «Посты» со статусом Черновик (нажата кнопка «Сохранить»)."""
+    """Записывает вариант в «Посты» со статусом Черновик (нажата кнопка «Сохранить»)."""
     ws = _get_spreadsheet().worksheet(SHEET_POSTS)
     ws.append_row([
-        idea["id"],
-        gen["id"],
-        gen["variant_num"],
-        gen["format"],
-        gen["text"],
-        _STATUS_DRAFT,
-        "",  # Дата публикации — ставит пользователь
-        "",  # Ссылка — появится после публикации
+        gen["id"],           # A: Gen ID
+        gen["format"],       # B: Формат
+        gen["text"],         # C: Текст поста
+        _STATUS_DRAFT,       # D: Статус
+        "",                  # E: Дата публикации — ставит пользователь
+        "",                  # F: Ссылка — появится после публикации
     ])
     db.update_generation_hash(gen["id"], _hash(gen["text"]))
+    # Обновляем дропдауны после каждого добавления черновика
+    try:
+        _apply_sheet_validations()
+    except Exception as e:
+        logging.warning(f"[sheets] validations после push не удались: {e}")
 
 
 def push_blacklist_entry(entry: dict):
@@ -106,12 +116,73 @@ def push_blacklist_entry(entry: dict):
     ws.append_row([entry["text"], mode_label, until, entry.get("reason", ""), added.strftime("%d.%m.%Y")])
 
 
+# ── Валидация (дропдауны) ─────────────────────────────────────
+def _apply_sheet_validations():
+    """Устанавливает дропдауны Статус и Дата публикации в листе «Посты».
+    Вызывается при push нового черновика и при ежесуточном sync."""
+    import publisher  # локальный импорт — избегаем циклической зависимости
+
+    ss = _get_spreadsheet()
+    ws = ss.worksheet(SHEET_POSTS)
+    sheet_id = ws._properties["sheetId"]
+
+    # Свободные слоты на 2 месяца вперёд
+    slots = publisher.get_free_slots_2months()
+    date_options = [
+        f"{dt.strftime('%d.%m.%Y %H:%M')} ({_DAY_NAMES.get(dt.weekday(), '')})"
+        for dt in slots
+    ]
+
+    requests = [
+        # D (индекс 3) — дропдаун Статус
+        {
+            "setDataValidation": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 1, "endRowIndex": 500,
+                    "startColumnIndex": 3, "endColumnIndex": 4,
+                },
+                "rule": {
+                    "condition": {
+                        "type": "ONE_OF_LIST",
+                        "values": [{"userEnteredValue": v} for v in _STATUS_OPTIONS],
+                    },
+                    "showCustomUi": True,
+                    "strict": True,
+                },
+            }
+        },
+    ]
+
+    # E (индекс 4) — дропдаун Дата публикации (только если есть слоты)
+    if date_options:
+        requests.append({
+            "setDataValidation": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 1, "endRowIndex": 500,
+                    "startColumnIndex": 4, "endColumnIndex": 5,
+                },
+                "rule": {
+                    "condition": {
+                        "type": "ONE_OF_LIST",
+                        "values": [{"userEnteredValue": v} for v in date_options],
+                    },
+                    "showCustomUi": True,
+                    "strict": False,  # пользователь может вписать произвольную дату
+                },
+            }
+        })
+
+    ss.batch_update({"requests": requests})
+
+
 # ── История для ротации форматов ─────────────────────────────
 def get_recent_history(limit: int = 15) -> list[dict]:
     """Читает лист «Календарь» для аналитики тем и форматов."""
     try:
         ws = _get_spreadsheet().worksheet(SHEET_CALENDAR)
-        rows = ws.get_all_values()[1:]  # пропускаем заголовок
+        rows = ws.get_all_values()[1:]
         result = []
         for row in rows:
             if len(row) < 6:
@@ -131,8 +202,7 @@ def get_recent_history(limit: int = 15) -> list[dict]:
 
 # ── Пересборка «Календаря» (вызывается при 3:00-sync) ────────
 def rebuild_calendar():
-    """Полностью перезаписывает лист «Календарь» из текущих данных SQLite.
-    Включает все generations со статусом 'to_publish' и 'published'."""
+    """Полностью перезаписывает «Календарь» из SQLite generations."""
     conn = db.get_conn()
     rows = conn.execute(
         """SELECT g.id, g.text, g.format, g.status, g.scheduled_at, g.published_at,
@@ -146,8 +216,6 @@ def rebuild_calendar():
 
     ss = _get_spreadsheet()
     ws = ss.worksheet(SHEET_CALENDAR)
-
-    # Очищаем всё и перезаписываем
     ws.clear()
     ws.append_row(_HEADERS[SHEET_CALENDAR])
 
@@ -165,7 +233,7 @@ def rebuild_calendar():
 
         status_label = _STATUS_PUBLISHED if row["status"] == "published" else "📅 Запланирован"
         link = (
-            f"https://t.me/{config.CHANNEL_ID.lstrip('@')}/{row['channel_message_id']}"
+            f"https://t.me/c/{str(config.CHANNEL_ID).lstrip('-100')}/{row['channel_message_id']}"
             if row["channel_message_id"] else ""
         )
         ws.append_row([
@@ -174,109 +242,120 @@ def rebuild_calendar():
         ])
 
 
-# ── Обновление дропдауна свободных дат в «Посты» ─────────────
-def _update_free_slots_dropdown():
-    """Устанавливает data validation в колонке «Дата публикации» для черновиков.
-    Показывает список ближайших свободных слотов — чтобы нельзя было выбрать занятую дату."""
-    import publisher  # локальный импорт — избегаем циклической зависимости
+# ── Миграция листа «Посты» (одноразово) ──────────────────────
+def migrate_posts_sheet():
+    """Очищает «Посты» и перезаписывает из SQLite всеми draft/to_publish generations.
+    Вызывать один раз при переходе на новую структуру колонок."""
+    ss = _get_spreadsheet()
+    ws = ss.worksheet(SHEET_POSTS)
+    ws.clear()
+    ws.append_row(_HEADERS[SHEET_POSTS])
+
+    conn = db.get_conn()
+    rows = conn.execute(
+        """SELECT g.id, g.text, g.format, g.status, g.scheduled_at,
+                  g.channel_message_id, g.sheets_hash
+           FROM generations g
+           WHERE g.status IN ('generated', 'draft', 'to_publish', 'published')
+           ORDER BY g.id""",
+    ).fetchall()
+    conn.close()
+
+    for row in rows:
+        if row["status"] in ("generated",):
+            # generated — ещё не был показан в Sheets, пропускаем
+            continue
+        if row["status"] == "published":
+            status_label = _STATUS_PUBLISHED
+        elif row["status"] == "to_publish":
+            status_label = _STATUS_TO_PUBLISH
+        else:
+            status_label = _STATUS_DRAFT
+
+        pub_date = ""
+        if row["scheduled_at"]:
+            try:
+                dt = datetime.fromisoformat(row["scheduled_at"])
+                pub_date = f"{dt.strftime('%d.%m.%Y %H:%M')} ({_DAY_NAMES.get(dt.weekday(), '')})"
+            except Exception:
+                pass
+
+        link = ""
+        if row["channel_message_id"]:
+            link = f"https://t.me/c/{str(config.CHANNEL_ID).lstrip('-100')}/{row['channel_message_id']}"
+
+        ws.append_row([
+            row["id"],       # Gen ID
+            row["format"],
+            row["text"],
+            status_label,
+            pub_date,
+            link,
+        ])
+
     try:
-        slots = publisher.get_free_slots(8)
-        date_options = [
-            f"{dt.strftime('%d.%m.%Y %H:%M')} ({_DAY_NAMES.get(dt.weekday(), '')})"
-            for dt in slots
-        ]
-        if not date_options:
-            return
-
-        ss = _get_spreadsheet()
-        ws = ss.worksheet(SHEET_POSTS)
-        sheet_id = ws._properties["sheetId"]
-
-        # Колонка «Дата публикации» = индекс 6 (0-based, столбец G)
-        ss.batch_update({"requests": [{
-            "setDataValidation": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": 1,
-                    "endRowIndex": 500,
-                    "startColumnIndex": 6,
-                    "endColumnIndex": 7,
-                },
-                "rule": {
-                    "condition": {
-                        "type": "ONE_OF_LIST",
-                        "values": [{"userEnteredValue": v} for v in date_options],
-                    },
-                    "showCustomUi": True,
-                    "strict": False,  # пользователь может вписать произвольную дату тоже
-                },
-            }
-        }]})
+        _apply_sheet_validations()
     except Exception as e:
-        logging.warning(f"[sheets] _update_free_slots_dropdown не удался: {e}")
+        logging.warning(f"[migrate] validations не удались: {e}")
+
+    logging.info(f"[migrate] Посты: записано {len(rows)} строк")
 
 
 # ── Pull: Sheets → бот (раз в сутки в 3:00 МСК) ─────────────
 def sync_from_sheets():
-    """Главный ежесуточный sync:
-    1. Подхватывает правки текстов черновиков
-    2. Удаляет помеченные на удаление
-    3. Ставит в расписание те, у кого стоит «К публикации» + дата
-    4. Обновляет дропдаун свободных слотов
-    5. Пересобирает «Календарь»
-    """
+    """Главный ежесуточный sync."""
     _sync_posts()
     _sync_new_ideas()
-    _update_free_slots_dropdown()
+    _apply_sheet_validations()
     rebuild_calendar()
 
 
 def _sync_posts():
-    import publisher  # локальный импорт
-    from datetime import datetime
+    import publisher
 
     ss = _get_spreadsheet()
     ws = ss.worksheet(SHEET_POSTS)
     rows = ws.get_all_values()
 
-    # Ищем строки на удаление отдельно, чтобы удалять снизу вверх (не сбить индексы)
     rows_to_delete = []
 
-    for i, row in enumerate(rows[1:], start=2):  # start=2 потому что строки Sheets 1-based, первая — заголовок
-        if len(row) < 6:
+    for i, row in enumerate(rows[1:], start=2):
+        if len(row) < 4:
             continue
-        idea_id_raw, gen_id_raw, _var_num, _fmt, text, status = row[:6]
-        pub_date = row[6] if len(row) > 6 else ""
-        link     = row[7] if len(row) > 7 else ""
+        gen_id_raw = row[0]
+        text       = row[2] if len(row) > 2 else ""
+        status     = row[3] if len(row) > 3 else ""
+        pub_date   = row[4] if len(row) > 4 else ""
 
         if not gen_id_raw:
             continue
-        gen_id = int(gen_id_raw)
+        try:
+            gen_id = int(gen_id_raw)
+        except ValueError:
+            continue
         gen = db.get_generation(gen_id)
         if not gen:
             continue
 
-        # 1. Статус «🗑 Удалить» → удалить из БД, пометить строку на удаление
+        # Статус «🗑 Удалить» → удалить из БД + пометить строку
         if status.strip() == _STATUS_DELETE:
             db.delete_generation(gen_id)
             rows_to_delete.append(i)
             continue
 
-        # 2. Текст изменён вручную → обновить SQLite
+        # Текст изменён вручную → обновить SQLite
         new_hash = _hash(text)
         if text and new_hash != (gen.get("sheets_hash") or ""):
             db.update_generation_text(gen_id, text)
             db.update_generation_hash(gen_id, new_hash)
 
-        # 3. Статус «К публикации» + дата → ставим в расписание
+        # Статус «К публикации» + дата → ставим в расписание
         if status.strip() == _STATUS_TO_PUBLISH and pub_date and gen["status"] not in ("to_publish", "published"):
-            # Пробуем несколько форматов даты
+            clean = pub_date.strip().split("(")[0].strip()
             dt = None
-            for fmt in ("%d.%m.%Y %H:%M (%a)", "%d.%m.%Y %H:%M (Пн)", "%d.%m.%Y %H:%M"):
+            for fmt in ("%d.%m.%Y %H:%M", "%d.%m.%Y"):
                 try:
-                    # Срезаем скобочную часть если есть
-                    clean = pub_date.strip().split("(")[0].strip()
-                    dt = datetime.strptime(clean, "%d.%m.%Y %H:%M")
+                    dt = datetime.strptime(clean, fmt)
                     break
                 except ValueError:
                     continue
@@ -286,21 +365,17 @@ def _sync_posts():
 
             now = datetime.now(_MSK).replace(tzinfo=None)
             if dt <= now:
-                # Дата уже наступила — публикуем немедленно в этом же sync-прогоне
-                import asyncio
+                import asyncio, concurrent.futures
                 try:
                     loop = asyncio.get_event_loop()
                     loop.run_until_complete(publisher.publish_now(gen_id))
                 except RuntimeError:
-                    # В asyncio-контексте (при вызове из async) используем другой подход
-                    import concurrent.futures
                     with concurrent.futures.ThreadPoolExecutor() as pool:
                         future = pool.submit(asyncio.run, publisher.publish_now(gen_id))
                         future.result(timeout=30)
             else:
                 publisher.schedule_generation(gen_id, dt)
 
-    # Удаляем помеченные строки снизу вверх чтобы не сбить индексы
     for row_idx in sorted(rows_to_delete, reverse=True):
         ws.delete_rows(row_idx)
 
@@ -312,8 +387,9 @@ def _sync_new_ideas():
     for row in rows:
         if len(row) < 4:
             continue
-        idea_id_raw, _date, _source, text = row[:4]
-        rubric = row[6] if len(row) > 6 and row[6] else "regular"
+        idea_id_raw = row[0]
+        text        = row[3]
+        rubric      = row[6] if len(row) > 6 and row[6] else "regular"
         if idea_id_raw or not text.strip():
-            continue  # уже есть ID (известна боту) или пустая строка
+            continue
         db.add_idea(text.strip(), source="manual", rubric=rubric)

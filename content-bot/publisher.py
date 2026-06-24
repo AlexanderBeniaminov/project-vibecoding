@@ -79,7 +79,7 @@ def next_publish_dates(count: int) -> list[datetime]:
 
 
 def get_free_slots(count: int = 3) -> list[datetime]:
-    """Ближайшие свободные слоты (не занятые generation со статусом 'to_publish')."""
+    """Ближайшие N свободных слотов."""
     taken = {
         datetime.fromisoformat(g["scheduled_at"])
         for g in db.get_generations_by_status("to_publish")
@@ -91,6 +91,25 @@ def get_free_slots(count: int = 3) -> list[datetime]:
             free.append(dt)
         if len(free) >= count:
             break
+    return free
+
+
+def get_free_slots_2months() -> list[datetime]:
+    """Все свободные слоты на 2 месяца вперёд — для дропдауна в Sheets."""
+    taken = {
+        datetime.fromisoformat(g["scheduled_at"])
+        for g in db.get_generations_by_status("to_publish")
+        if g.get("scheduled_at")
+    }
+    until = datetime.now(_MSK).replace(tzinfo=None) + timedelta(days=62)
+    cur = datetime.now(_MSK).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    free = []
+    while cur <= until:
+        cur += timedelta(days=1)
+        if cur.weekday() in config.PUBLISH_DAYS:
+            dt = cur.replace(hour=config.PUBLISH_HOUR, minute=0)
+            if dt not in taken:
+                free.append(dt)
     return free
 
 
