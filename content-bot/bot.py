@@ -657,31 +657,48 @@ async def cb_cp_confirm(callback: CallbackQuery):
     recent_formats = _get_recent_formats()
 
     await callback.answer()
-    await callback.message.answer(f"⏳ Пишу черновики для {len(approved)} тем...")
+    status_msg = await callback.message.answer(f"⏳ Пишу черновики для {len(approved)} тем...")
 
-    for i, topic in enumerate(approved):
+    saved_count = 0
+    for topic in approved:
         idea_text = f"{topic['topic']}: {topic.get('description', '')}"
         idea_id = db.add_idea(idea_text, source="text", status="in_progress")
         idea = db.get_idea(idea_id)
         try:
             async with _Typing(callback.message.chat.id):
                 variants = await generator.generate_variants(idea_text, recent_formats=recent_formats)
-        except Exception as e:
-            await callback.message.answer(f"❌ Не удалось сгенерировать для «{topic['topic']}»: {e}")
-            continue
-        for v in variants:
-            gen_id = db.add_generation(idea_id, v["variant"], v["text"], v["audience"], v["format"])
-            db.mark_generation_saved(gen_id)
-            gen = db.get_generation(gen_id)
-            try:
-                sheets.push_generation_draft(idea, gen)
-            except Exception as e:
-                logging.warning(f"[sheets] push_generation_draft для контент-плана не удался: {e}")
 
-    await callback.message.answer(
-        f"✅ {len(approved)} тем → по 3 черновика в листе «Посты».\n"
-        "Открой таблицу: правь тексты, выставляй даты и статус «К публикации»."
-    )
+            if not variants:
+                await callback.message.answer(f"❌ Пустой ответ для «{topic['topic'][:40]}». Пропускаю.")
+                continue
+
+            for v in variants:
+                gen_id = db.add_generation(
+                    idea_id,
+                    v.get("variant", 1),
+                    v.get("text", ""),
+                    v.get("audience", ""),
+                    v.get("format", ""),
+                )
+                db.mark_generation_saved(gen_id)
+                gen = db.get_generation(gen_id)
+                try:
+                    sheets.push_generation_draft(idea, gen)
+                except Exception as e:
+                    logging.warning(f"[sheets] push_generation_draft для контент-плана не удался: {e}")
+            saved_count += 1
+        except Exception as e:
+            logging.exception(f"cp_confirm error for topic {topic['topic']}")
+            await callback.message.answer(f"❌ Ошибка для «{topic['topic'][:40]}»: {e}")
+            continue
+
+    if saved_count > 0:
+        await status_msg.edit_text(
+            f"✅ {saved_count} из {len(approved)} тем → по 3 черновика в листе «Посты».\n"
+            "Открой таблицу: правь тексты, выставляй даты и статус «К публикации»."
+        )
+    else:
+        await status_msg.edit_text("❌ Не удалось написать ни одного черновика. Попробуй ещё раз.")
 
 
 # ── Блэклист ──────────────────────────────────────────────────
