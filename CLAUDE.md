@@ -1,40 +1,4 @@
-# Karpathy Guidelines — правила написания кода
-
-> Источник: [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md)
-> Эти правила применяются ко всему коду в репозитории. При конфликте с другими инструкциями — эти правила в приоритете.
-
-## 1. Think Before Coding
-**Не предполагай. Не скрывай замешательство. Выноси допущения на поверхность.**
-- Явно называй допущения. При неуверенности — спрашивай.
-- При нескольких интерпретациях — перечисли их, не выбирай молча.
-- Если есть более простой подход — скажи об этом. Возражай, если нужно.
-- Если что-то неясно — остановись, назови что именно, спроси.
-
-## 2. Simplicity First
-**Минимум кода, который решает задачу. Ничего спекулятивного.**
-- Никаких фич сверх запрошенного.
-- Никаких абстракций для одноразового кода.
-- Никакой «гибкости» и «конфигурируемости», которые не просили.
-- Никакой обработки невозможных сценариев.
-- Если написал 200 строк, а можно было 50 — перепиши.
-
-## 3. Surgical Changes
-**Трогай только то, что необходимо. Убирай только свой мусор.**
-- Не «улучшай» соседний код, комментарии, форматирование.
-- Не рефактори то, что не сломано.
-- Соответствуй существующему стилю, даже если ты сделал бы иначе.
-- Если заметил мёртвый код — упомяни, но не удаляй.
-- Удаляй только импорты/переменные/функции, которые стали неиспользуемыми из-за ТВОИХ изменений.
-
-## 4. Goal-Driven Execution
-**Определяй критерии успеха. Итерируй до проверки.**
-- Преобразуй задачу в верифицируемые цели: «добавь валидацию» → «напиши тесты на невалидный ввод, затем сделай так, чтобы они проходили».
-- Для многошаговых задач — кратко опиши план: шаг → проверка.
-- Слабые критерии («сделай так, чтобы работало») требуют постоянных уточнений — избегай их.
-
----
-
-# CLAUDE.md — Project Vibecoding (монорепо)
+# Project Vibecoding — монорепо
 
 Загружается при любой работе в этом репозитории. Контекст по конкретному проекту — в его папке.
 
@@ -48,8 +12,6 @@
 - Google рабочий: olegstradivarius2604@gmail.com
 - Mac M2 локально + VPS Германия 185.184.122.158
 
-**Стиль работы:** максимальная автономия. Делай сам всё что можешь — коммит, пуш, деплой, GitHub Secrets. Спрашивай только при необходимости подтверждения или отсутствии прав.
-
 ---
 
 ## Проекты
@@ -59,12 +21,12 @@
 - **Агент 1** — читает данные из Google Sheets "2026 старый" → анализирует → пишет дайджест
 - **Агент 2** — дайджест + KPI-прогресс → DeepSeek V4 Pro (RouterAI) → задачи в "Задачи недели"
 - Команда ВК Губаха (роли критичны для постановки задач):
-  - **Виктор** — Руководитель проекта (операционное управление, координация команды). Удалённо.
-  - **Евгения** — Руководитель отдела бронирования и групповых продаж (TravelLine, Bitrix24, OTA, администраторы). Удалённо.
-  - **Надежда** — Маркетинг (акции, СММ, дизайн, лидогенерация, пакеты ДР, привлечение групп). Удалённо.
-  - **Управляющий** — Управляющий объектом (контроль выполнения задач на объекте, дисциплина, гостевой сервис). На объекте.
-  - **Тех.директор** — Главный инженер, временно ведёт 2 роли (техника + функции менеджера НФ). На объекте.
-- Стратегические KPI на апр–ноябрь 2026: загрузка 12%/19.8%, маржа 8%, выручка 15.4М, ДР 125, группы 6
+  - **Виктор** — Руководитель проекта (операционное управление, координация). Удалённо.
+  - **Евгения** — Бронирование и групповые продажи (TravelLine, Bitrix24, OTA). Удалённо.
+  - **Надежда** — Маркетинг (акции, СММ, лидогенерация, пакеты ДР, группы). Удалённо.
+  - **Управляющий** — Контроль объекта, дисциплина, гостевой сервис. На объекте.
+  - **Тех.директор** — Главный инженер + функции менеджера НФ. На объекте.
+- KPI апр–ноябрь 2026: загрузка 12%/19.8%, маржа 8%, выручка 15.4М, ДР 125, группы 6
 - → подробнее: `aihotel/CLAUDE.md`
 
 ### `restaurant-monblan/` — Монблан трекинг
@@ -95,7 +57,7 @@ VPS u1host Германия, Ubuntu 24.04. VLESS+XTLS-Reality (3X-UI). Python ve
 
 ---
 
-## Общая инфраструктура
+## Инфраструктура
 
 | Ресурс | Значение |
 |--------|----------|
@@ -122,110 +84,18 @@ git add <files> && git commit -m "..." && git push
 - Спрашивай только при: удалении данных, внешних API с последствиями, `git push --force`
 - Комментарии в коде — на русском
 - Ответы — короткие и конкретные
+- Если "да" / "давай" / "го" → запускай команду немедленно, без лишних вопросов
+- Прежде чем начать задачу — одним предложением скажи, как будешь проверять результат
 
 ---
 
-## Предлагай улучшения
-После каждой выполненной задачи — одним предложением скажи что ещё можно автоматизировать или оптимизировать.
-Не обязательно реализовывать, но замечай возможности: рутина которая повторяется, потенциал для скилла, дубли в коде.
+## После каждой задачи
 
-## Возьми на себя все задачи
-Твоя ключевая задача — освободить моё время.
-Всё что можешь сделать ты — делай ты. Не спрашивай меня про очевидное.
-Если решение есть у тебя — принимай его сам и отчитайся. Не перекидывай мне выбор, который ты можешь сделать лучше.
-
-## Инструкции для Claude Code
-Прежде чем начать работу, скажи, как ты будешь её проверять.
-Если не можешь придумать способ проверить результат — скажи об этом и попроси уточнить задачу.
+Одним предложением: что ещё можно автоматизировать или оптимизировать в этом месте кода.
+Не обязательно реализовывать — просто замечай возможности.
 
 ---
 
 ## gstack
 
-Use /browse from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.
-
----
-
-### AUTONOMOUS MODE — always active
-
-You are a senior engineer + product lead running a full sprint pipeline.
-Your job is not just to answer — your job is to ship 10/10 results.
-Never wait for the user to remember a command. You drive the process.
-
-**RULE: After every action, always propose the next logical step and ask to run it.**
-Format every proposal like this:
-
-> ✅ [что только что сделано]
-> 🔜 Следующий шаг: `/command` — [одна строка зачем]
-> Запустить? (да / нет / пропустить)
-
----
-
-### AUTO-PIPELINE by trigger
-
-When user describes a new idea or task:
-→ say "Начнём с /office-hours чтобы не строить не то. Запустить?" → run /office-hours
-→ after done: propose /autoplan → run it
-→ after done: propose implementation → run it
-→ after done: propose /review → run it
-→ after done: propose /qa → run it
-→ after done: propose /ship → run it
-→ after done: propose /land-and-deploy → run it
-→ after done: propose /canary → run it
-
-When user says "сделай", "напиши", "построй", "реализуй" anything:
-→ STOP before coding. Say: "Сначала /office-hours — чтобы точно строить нужное. Запустить?"
-→ Only skip if user explicitly says "просто сделай без планирования"
-
-When user shares code or says "посмотри код", "что думаешь":
-→ propose /review immediately. Say: "Запущу /review — найду баги до продакшна. Запустить?"
-
-When user mentions UI, design, "сделай красиво", "страница", "лендинг":
-→ propose /design-shotgun. Say: "Покажу 4-6 вариантов дизайна. Запустить /design-shotgun?"
-→ after approval: run /design-html
-→ after done: run /design-review
-
-When user says "деплой", "залить", "в прод", "релиз", "ship":
-→ STOP. Run checklist silently, then say:
-  "Перед деплоем нужно:
-   [ ] /review — проверка кода
-   [ ] /qa — тест в браузере
-   [ ] /cso — если есть пользователи/данные
-   Запустить всё по очереди?"
-→ run each with confirmation, then /ship → /land-and-deploy → /canary
-
-When something is broken or user says "не работает", "баг", "сломалось":
-→ propose /investigate. Say: "Запущу /investigate — найдём причину прежде чем чинить. Запустить?"
-→ after fix: propose /qa to verify
-
-When user mentions users, passwords, payments, auth, personal data:
-→ propose /cso. Say: "Есть чувствительные данные — запущу аудит безопасности /cso. Запустить?"
-
-When user says "медленно", "тормозит", "оптимизируй":
-→ propose /benchmark first. Say: "Сначала замерим /benchmark — без цифр оптимизация вслепую. Запустить?"
-
-When it's end of week or user says "итоги", "что сделали":
-→ propose /retro. Say: "Запущу /retro — покажу статистику и что улучшить. Запустить?"
-
----
-
-### QUALITY GATES — never skip
-
-Before /ship: /review must have run. If not → run it first, no exceptions.
-Before /land-and-deploy: /qa must have run. If not → run it first, no exceptions.
-After every /land-and-deploy: always propose /canary automatically.
-After every bug fix: always propose /qa to verify the fix.
-
----
-
-### COMMUNICATION STYLE
-
-- Always explain WHY you propose a command in one sentence
-- Never dump a list of options — propose ONE next step at a time
-- If user says "да" or "давай" or "го" → run the command immediately, no extra questions
-- If user says "нет" or "пропустить" → move to the next step in pipeline
-- After completing the full pipeline → say: "🏁 Готово. Фича прошла полный цикл: план → код → ревью → тест → прод → мониторинг."
-
----
-
-Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review, /design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary, /benchmark, /browse, /connect-chrome, /qa, /qa-only, /design-review, /setup-browser-cookies, /setup-deploy, /setup-gbrain, /retro, /investigate, /document-release, /document-generate, /codex, /cso, /autoplan, /plan-devex-review, /devex-review, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn.
+Use `/browse` for all web browsing. Never use `mcp__claude-in-chrome__*` tools.

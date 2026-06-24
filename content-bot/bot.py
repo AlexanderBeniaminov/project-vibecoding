@@ -314,43 +314,61 @@ async def _generate_and_render(
     loading_msg: Message, idea_id: int, idea_text: str, rubric: str,
     recent_formats: list[str] | None = None,
 ):
-    matched = await blacklist.check_against_blacklist(idea_text)
-    if matched:
-        _pending_blacklist_confirm[loading_msg.chat.id] = {
-            "idea_id": idea_id, "text": idea_text, "rubric": rubric,
-            "recent_formats": recent_formats,
-        }
-        kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="Да, генерировать", callback_data="blconfirm:yes"),
-            InlineKeyboardButton(text="Нет, отмена", callback_data="blconfirm:no"),
-        ]])
-        await loading_msg.edit_text(
-            f"⚠️ Тема похожа на заблокированную: «{matched}». Всё равно генерировать?", reply_markup=kb
-        )
-        return
-    await _do_generate(loading_msg, idea_id, idea_text, rubric, recent_formats)
+    # _Typing охватывает весь pipeline: проверку блэклиста + генерацию
+    async with _Typing(loading_msg.chat.id):
+        matched = await blacklist.check_against_blacklist(idea_text)
+        if matched:
+            _pending_blacklist_confirm[loading_msg.chat.id] = {
+                "idea_id": idea_id, "text": idea_text, "rubric": rubric,
+                "recent_formats": recent_formats,
+            }
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Да, генерировать", callback_data="blconfirm:yes"),
+                InlineKeyboardButton(text="Нет, отмена", callback_data="blconfirm:no"),
+            ]])
+            await loading_msg.edit_text(
+                f"⚠️ Тема похожа на заблокированную: «{matched}». Всё равно генерировать?", reply_markup=kb
+            )
+            return
+        await _do_generate(loading_msg, idea_id, idea_text, rubric, recent_formats)
 
 
 async def _do_generate(
     loading_msg: Message, idea_id: int, idea_text: str, rubric: str,
     recent_formats: list[str] | None = None,
 ):
+    # Весь блок в одном try/except — включая DB-запись и edit_text
     try:
-        async with _Typing(loading_msg.chat.id):
-            variants = await generator.generate_variants(idea_text, rubric, recent_formats)
+        variants = await generator.generate_variants(idea_text, rubric, recent_formats)
+
+        if not variants:
+            await loading_msg.edit_text("Не удалось сгенерировать варианты. Попробуй ещё раз.")
+            return
+
+        # Сохраняем варианты в БД со статусом 'generated' (в Sheets НЕ пишем — только после «Сохранить»)
+        generations = []
+        for v in variants:
+            gen_id = db.add_generation(
+                idea_id,
+                v.get("variant", 1),
+                v.get("text", ""),
+                v.get("audience", ""),
+                v.get("format", ""),
+            )
+            generations.append(db.get_generation(gen_id))
+
+        result_text = _render_variants_text(generations)
+        if not result_text.strip():
+            await loading_msg.edit_text("⚠️ Получили пустой ответ. Попробуй ещё раз.")
+            return
+
+        await loading_msg.edit_text(result_text, reply_markup=_result_keyboard(generations, idea_id))
     except Exception as e:
-        await loading_msg.edit_text(f"Не удалось сгенерировать варианты: {e}")
-        return
-
-    # Сохраняем варианты в БД со статусом 'generated' (в Sheets НЕ пишем — только после «Сохранить»)
-    generations = []
-    for v in variants:
-        gen_id = db.add_generation(idea_id, v["variant"], v["text"], v["audience"], v["format"])
-        generations.append(db.get_generation(gen_id))
-
-    await loading_msg.edit_text(
-        _render_variants_text(generations), reply_markup=_result_keyboard(generations, idea_id)
-    )
+        logging.exception("_do_generate error")
+        try:
+            await loading_msg.edit_text(f"Не удалось сгенерировать варианты: {e}")
+        except Exception:
+            pass
 
 
 @dp.callback_query(F.data == "blconfirm:yes")
@@ -359,11 +377,12 @@ async def cb_blconfirm_yes(callback: CallbackQuery):
     if not pending:
         await callback.answer()
         return
-    await _do_generate(
-        callback.message, pending["idea_id"], pending["text"], pending["rubric"],
-        pending.get("recent_formats"),
-    )
     await callback.answer()
+    async with _Typing(callback.message.chat.id):
+        await _do_generate(
+            callback.message, pending["idea_id"], pending["text"], pending["rubric"],
+            pending.get("recent_formats"),
+        )
 
 
 @dp.callback_query(F.data == "blconfirm:no")
@@ -384,7 +403,8 @@ async def cb_regen(callback: CallbackQuery):
         return
     await callback.answer()
     loading = await callback.message.answer("⏳ Генерирую другие варианты...")
-    await _do_generate(loading, idea_id, idea["text"], idea["rubric"], _get_recent_formats())
+    async with _Typing(callback.message.chat.id):
+        await _do_generate(loading, idea_id, idea["text"], idea["rubric"], _get_recent_formats())
 
 
 # ── Кнопка «Сохранить» ───────────────────────────────────────
@@ -476,22 +496,23 @@ async def _handle_correction(message: Message, gen_id: int):
 async def cb_propose(callback: CallbackQuery):
     await callback.answer()  # отвечаем сразу — генерация занимает >10с, Telegram не ждёт
     loading = await callback.message.answer("🔍 Ищу тренды и формирую идеи...")
-    loop = asyncio.get_running_loop()
-    search_context = await loop.run_in_executor(None, search.search_niche_trends)
-    if not search_context:
-        await loading.edit_text("🔍 Поиск недоступен — генерирую из базы знаний...")
-    published = db.get_published_texts()
-    blacklisted = [e["text"] for e in blacklist.list_active()]
-    recent_formats = _get_recent_formats()
-    try:
-        async with _Typing(callback.message.chat.id):
+    # _Typing с самого начала — охватывает поиск + генерацию тем
+    async with _Typing(callback.message.chat.id):
+        loop = asyncio.get_running_loop()
+        search_context = await loop.run_in_executor(None, search.search_niche_trends)
+        if not search_context:
+            await loading.edit_text("🔍 Поиск недоступен — генерирую из базы знаний...")
+        published = db.get_published_texts()
+        blacklisted = [e["text"] for e in blacklist.list_active()]
+        recent_formats = _get_recent_formats()
+        try:
             topics = await generator.generate_topic_suggestions(
                 search_context, published, blacklisted, recent_formats
             )
-    except Exception as e:
-        logging.exception("generate_topic_suggestions error")
-        await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
-        return
+        except Exception as e:
+            logging.exception("generate_topic_suggestions error")
+            await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
+            return
 
     if not topics:
         await loading.edit_text("Не удалось получить темы. Попробуй ещё раз.")
@@ -565,19 +586,20 @@ async def cb_content_plan(callback: CallbackQuery):
     loading = await callback.message.answer("🗂 Формирую контент-план...")
     free_slots = publisher.get_free_slots(4)
     count = max(len(free_slots), 3)
-    loop = asyncio.get_running_loop()
-    search_context = await loop.run_in_executor(None, search.search_niche_trends)
-    published = db.get_published_texts()
-    blacklisted = [e["text"] for e in blacklist.list_active()]
-    recent_formats = _get_recent_formats()
-    try:
-        async with _Typing(callback.message.chat.id):
+    # _Typing с самого начала — охватывает поиск + генерацию тем
+    async with _Typing(callback.message.chat.id):
+        loop = asyncio.get_running_loop()
+        search_context = await loop.run_in_executor(None, search.search_niche_trends)
+        published = db.get_published_texts()
+        blacklisted = [e["text"] for e in blacklist.list_active()]
+        recent_formats = _get_recent_formats()
+        try:
             topics = await generator.generate_topic_suggestions(
                 search_context, published, blacklisted, recent_formats, count=count
             )
-    except Exception as e:
-        await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
-        return
+        except Exception as e:
+            await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
+            return
 
     if not topics:
         await loading.edit_text("Не удалось получить темы. Попробуй ещё раз.")
