@@ -488,12 +488,22 @@ async def cb_propose(callback: CallbackQuery):
                 search_context, published, blacklisted, recent_formats
             )
     except Exception as e:
+        logging.exception("generate_topic_suggestions error")
         await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
         await callback.answer()
         return
+
+    if not topics:
+        await loading.edit_text(
+            "Не удалось получить темы от модели. Попробуй ещё раз через пару секунд."
+        )
+        await callback.answer()
+        return
+
     _pending_topics[callback.from_user.id] = topics
 
-    lines = [f"{i+1}. «{t['topic']}» — {t['description']}" for i, t in enumerate(topics)]
+    desc = lambda t: (f" — {t['description']}" if t.get("description") else "")
+    lines = [f"{i+1}. «{t['topic']}»{desc(t)}" for i, t in enumerate(topics)]
     rows = []
     for i in range(len(topics)):
         rows.append([

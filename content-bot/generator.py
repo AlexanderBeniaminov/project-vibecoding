@@ -1,5 +1,6 @@
 """Генерация постов и идей через DeepSeek (RouterAI)."""
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -28,13 +29,16 @@ def _safe_json_loads(text: str) -> list:
     """json.loads с фallback через json_repair — DeepSeek иногда не экранирует кавычки."""
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as e:
+        logging.warning(f"[generator] json.loads failed ({e}), trying json_repair. Raw: {text[:300]}")
     try:
         from json_repair import repair_json
-        return json.loads(repair_json(text))
-    except Exception:
-        pass
+        repaired = repair_json(text)
+        result = json.loads(repaired)
+        logging.info(f"[generator] json_repair succeeded, got {len(result)} items")
+        return result
+    except Exception as e:
+        logging.error(f"[generator] json_repair also failed: {e}. Raw: {text[:300]}")
     return []
 
 
