@@ -276,11 +276,11 @@ async def cb_idea_select(callback: CallbackQuery):
     if not idea:
         await callback.answer("Идея не найдена")
         return
-    loading = await callback.message.answer("⏳ Обрабатываю, генерирую варианты...")
+    await callback.answer()
+    loading = await callback.message.answer("⏳ Генерирую варианты...")
     db.update_idea_status(idea_id, "in_progress")
     recent_formats = _get_recent_formats()
     await _generate_and_render(loading, idea_id, idea["text"], idea["rubric"], recent_formats)
-    await callback.answer()
 
 
 def _get_recent_formats() -> list[str]:
@@ -382,9 +382,9 @@ async def cb_regen(callback: CallbackQuery):
     if not idea:
         await callback.answer("Идея не найдена")
         return
+    await callback.answer()
     loading = await callback.message.answer("⏳ Генерирую другие варианты...")
     await _do_generate(loading, idea_id, idea["text"], idea["rubric"], _get_recent_formats())
-    await callback.answer()
 
 
 # ── Кнопка «Сохранить» ───────────────────────────────────────
@@ -474,6 +474,7 @@ async def _handle_correction(message: Message, gen_id: int):
 # ── Режим 0 — бот сам предлагает темы ─────────────────────────
 @dp.callback_query(F.data == "menu:propose")
 async def cb_propose(callback: CallbackQuery):
+    await callback.answer()  # отвечаем сразу — генерация занимает >10с, Telegram не ждёт
     loading = await callback.message.answer("🔍 Ищу тренды и формирую идеи...")
     loop = asyncio.get_running_loop()
     search_context = await loop.run_in_executor(None, search.search_niche_trends)
@@ -490,14 +491,10 @@ async def cb_propose(callback: CallbackQuery):
     except Exception as e:
         logging.exception("generate_topic_suggestions error")
         await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
-        await callback.answer()
         return
 
     if not topics:
-        await loading.edit_text(
-            "Не удалось получить темы от модели. Попробуй ещё раз через пару секунд."
-        )
-        await callback.answer()
+        await loading.edit_text("Не удалось получить темы. Попробуй ещё раз.")
         return
 
     _pending_topics[callback.from_user.id] = topics
@@ -512,7 +509,6 @@ async def cb_propose(callback: CallbackQuery):
         ])
     rows.append([InlineKeyboardButton(text="🔙 Меню", callback_data="menu:show")])
     await loading.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("topic:write:"))
@@ -523,11 +519,11 @@ async def cb_topic_write(callback: CallbackQuery):
         await callback.answer("Тема устарела, предложи заново")
         return
     topic = topics[idx]
-    idea_text = f"{topic['topic']}: {topic['description']}"
-    idea_id = db.add_idea(idea_text, source="text", status="in_progress")
-    loading = await callback.message.answer("⏳ Обрабатываю, генерирую варианты...")
-    await _generate_and_render(loading, idea_id, idea_text, "regular", _get_recent_formats())
     await callback.answer()
+    idea_text = f"{topic['topic']}: {topic.get('description', '')}"
+    idea_id = db.add_idea(idea_text, source="text", status="in_progress")
+    loading = await callback.message.answer("⏳ Генерирую варианты...")
+    await _generate_and_render(loading, idea_id, idea_text, "regular", _get_recent_formats())
 
 
 @dp.callback_query(F.data.startswith("topic:save:"))
@@ -565,6 +561,7 @@ def _content_plan_kb(topics: list[dict], selected: set) -> InlineKeyboardMarkup:
 
 @dp.callback_query(F.data == "menu:content_plan")
 async def cb_content_plan(callback: CallbackQuery):
+    await callback.answer()
     loading = await callback.message.answer("🗂 Формирую контент-план...")
     free_slots = publisher.get_free_slots(4)
     count = max(len(free_slots), 3)
@@ -580,19 +577,22 @@ async def cb_content_plan(callback: CallbackQuery):
             )
     except Exception as e:
         await loading.edit_text(f"Не удалось сгенерировать темы: {e}")
-        await callback.answer()
+        return
+
+    if not topics:
+        await loading.edit_text("Не удалось получить темы. Попробуй ещё раз.")
         return
 
     user_id = callback.from_user.id
     _content_plan[user_id] = {"topics": topics, "selected": set()}
 
-    lines = [f"{i+1}. «{t['topic']}» — {t['description']}" for i, t in enumerate(topics)]
+    desc = lambda t: (f" — {t['description']}" if t.get("description") else "")
+    lines = [f"{i+1}. «{t['topic']}»{desc(t)}" for i, t in enumerate(topics)]
     await loading.edit_text(
-        "Выбери темы для черновиков (нажми чтобы отметить ✅), потом «✍️ Написать черновики»:\n\n"
+        "Выбери темы (нажми чтобы отметить ✅), потом «✍️ Написать черновики»:\n\n"
         + "\n".join(lines),
         reply_markup=_content_plan_kb(topics, set()),
     )
-    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("cp:toggle:"))
@@ -623,11 +623,11 @@ async def cb_cp_confirm(callback: CallbackQuery):
     approved = [topics[i] for i in sorted(plan["selected"]) if i < len(topics)]
     recent_formats = _get_recent_formats()
 
-    await callback.message.answer(f"⏳ Пишу черновики для {len(approved)} тем...")
     await callback.answer()
+    await callback.message.answer(f"⏳ Пишу черновики для {len(approved)} тем...")
 
     for i, topic in enumerate(approved):
-        idea_text = f"{topic['topic']}: {topic['description']}"
+        idea_text = f"{topic['topic']}: {topic.get('description', '')}"
         idea_id = db.add_idea(idea_text, source="text", status="in_progress")
         idea = db.get_idea(idea_id)
         try:
