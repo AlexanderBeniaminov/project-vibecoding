@@ -205,7 +205,17 @@ async def generate_topic_suggestions(
         temperature=0.9,
     )
     content = _clean_json_response(resp.choices[0].message.content or "[]")
-    return _safe_json_loads(content)
+    raw = _safe_json_loads(content)
+    # Нормализуем — заполняем отсутствующие поля чтобы не падать в bot.py
+    result = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        topic = item.get("topic") or item.get("title") or item.get("name") or ""
+        desc  = item.get("description") or item.get("desc") or item.get("text") or ""
+        if topic:
+            result.append({"topic": str(topic).strip(), "description": str(desc).strip()})
+    return result
 
 
 _CORRECTION_SYSTEM = (
