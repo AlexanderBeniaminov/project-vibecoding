@@ -9,7 +9,10 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+    KeyboardButton, Message, ReplyKeyboardMarkup,
+)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import blacklist
@@ -139,6 +142,15 @@ async def transcribe_voice(message: Message) -> str:
 
 
 # ── Главное меню ─────────────────────────────────────────────
+def _persistent_kb() -> ReplyKeyboardMarkup:
+    """Постоянная клавиатура в строке ввода — всегда доступна."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📋 Меню")]],
+        resize_keyboard=True,
+        input_field_placeholder="Наговори тему или напиши...",
+    )
+
+
 def _main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💡 Предложи темы", callback_data="menu:propose"),
@@ -171,9 +183,10 @@ async def cmd_start(message: Message):
         return
     await message.answer(
         "Привет! Я помогу писать и публиковать посты для «ИИндустрия Развлечений».\n\n"
-        "Наговори тему — пришлю 3 варианта. Или выбери действие:",
-        reply_markup=_main_menu_kb(),
+        "Наговори тему — пришлю 3 варианта. Кнопка «📋 Меню» всегда доступна в строке ввода.",
+        reply_markup=_persistent_kb(),
     )
+    await message.answer("Меню:", reply_markup=_main_menu_kb())
 
 
 @dp.message(Command("menu"))
@@ -284,12 +297,9 @@ def _result_keyboard(generations: list[dict], idea_id: int) -> InlineKeyboardMar
     rows = []
     for g in generations:
         rows.append([
-            InlineKeyboardButton(text="⚙️ Скорректировать", callback_data=f"corr:{g['id']}"),
-            InlineKeyboardButton(text="💾 Сохранить", callback_data=f"save:{g['id']}"),
-            InlineKeyboardButton(text="🚨 СРОЧНО В КАНАЛ", callback_data=f"urgent:{g['id']}"),
+            InlineKeyboardButton(text=f"💾 Сохранить вар.{g['variant_num']}", callback_data=f"save:{g['id']}"),
         ])
     rows.append([InlineKeyboardButton(text="🔄 Другие варианты", callback_data=f"regen:{idea_id}")])
-    rows.append([InlineKeyboardButton(text="🔙 Меню", callback_data="menu:show")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -758,6 +768,11 @@ async def handle_message(message: Message):
     if not is_allowed(message.from_user.id):
         return
     user_id = message.from_user.id
+
+    # Reply-кнопка «📋 Меню» в строке ввода
+    if message.text and message.text.strip() in ("📋 Меню", "Меню", "/menu"):
+        await message.answer("Меню:", reply_markup=_main_menu_kb())
+        return
 
     if user_id in _awaiting_correction:
         gen_id = _awaiting_correction.pop(user_id)
