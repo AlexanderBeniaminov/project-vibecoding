@@ -42,6 +42,22 @@ check "NAMES_PAT или TEAM_ALIASES есть"  "telegram-helper/helper_bot.py" 
 check "TASK_FOR_RE есть"                 "telegram-helper/helper_bot.py"    "TASK_FOR_RE"
 
 echo ""
+echo "── telegram-manager/manager_bot.py (сессия 2026-06-25) ──"
+check "handler ловит F.photo"            "telegram-manager/manager_bot.py"  "F\.photo"
+check "читает message.caption"           "telegram-manager/manager_bot.py"  "message\.caption"
+check "мгновенный typing после auth"     "telegram-manager/manager_bot.py"  "send_chat_action.*typing"
+
+echo ""
+echo "── telegram-assistant/assistant_bot.py (сессия 2026-06-25) ──"
+check "нет echo «Верно?» для reminder"   "telegram-assistant/assistant_bot.py" "Сразу вызывай add_reminder"
+check "запрет Верно? в ЖЁСТКИХ ЗАПРЕТАХ" "telegram-assistant/assistant_bot.py" "НЕЛЬЗЯ перед add_reminder"
+
+echo ""
+echo "── deploy.sh health-check (сессия 2026-06-25) ──"
+check "assistant deploy ждёт active"     "telegram-assistant/deploy.sh"     "is-active telegram-assistant"
+check "manager deploy ждёт active"       "telegram-manager/deploy.sh"       "is-active telegram-manager"
+
+echo ""
 echo "── Git ──"
 HEAD=$(cd "$ROOT" && git rev-parse HEAD)
 TAG=$(cd "$ROOT" && git rev-parse last-known-good 2>/dev/null || echo "НЕТ ТЕГА")

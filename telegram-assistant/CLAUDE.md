@@ -125,7 +125,7 @@ def _clean_response(text: str) -> str:
 bash telegram-assistant/deploy.sh
 ```
 
-Скрипт: rsync исключая `config.py`, `data/`, `__pycache__/` → рестарт сервиса.
+Скрипт: забирает `knowledge/*.md` с сервера → rsync (без `config.py`, `data/`, `__pycache__/`) → рестарт → ждёт `active` до 10 сек → проверяет логи на `error/traceback`. При сбое — `journalctl -n 20` и `exit 1`.
 
 После обновления `knowledge/*.md` — деплой обязателен (или `_reload_knowledge()` внутри бота через `update_knowledge`).
 
@@ -175,3 +175,4 @@ bash telegram-assistant/deploy.sh
 - После вызова инструмента — одно короткое подтверждение
 - Если бот узнал что-то важное — вызвать `remember_fact`
 - Knowledge-файлы обновлять автономно через `update_knowledge`, потом деплоить
+- **Напоминания: НЕ переспрашивать «Верно?»** — `add_reminder` вызывать сразу, без echo-подтверждения (для всех типов сообщений, включая голосовые)
