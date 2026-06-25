@@ -42,6 +42,27 @@ rsync -avz \
 echo "Перезапускаю сервис..."
 ssh "$REMOTE" "systemctl restart telegram-assistant"
 
-echo "Статус:"
-ssh "$REMOTE" "systemctl status telegram-assistant --no-pager | grep -E 'Active|python'"
+# 6. Проверяем что сервис поднялся без ошибок (ждём до 10 сек)
+echo "Проверяю запуск..."
+for i in $(seq 1 10); do
+    STATE=$(ssh "$REMOTE" "systemctl is-active telegram-assistant" 2>/dev/null)
+    if [ "$STATE" = "active" ]; then
+        # Дополнительно: нет ли ERROR в логах последних 5 строк
+        ERRORS=$(ssh "$REMOTE" "journalctl -u telegram-assistant -n 5 --no-pager 2>/dev/null | grep -i 'error\|traceback\|exception'" || true)
+        if [ -n "$ERRORS" ]; then
+            echo "⚠️  Сервис active, но есть ошибки в логах:"
+            echo "$ERRORS"
+            exit 1
+        fi
+        echo "✅ telegram-assistant запущен (попытка $i/10)"
+        break
+    fi
+    if [ "$i" -eq 10 ]; then
+        echo "❌ Сервис не поднялся за 10 сек. Статус: $STATE"
+        ssh "$REMOTE" "journalctl -u telegram-assistant -n 20 --no-pager"
+        exit 1
+    fi
+    sleep 1
+done
+
 echo "Done."
