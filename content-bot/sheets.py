@@ -167,6 +167,16 @@ def _apply_sheet_validations():
     ]
 
     requests = [
+        # D (индекс 3) — снять старую валидацию (Статус раньше был здесь, до сдвига схемы)
+        {
+            "setDataValidation": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 1, "endRowIndex": 500,
+                    "startColumnIndex": 3, "endColumnIndex": 4,
+                },
+            }
+        },
         # E (индекс 4) — дропдаун Статус
         {
             "setDataValidation": {
