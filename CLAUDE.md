@@ -76,6 +76,11 @@ VPS u1host Германия, Ubuntu 24.04. VLESS+XTLS-Reality (3X-UI). Python ve
 git add <files> && git commit -m "..." && git push
 ```
 
+Pre-push hook (детектор дрейфа): `.git/hooks/pre-push` — запускает `aihotel/drift_detect.sh` перед каждым push. При свежем клоне создать:
+```bash
+printf '#!/usr/bin/env bash\nexec bash "$(git rev-parse --show-toplevel)/aihotel/drift_detect.sh"\n' > .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+```
+
 ---
 
 ## Правила работы
