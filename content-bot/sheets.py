@@ -25,7 +25,7 @@ SHEET_BLACKLIST = "🚫 Блэклист"
 _HEADERS = {
     SHEET_IDEAS:    ["Дата", "Тема"],
     SHEET_POSTS:    ["Gen ID", "Дата", "Формат", "Текст поста", "Статус", "Дата публикации"],
-    SHEET_CALENDAR: ["Дата", "День", "Время", "Тема", "Рубрика", "Статус", "Ссылка"],
+    SHEET_CALENDAR: ["Дата", "День", "Время", "Тема", "Пост", "Статус", "Ссылка"],
     SHEET_BLACKLIST: ["Тема", "Режим", "Заблокировано до", "Причина", "Добавлено"],
 }
 
@@ -194,7 +194,7 @@ def get_recent_history(limit: int = 15) -> list[dict]:
             result.append({
                 "date":   row[0],
                 "topic":  row[3] if len(row) > 3 else "",
-                "rubric": row[4] if len(row) > 4 else "",
+                "post":   row[4] if len(row) > 4 else "",
                 "status": row[5] if len(row) > 5 else "",
                 "format": row[6] if len(row) > 6 else "",
             })
@@ -242,7 +242,7 @@ def rebuild_calendar():
         )
         ws.append_row([
             date_label, day_label, time_label,
-            row["idea_text"], row["rubric"], status_label, link,
+            row["idea_text"], row["text"], status_label, link,
         ])
 
 
