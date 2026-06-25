@@ -102,14 +102,43 @@ def push_generation_draft(idea: dict, gen: dict):
         logging.warning(f"[sheets] validations после push не удались: {e}")
 
 
-def update_post_status_by_gen_id(gen_id: int, new_status: str) -> bool:
-    """Находит строку по Gen ID в колонке A и обновляет статус (E). Возвращает True если нашёл."""
+def update_post_status_by_gen_id(gen_id: int, new_status: str) -> tuple[bool, int | None, int | None]:
+    """Находит строку по Gen ID в колонке A и обновляет статус (E).
+    Возвращает (найдено, номер_строки, gid_листа) — row/gid нужны для прямой ссылки на пост."""
     ws = _get_spreadsheet().worksheet(SHEET_POSTS)
     cell = ws.find(str(gen_id), in_column=1)
     if cell:
         ws.update_cell(cell.row, 5, new_status)
-        return True
-    return False
+        return True, cell.row, ws.id
+    return False, None, None
+
+
+def build_post_link(row: int, gid: int) -> str:
+    """Прямая ссылка на строку поста в Google Sheets (не на весь лист)."""
+    base = config.SPREADSHEET_URL.rstrip("/")
+    return f"{base}/edit#gid={gid}&range=A{row}"
+
+
+def get_pending_reviews() -> list[dict]:
+    """Строки листа «✏️ Посты» со статусом «На согласование» — для поллинга ручных правок."""
+    ws = _get_spreadsheet().worksheet(SHEET_POSTS)
+    rows = ws.get_all_values()
+    gid = ws.id
+
+    pending = []
+    for i, row in enumerate(rows[1:], start=2):
+        if len(row) < 5:
+            continue
+        gen_id_raw = row[0]
+        status = row[4]
+        if not gen_id_raw or status.strip() != _STATUS_ON_REVIEW:
+            continue
+        try:
+            gen_id = int(gen_id_raw)
+        except ValueError:
+            continue
+        pending.append({"gen_id": gen_id, "row": i, "gid": gid})
+    return pending
 
 
 def push_blacklist_entry(entry: dict):

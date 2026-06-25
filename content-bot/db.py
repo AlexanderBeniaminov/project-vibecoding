@@ -58,6 +58,7 @@ def init_db():
         "ALTER TABLE generations ADD COLUMN scheduled_at TEXT",
         "ALTER TABLE generations ADD COLUMN published_at TEXT",
         "ALTER TABLE generations ADD COLUMN channel_message_id INTEGER",
+        "ALTER TABLE generations ADD COLUMN notified_about_review_at TEXT",
     ]:
         try:
             conn.execute(col_def)
@@ -150,6 +151,14 @@ def get_generation(gen_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM generations WHERE id=?", (gen_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def mark_review_notified(gen_id: int):
+    """Отмечает, что Александр уже получил уведомление о «На согласование» (кнопкой или поллингом)."""
+    conn = get_conn()
+    conn.execute("UPDATE generations SET notified_about_review_at=? WHERE id=?", (_now(), gen_id))
+    conn.commit()
+    conn.close()
 
 
 def get_generations_for_idea(idea_id: int) -> list[dict]:

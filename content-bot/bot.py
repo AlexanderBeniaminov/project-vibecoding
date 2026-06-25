@@ -504,9 +504,9 @@ async def cb_review_send(callback: CallbackQuery):
 
     # Обновить статус в Sheets
     loop = asyncio.get_running_loop()
-    updated = False
+    updated, row, gid = False, None, None
     try:
-        updated = await loop.run_in_executor(
+        updated, row, gid = await loop.run_in_executor(
             None, lambda: sheets.update_post_status_by_gen_id(gen_id, sheets._STATUS_ON_REVIEW)
         )
     except Exception as e:
@@ -516,8 +516,9 @@ async def cb_review_send(callback: CallbackQuery):
     try:
         idea = db.get_idea(gen["idea_id"])
         topic_hint = f"«{idea['text'][:60]}»" if idea else ""
+        post_link = sheets.build_post_link(row, gid) if row else config.SPREADSHEET_URL
         kb_owner = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="📊 Открыть таблицу", url=config.SPREADSHEET_URL),
+            InlineKeyboardButton(text="📊 Открыть этот пост", url=post_link),
         ]])
         await bot.send_message(
             config.OWNER_USER_ID,
@@ -526,6 +527,7 @@ async def cb_review_send(callback: CallbackQuery):
             "Открой «Посты», проверь текст и дату → смени статус на «К публикации».",
             reply_markup=kb_owner,
         )
+        db.mark_review_notified(gen_id)
     except Exception as e:
         logging.warning(f"[bot] уведомление владельцу не удалось: {e}")
 
@@ -1041,6 +1043,40 @@ async def _periodic_sheets_sync():
     await loop.run_in_executor(None, sheets.sync_from_sheets)
 
 
+REVIEW_POLL_MINUTES = 3  # хардкод, не в config.py — VPS-конфиг не входит в деплой
+
+
+async def _periodic_review_poll():
+    """Ловит ручные правки статуса на «На согласование» прямо в Sheets (минуя кнопку бота)."""
+    loop = asyncio.get_running_loop()
+    try:
+        pending = await loop.run_in_executor(None, sheets.get_pending_reviews)
+    except Exception as e:
+        logging.warning(f"[sheets] review poll не удался: {e}")
+        return
+
+    for item in pending:
+        gen = db.get_generation(item["gen_id"])
+        if not gen or gen.get("notified_about_review_at"):
+            continue  # уже уведомлён — кнопкой или предыдущим поллингом
+
+        try:
+            link = sheets.build_post_link(item["row"], item["gid"])
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="📊 Открыть этот пост", url=link),
+            ]])
+            await bot.send_message(
+                config.OWNER_USER_ID,
+                f"📬 Статус поста изменён на «На согласование» вручную в таблице\n\n"
+                f"──── {gen.get('format', '')} ────\n{gen['text']}\n\n"
+                "Открой «Посты», проверь текст и дату → смени статус на «К публикации».",
+                reply_markup=kb,
+            )
+            db.mark_review_notified(item["gen_id"])
+        except Exception as e:
+            logging.warning(f"[bot] уведомление о ручной правке не удалось (gen_id={item['gen_id']}): {e}")
+
+
 async def main():
     db.init_db()
     try:
@@ -1052,6 +1088,10 @@ async def main():
     scheduler.add_job(
         _periodic_sheets_sync, "cron",
         hour=config.SHEETS_SYNC_HOUR, minute=0, id="sheets_sync",
+    )
+    scheduler.add_job(
+        _periodic_review_poll, "interval",
+        minutes=REVIEW_POLL_MINUTES, id="review_poll",
     )
     scheduler.start()
 
