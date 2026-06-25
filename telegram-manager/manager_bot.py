@@ -494,7 +494,7 @@ async def _reformat_with_llm(original: str, instruction: str) -> str:
         return original
 
 
-@dp.message(F.text | F.voice)
+@dp.message(F.text | F.voice | F.photo | F.document | F.video | F.sticker | F.audio)
 async def handle_message(message: Message):
     if not _auth(message):
         return
@@ -514,9 +514,15 @@ async def handle_message(message: Message):
             return
         await message.answer(f"🎙 _{text}_", parse_mode="Markdown")
     else:
-        text = (message.text or "").strip()
+        # message.text для обычных, message.caption для фото/документов с подписью
+        text = (message.text or message.caption or "").strip()
 
     if not text:
+        await message.answer(
+            "Пришли текстовое или голосовое сообщение.\n"
+            "Пример: _«Напоминатор, не переспрашивай перед записью»_",
+            parse_mode="Markdown",
+        )
         return
 
     # ── "Переделай" flow: reply на сообщение ─────────────────────────────────
