@@ -499,6 +499,9 @@ async def handle_message(message: Message):
     if not _auth(message):
         return
 
+    # Мгновенно показываем «печатает…» как только получили сообщение
+    await bot.send_chat_action(message.chat.id, "typing")
+
     # ── Транскрипция голосового ────────────────────────────────────────────────
     if message.voice:
         stop = asyncio.Event()
