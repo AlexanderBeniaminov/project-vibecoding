@@ -1077,6 +1077,39 @@ async def _periodic_review_poll():
             logging.warning(f"[bot] уведомление о ручной правке не удалось (gen_id={item['gen_id']}): {e}")
 
 
+URGENT_POLL_MINUTES = 1  # быстрее review_poll — статус «Срочно» должен уйти в канал немедленно
+
+
+async def _periodic_urgent_poll():
+    """Ловит статус «🚨 Срочно» в Sheets и публикует пост в канал немедленно, минуя расписание."""
+    loop = asyncio.get_running_loop()
+    try:
+        pending = await loop.run_in_executor(None, sheets.get_pending_urgent)
+    except Exception as e:
+        logging.warning(f"[sheets] urgent poll не удался: {e}")
+        return
+
+    for item in pending:
+        gen = db.get_generation(item["gen_id"])
+        if not gen or gen["status"] == "published":
+            continue  # уже опубликован — ждём, пока статус в Sheets подтянется
+
+        try:
+            await publisher.publish_now(item["gen_id"])
+            sheets.update_post_status_by_gen_id(item["gen_id"], sheets._STATUS_PUBLISHED)
+            link = sheets.build_post_link(item["row"], item["gid"])
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="📊 Открыть этот пост", url=link),
+            ]])
+            await bot.send_message(
+                config.OWNER_USER_ID,
+                f"✅ Срочно опубликовано в канал\n\n──── {gen.get('format', '')} ────\n{gen['text']}",
+                reply_markup=kb,
+            )
+        except Exception as e:
+            logging.warning(f"[bot] срочная публикация не удалась (gen_id={item['gen_id']}): {e}")
+
+
 async def main():
     db.init_db()
     try:
@@ -1092,6 +1125,10 @@ async def main():
     scheduler.add_job(
         _periodic_review_poll, "interval",
         minutes=REVIEW_POLL_MINUTES, id="review_poll",
+    )
+    scheduler.add_job(
+        _periodic_urgent_poll, "interval",
+        minutes=URGENT_POLL_MINUTES, id="urgent_poll",
     )
     scheduler.start()
 

@@ -33,11 +33,12 @@ _HEADERS = {
 _STATUS_DRAFT      = "✏️ Черновик"
 _STATUS_ON_REVIEW  = "📬 На согласование"   # Алексей отправил на утверждение Александру
 _STATUS_TO_PUBLISH = "К публикации"          # Александр утвердил — бот поставит в расписание
+_STATUS_URGENT     = "🚨 Срочно"             # публикация в канал немедленно, минуя расписание
 _STATUS_PUBLISHED  = "✔️ Опубликован"
 _STATUS_DELETE     = "🗑 Удалить"
 
 # Dropdown для колонки Статус (E)
-_STATUS_OPTIONS = [_STATUS_DRAFT, _STATUS_ON_REVIEW, _STATUS_TO_PUBLISH, _STATUS_PUBLISHED, _STATUS_DELETE]
+_STATUS_OPTIONS = [_STATUS_DRAFT, _STATUS_ON_REVIEW, _STATUS_TO_PUBLISH, _STATUS_URGENT, _STATUS_PUBLISHED, _STATUS_DELETE]
 
 _IDEA_SOURCE_LABEL = {"text": "✍️ текст", "voice": "🎙 голос", "manual": "✍️ Sheets"}
 _DAY_NAMES = {0: "Пн", 1: "Вт", 2: "Ср", 3: "Чт", 4: "Пт", 5: "Сб", 6: "Вс"}
@@ -132,6 +133,28 @@ def get_pending_reviews() -> list[dict]:
         gen_id_raw = row[0]
         status = row[4]
         if not gen_id_raw or status.strip() != _STATUS_ON_REVIEW:
+            continue
+        try:
+            gen_id = int(gen_id_raw)
+        except ValueError:
+            continue
+        pending.append({"gen_id": gen_id, "row": i, "gid": gid})
+    return pending
+
+
+def get_pending_urgent() -> list[dict]:
+    """Строки листа «✏️ Посты» со статусом «🚨 Срочно» — для немедленной публикации."""
+    ws = _get_spreadsheet().worksheet(SHEET_POSTS)
+    rows = ws.get_all_values()
+    gid = ws.id
+
+    pending = []
+    for i, row in enumerate(rows[1:], start=2):
+        if len(row) < 5:
+            continue
+        gen_id_raw = row[0]
+        status = row[4]
+        if not gen_id_raw or status.strip() != _STATUS_URGENT:
             continue
         try:
             gen_id = int(gen_id_raw)
