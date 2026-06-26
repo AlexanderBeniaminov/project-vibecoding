@@ -120,48 +120,28 @@ def build_post_link(row: int, gid: int) -> str:
     return f"{base}/edit#gid={gid}&range=A{row}"
 
 
-def get_pending_reviews() -> list[dict]:
-    """Строки листа «✏️ Посты» со статусом «На согласование» — для поллинга ручных правок."""
+def get_pending_actions() -> dict[str, list[dict]]:
+    """Один проход по листу «✏️ Посты» — строки со статусом «На согласование» и «🚨 Срочно».
+    Объединено в одну функцию, чтобы поллинг ходил в Sheets API один раз, а не два."""
     ws = _get_spreadsheet().worksheet(SHEET_POSTS)
     rows = ws.get_all_values()
     gid = ws.id
 
-    pending = []
+    review, urgent = [], []
     for i, row in enumerate(rows[1:], start=2):
         if len(row) < 5:
             continue
         gen_id_raw = row[0]
-        status = row[4]
-        if not gen_id_raw or status.strip() != _STATUS_ON_REVIEW:
+        status = row[4].strip()
+        if not gen_id_raw or status not in (_STATUS_ON_REVIEW, _STATUS_URGENT):
             continue
         try:
             gen_id = int(gen_id_raw)
         except ValueError:
             continue
-        pending.append({"gen_id": gen_id, "row": i, "gid": gid})
-    return pending
-
-
-def get_pending_urgent() -> list[dict]:
-    """Строки листа «✏️ Посты» со статусом «🚨 Срочно» — для немедленной публикации."""
-    ws = _get_spreadsheet().worksheet(SHEET_POSTS)
-    rows = ws.get_all_values()
-    gid = ws.id
-
-    pending = []
-    for i, row in enumerate(rows[1:], start=2):
-        if len(row) < 5:
-            continue
-        gen_id_raw = row[0]
-        status = row[4]
-        if not gen_id_raw or status.strip() != _STATUS_URGENT:
-            continue
-        try:
-            gen_id = int(gen_id_raw)
-        except ValueError:
-            continue
-        pending.append({"gen_id": gen_id, "row": i, "gid": gid})
-    return pending
+        item = {"gen_id": gen_id, "row": i, "gid": gid}
+        (review if status == _STATUS_ON_REVIEW else urgent).append(item)
+    return {"review": review, "urgent": urgent}
 
 
 def push_blacklist_entry(entry: dict):

@@ -1043,19 +1043,19 @@ async def _periodic_sheets_sync():
     await loop.run_in_executor(None, sheets.sync_from_sheets)
 
 
-REVIEW_POLL_MINUTES = 3  # хардкод, не в config.py — VPS-конфиг не входит в деплой
+SHEETS_POLL_MINUTES = 1  # один проход на «На согласование» + «🚨 Срочно» — срочное должно уйти немедленно
 
 
-async def _periodic_review_poll():
-    """Ловит ручные правки статуса на «На согласование» прямо в Sheets (минуя кнопку бота)."""
+async def _periodic_sheets_poll():
+    """Один опрос листа «Посты» — ловит ручные правки статуса на «На согласование» и «🚨 Срочно»."""
     loop = asyncio.get_running_loop()
     try:
-        pending = await loop.run_in_executor(None, sheets.get_pending_reviews)
+        pending = await loop.run_in_executor(None, sheets.get_pending_actions)
     except Exception as e:
-        logging.warning(f"[sheets] review poll не удался: {e}")
+        logging.warning(f"[sheets] sheets poll не удался: {e}")
         return
 
-    for item in pending:
+    for item in pending["review"]:
         gen = db.get_generation(item["gen_id"])
         if not gen or gen.get("notified_about_review_at"):
             continue  # уже уведомлён — кнопкой или предыдущим поллингом
@@ -1076,20 +1076,7 @@ async def _periodic_review_poll():
         except Exception as e:
             logging.warning(f"[bot] уведомление о ручной правке не удалось (gen_id={item['gen_id']}): {e}")
 
-
-URGENT_POLL_MINUTES = 1  # быстрее review_poll — статус «Срочно» должен уйти в канал немедленно
-
-
-async def _periodic_urgent_poll():
-    """Ловит статус «🚨 Срочно» в Sheets и публикует пост в канал немедленно, минуя расписание."""
-    loop = asyncio.get_running_loop()
-    try:
-        pending = await loop.run_in_executor(None, sheets.get_pending_urgent)
-    except Exception as e:
-        logging.warning(f"[sheets] urgent poll не удался: {e}")
-        return
-
-    for item in pending:
+    for item in pending["urgent"]:
         gen = db.get_generation(item["gen_id"])
         if not gen or gen["status"] == "published":
             continue  # уже опубликован — ждём, пока статус в Sheets подтянется
@@ -1123,12 +1110,8 @@ async def main():
         hour=config.SHEETS_SYNC_HOUR, minute=0, id="sheets_sync",
     )
     scheduler.add_job(
-        _periodic_review_poll, "interval",
-        minutes=REVIEW_POLL_MINUTES, id="review_poll",
-    )
-    scheduler.add_job(
-        _periodic_urgent_poll, "interval",
-        minutes=URGENT_POLL_MINUTES, id="urgent_poll",
+        _periodic_sheets_poll, "interval",
+        minutes=SHEETS_POLL_MINUTES, id="sheets_poll",
     )
     scheduler.start()
 
