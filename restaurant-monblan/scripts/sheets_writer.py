@@ -436,9 +436,12 @@ def read_daily_row(service, spreadsheet_id: str, report_date: str) -> dict:
     Возвращает словарь {название метрики: значение}.
     Если дата не найдена — возвращает пустой словарь.
     """
+    # Без буквенного ограничения колонок — лист растёт на 1 колонку/день,
+    # жёсткий диапазон (напр. A:AZ = 52 колонки = ~51 день) рано или поздно
+    # перестаёт покрывать новые даты и read_daily_row молча возвращает {}.
     result = service.spreadsheets().values().get(
         spreadsheetId=spreadsheet_id,
-        range="Ежедневно!A:AZ"
+        range="Ежедневно"
     ).execute()
     rows = result.get("values", [])
 

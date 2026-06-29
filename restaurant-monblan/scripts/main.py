@@ -339,9 +339,11 @@ def _aggregate_weekly(service, monday: date, sunday: date, week_num: int) -> dic
     Прочитать лист «Ежедневно» и собрать агрегаты за неделю.
     Структура листа: строка 1 — даты, колонка A — названия метрик.
     """
+    # Без буквенного ограничения колонок — см. комментарий в read_daily_row
+    # (sheets_writer.py): A:AZ покрывает только ~51 день и обрезает данные.
     result = service.spreadsheets().values().get(
         spreadsheetId=SHEETS_ID,
-        range="Ежедневно!A:AZ",
+        range="Ежедневно",
         valueRenderOption="UNFORMATTED_VALUE",
     ).execute()
     rows = result.get("values", [])
