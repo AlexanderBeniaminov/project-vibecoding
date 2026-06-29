@@ -121,22 +121,26 @@ def build_post_link(row: int, gid: int) -> str:
 
 
 def get_pending_actions() -> dict[str, list[dict]]:
-    """Один проход по листу «✏️ Посты» — строки со статусом «На согласование» и «🚨 Срочно».
-    Объединено в одну функцию, чтобы поллинг ходил в Sheets API один раз, а не два.
+    """Один проход по листу «✏️ Посты» — строки со статусом «На согласование», «🚨 Срочно»
+    и «К публикации». Объединено в одну функцию, чтобы поллинг ходил в Sheets API один раз.
+    «К публикации» включена сюда же (не только в суточный _sync_posts()) — иначе пост,
+    поставленный в расписание после ночного sync, не попадёт в APScheduler до следующих суток
+    и пропустит свою дату публикации.
     Перед тем как вернуть строку — синхронизирует ручную правку текста (колонка D) в SQLite,
     тот же приём, что в _sync_posts(), иначе публикация/уведомление уйдут со старым текстом из БД."""
     ws = _get_spreadsheet().worksheet(SHEET_POSTS)
     rows = ws.get_all_values()
     gid = ws.id
 
-    review, urgent = [], []
+    review, urgent, to_publish = [], [], []
     for i, row in enumerate(rows[1:], start=2):
         if len(row) < 5:
             continue
         gen_id_raw = row[0]
         text = row[3] if len(row) > 3 else ""
         status = row[4].strip()
-        if not gen_id_raw or status not in (_STATUS_ON_REVIEW, _STATUS_URGENT):
+        pub_date = row[5].strip() if len(row) > 5 else ""
+        if not gen_id_raw or status not in (_STATUS_ON_REVIEW, _STATUS_URGENT, _STATUS_TO_PUBLISH):
             continue
         try:
             gen_id = int(gen_id_raw)
@@ -151,8 +155,14 @@ def get_pending_actions() -> dict[str, list[dict]]:
                 db.update_generation_hash(gen_id, new_hash)
 
         item = {"gen_id": gen_id, "row": i, "gid": gid}
-        (review if status == _STATUS_ON_REVIEW else urgent).append(item)
-    return {"review": review, "urgent": urgent}
+        if status == _STATUS_ON_REVIEW:
+            review.append(item)
+        elif status == _STATUS_URGENT:
+            urgent.append(item)
+        elif pub_date:
+            item["pub_date"] = pub_date
+            to_publish.append(item)
+    return {"review": review, "urgent": urgent, "to_publish": to_publish}
 
 
 def push_blacklist_entry(entry: dict):
