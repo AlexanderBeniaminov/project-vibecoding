@@ -8,6 +8,7 @@ import hashlib
 import html
 import logging
 from datetime import datetime
+from html.parser import HTMLParser as _HTMLParser
 from zoneinfo import ZoneInfo
 
 import gspread
@@ -179,6 +180,105 @@ def _fetch_posts_rich_text() -> dict[int, str]:
     return result
 
 
+# ── Rich text: Telegram HTML → Sheets textFormatRuns ─────────
+
+class _RunsBuilder(_HTMLParser):
+    """Парсит Telegram HTML и строит textFormatRuns для Sheets API batchUpdate."""
+
+    def __init__(self):
+        super().__init__()
+        self._parts: list[str] = []
+        self._pos: int = 0
+        self._runs: list[dict] = []
+        self._stack: list[dict] = [{}]
+        self._last_fmt: dict = {}
+        self._in_blockquote: bool = False
+
+    def _current_fmt(self) -> dict:
+        result: dict = {}
+        for layer in self._stack:
+            result.update(layer)
+        return result
+
+    def handle_starttag(self, tag: str, attrs: list):
+        a = dict(attrs)
+        if tag == "b":
+            self._stack.append({"bold": True})
+        elif tag == "i":
+            self._stack.append({"italic": True})
+        elif tag == "u":
+            self._stack.append({"underline": True})
+        elif tag == "s":
+            self._stack.append({"strikethrough": True})
+        elif tag == "a":
+            self._stack.append({"link": {"uri": a.get("href", "")}})
+        elif tag == "blockquote":
+            self._in_blockquote = True
+            self._stack.append({})
+        else:
+            self._stack.append({})
+
+    def handle_endtag(self, tag: str):
+        if tag == "blockquote":
+            self._in_blockquote = False
+        if len(self._stack) > 1:
+            self._stack.pop()
+
+    def handle_data(self, data: str):
+        if not data:
+            return
+        if self._in_blockquote:
+            lines = data.split("\n")
+            data = "\n".join(f"> {ln}" if ln else ">" for ln in lines)
+        fmt = self._current_fmt()
+        if fmt != self._last_fmt:
+            self._runs.append({"startIndex": self._pos, "format": fmt})
+            self._last_fmt = fmt
+        self._parts.append(data)
+        self._pos += len(data)
+
+    def result(self) -> tuple[str, list]:
+        plain = "".join(self._parts)
+        # Убираем начальный run с пустым форматом — он избыточен (это дефолт)
+        runs = self._runs[:]
+        if runs and runs[0]["startIndex"] == 0 and not any(v for v in runs[0]["format"].values() if v):
+            runs = runs[1:]
+        return plain, runs
+
+
+def _html_to_textformat_runs(html_text: str) -> tuple[str, list]:
+    """Конвертирует Telegram HTML в (plain_text, textFormatRuns) для Sheets API."""
+    parser = _RunsBuilder()
+    parser.feed(html_text)
+    return parser.result()
+
+
+def _write_cell_rich(sheet_gid: int, row: int, col: int, html_text: str):
+    """Перезаписывает ячейку (row, col) с rich text форматированием через Sheets batchUpdate."""
+    plain, runs = _html_to_textformat_runs(html_text)
+    cell_data: dict = {"userEnteredValue": {"stringValue": plain}}
+    if runs:
+        cell_data["textFormatRuns"] = runs
+    body = {
+        "requests": [{
+            "updateCells": {
+                "rows": [{"values": [cell_data]}],
+                "fields": "userEnteredValue,textFormatRuns",
+                "range": {
+                    "sheetId": sheet_gid,
+                    "startRowIndex": row - 1,
+                    "endRowIndex": row,
+                    "startColumnIndex": col - 1,
+                    "endColumnIndex": col,
+                },
+            }
+        }]
+    }
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{config.SPREADSHEET_ID}:batchUpdate"
+    resp = _get_sheets_session().post(url, json=body, timeout=15)
+    resp.raise_for_status()
+
+
 # ── Push: бот → Sheets (мгновенно при событиях) ──────────────
 def push_idea(idea: dict):
     """Записывает идею в лист «Идеи» — только дата и тема."""
@@ -191,14 +291,23 @@ def push_generation_draft(idea: dict, gen: dict):
     """Записывает вариант в «Посты» со статусом Черновик (нажата кнопка «Сохранить»)."""
     ws = _get_spreadsheet().worksheet(SHEET_POSTS)
     created = datetime.fromisoformat(gen["created_at"]) if gen.get("created_at") else datetime.now(_MSK)
+    plain_text, runs = _html_to_textformat_runs(gen["text"])
     ws.append_row([
         gen["id"],                          # A: Gen ID
         created.strftime("%d.%m.%Y"),       # B: Дата
         gen["format"],                      # C: Формат
-        gen["text"],                        # D: Текст поста
+        plain_text,                         # D: Текст поста (plain — форматирование ниже)
         _STATUS_DRAFT,                      # E: Статус
         "",                                 # F: Дата публикации — ставит пользователь
     ])
+    # Если текст содержит форматирование — применить через batchUpdate
+    if runs:
+        try:
+            cell = ws.find(str(gen["id"]), in_column=1)
+            if cell:
+                _write_cell_rich(ws._properties["sheetId"], cell.row, col=4, html_text=gen["text"])
+        except Exception as e:
+            logging.warning(f"[sheets] rich text push для gen_id={gen['id']} не удался: {e}")
     db.update_generation_hash(gen["id"], _hash(gen["text"]))
     # Обновляем дропдауны после каждого добавления черновика
     try:
