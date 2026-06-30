@@ -59,6 +59,7 @@ def init_db():
         "ALTER TABLE generations ADD COLUMN published_at TEXT",
         "ALTER TABLE generations ADD COLUMN channel_message_id INTEGER",
         "ALTER TABLE generations ADD COLUMN notified_about_review_at TEXT",
+        "ALTER TABLE generations ADD COLUMN notified_about_republish_at TEXT",
     ]:
         try:
             conn.execute(col_def)
@@ -151,6 +152,25 @@ def get_generation(gen_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM generations WHERE id=?", (gen_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def mark_republish_notified(gen_id: int):
+    """Отмечает, что уведомление о повторной публикации уже отправлено — не слать снова каждую минуту."""
+    conn = get_conn()
+    conn.execute("UPDATE generations SET notified_about_republish_at=? WHERE id=?", (_now(), gen_id))
+    conn.commit()
+    conn.close()
+
+
+def reset_generation_published(gen_id: int):
+    """Сбрасывает published-пост обратно в draft для повторной публикации."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE generations SET status='draft', notified_about_republish_at=NULL WHERE id=?",
+        (gen_id,),
+    )
+    conn.commit()
+    conn.close()
 
 
 def mark_review_notified(gen_id: int):

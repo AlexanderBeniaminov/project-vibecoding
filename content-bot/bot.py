@@ -915,6 +915,25 @@ async def cb_bl_mode(callback: CallbackQuery):
     await callback.answer()
 
 
+# ── Повторная публикация ──────────────────────────────────────
+@dp.callback_query(F.data.startswith("republish:"))
+async def cb_republish(callback: CallbackQuery):
+    gen_id = int(callback.data.split(":")[1])
+    db.reset_generation_published(gen_id)
+    result = await publisher.publish_now(gen_id)
+    sheets.update_post_status_by_gen_id(gen_id, sheets._STATUS_PUBLISHED)
+    await callback.message.edit_text(f"✅ Переопубликовано: {result}")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("skip_republish:"))
+async def cb_skip_republish(callback: CallbackQuery):
+    gen_id = int(callback.data.split(":")[1])
+    sheets.update_post_status_by_gen_id(gen_id, sheets._STATUS_PUBLISHED)
+    await callback.message.edit_text("Статус в таблице возвращён на «Опубликован».")
+    await callback.answer()
+
+
 # ── Сохранение идеи (Режим 2) ─────────────────────────────────
 async def _save_idea_flow(message: Message, raw_text: str, source: str):
     """Сохраняет идею как есть — без AI-структурирования."""
@@ -1079,8 +1098,28 @@ async def _periodic_sheets_poll():
 
     for item in pending["urgent"]:
         gen = db.get_generation(item["gen_id"])
-        if not gen or gen["status"] == "published":
-            continue  # уже опубликован — ждём, пока статус в Sheets подтянется
+        if not gen:
+            logging.warning(f"[bot] urgent gen_id={item['gen_id']} не найден в БД — пропускаю")
+            continue
+        if gen["status"] == "published":
+            if not gen.get("notified_about_republish_at"):
+                try:
+                    link = sheets.build_post_link(item["row"], item["gid"])
+                    kb = InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(text="🔁 Опубликовать снова", callback_data=f"republish:{item['gen_id']}"),
+                        InlineKeyboardButton(text="✖ Оставить", callback_data=f"skip_republish:{item['gen_id']}"),
+                    ]])
+                    await bot.send_message(
+                        config.OWNER_USER_ID,
+                        f"⚠️ Пост #{item['gen_id']} уже был опубликован ранее.\n"
+                        f"В таблице поставлен статус «Срочно» — опубликовать снова?\n\n"
+                        f"──── {gen.get('format', '')} ────\n{gen['text'][:300]}{'…' if len(gen['text']) > 300 else ''}",
+                        reply_markup=kb,
+                    )
+                    db.mark_republish_notified(item["gen_id"])
+                except Exception as e:
+                    logging.warning(f"[bot] уведомление о повторной публикации не удалось (gen_id={item['gen_id']}): {e}")
+            continue
 
         try:
             await publisher.publish_now(item["gen_id"])
