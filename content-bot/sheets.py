@@ -128,9 +128,10 @@ def _textformat_runs_to_html(plain: str, runs: list) -> str:
 
 
 def _apply_blockquotes(text: str) -> str:
-    """<<текст>> → <blockquote expandable>текст</blockquote>. Работает в любом месте строки."""
+    """<<текст>> → <blockquote expandable>текст</blockquote>.
+    Ищем &lt;&lt;...&gt;&gt; потому что html.escape() уже отработал до вызова этой функции."""
     return re.sub(
-        r"<<(.*?)>>",
+        r"&lt;&lt;(.*?)&gt;&gt;",
         lambda m: f"<blockquote expandable>{m.group(1).strip()}</blockquote>",
         text,
         flags=re.DOTALL,
