@@ -7,6 +7,7 @@ Push — мгновенно при событиях бота. Pull — APSchedul
 import hashlib
 import html
 import logging
+import re
 from datetime import datetime
 from html.parser import HTMLParser as _HTMLParser
 from zoneinfo import ZoneInfo
@@ -127,17 +128,13 @@ def _textformat_runs_to_html(plain: str, runs: list) -> str:
 
 
 def _apply_blockquotes(text: str) -> str:
-    """Абзацы, где все строки начинаются с '> ', превращает в <blockquote expandable>."""
-    paragraphs = text.split("\n\n")
-    out = []
-    for para in paragraphs:
-        lines = para.split("\n")
-        if lines and all(ln.startswith("> ") or ln == ">" for ln in lines):
-            inner = "\n".join(ln[2:] if ln.startswith("> ") else "" for ln in lines)
-            out.append(f"<blockquote expandable>{inner}</blockquote>")
-        else:
-            out.append(para)
-    return "\n\n".join(out)
+    """<<текст>> → <blockquote expandable>текст</blockquote>. Работает в любом месте строки."""
+    return re.sub(
+        r"<<(.*?)>>",
+        lambda m: f"<blockquote expandable>{m.group(1).strip()}</blockquote>",
+        text,
+        flags=re.DOTALL,
+    )
 
 
 def _fetch_posts_rich_text() -> dict[int, str]:
@@ -192,7 +189,6 @@ class _RunsBuilder(_HTMLParser):
         self._runs: list[dict] = []
         self._stack: list[dict] = [{}]
         self._last_fmt: dict = {}
-        self._in_blockquote: bool = False
 
     def _current_fmt(self) -> dict:
         result: dict = {}
@@ -213,23 +209,20 @@ class _RunsBuilder(_HTMLParser):
         elif tag == "a":
             self._stack.append({"link": {"uri": a.get("href", "")}})
         elif tag == "blockquote":
-            self._in_blockquote = True
+            self.handle_data("<<")
             self._stack.append({})
         else:
             self._stack.append({})
 
     def handle_endtag(self, tag: str):
         if tag == "blockquote":
-            self._in_blockquote = False
+            self.handle_data(">>")
         if len(self._stack) > 1:
             self._stack.pop()
 
     def handle_data(self, data: str):
         if not data:
             return
-        if self._in_blockquote:
-            lines = data.split("\n")
-            data = "\n".join(f"> {ln}" if ln else ">" for ln in lines)
         fmt = self._current_fmt()
         if fmt != self._last_fmt:
             self._runs.append({"startIndex": self._pos, "format": fmt})
