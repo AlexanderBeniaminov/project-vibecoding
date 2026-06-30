@@ -542,6 +542,41 @@ def main():
     force = '--force' in sys.argv
     attempt = get_attempt()   # 1-4 если запущен по расписанию, None если вручную
 
+    if '--notify-owner' in sys.argv:
+        finance_sheet_id = os.environ['FINANCE_SHEET_ID']
+        print('Подключаюсь к Google Sheets...')
+        client_gs = get_client()
+        ws_status = get_worksheet(client_gs, finance_sheet_id, 'Статус системы')
+        if get_flag(ws_status, 'дайджест_записан') == 'да':
+            print('Дайджест уже записан — уведомление не нужно.')
+            return
+        try:
+            ws_current = get_worksheet(client_gs, finance_sheet_id, CURRENT_YEAR_SHEET)
+            col_idx, week_num, date_label = find_week_column(ws_current)
+            if col_idx is not None:
+                missing = check_manual_cells(ws_current, col_idx)
+                if not missing:
+                    missing = ['неизвестные поля (проверь таблицу вручную)']
+            else:
+                missing = ['данные за текущую неделю не внесены вообще']
+                week_num, date_label = '?', '?'
+        except Exception as e:
+            missing = [f'ошибка чтения таблицы: {e}']
+            week_num, date_label = '?', '?'
+        from utils.telegram import send as tg_send
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+        owner_id  = os.environ.get('TELEGRAM_OWNER_ID', '')
+        text = (
+            f'⚠️ Губаха — нед.{week_num} ({date_label})\n'
+            f'Задачи на неделю НЕ сформированы — дайджест не записан.\n\n'
+            f'Не хватает {len(missing)} полей:\n' +
+            '\n'.join(f'• {c}' for c in missing) +
+            '\n\nВнеси данные в таблицу и запусти «Ручной запуск — Агент 1» через GitHub Actions.'
+        )
+        tg_send(bot_token, owner_id, text)
+        print(f'Telegram → Александр: {len(missing)} незаполненных полей')
+        return
+
     # Выбор недели: python3 agent1_analyst.py 15  → анализ за неделю 15
     target_week = None
     if len(sys.argv) > 1 and sys.argv[1].isdigit():

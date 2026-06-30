@@ -22,6 +22,7 @@ on:
     - cron: '0 22 * * 1'   # Пн 22:00 UTC = 01:00 МСК → Агент 1 попытка 4 финальная
     - cron: '0 2 * * 2'    # Вт 02:00 UTC = 05:00 МСК → Агент 2 (задачи)
     - cron: '0 6 * * 2'    # Вт 06:00 UTC = 09:00 МСК → напоминание если нет дайджеста
+    - cron: '0 7 * * 2'    # Вт 07:00 UTC = 10:00 МСК → уведомление Александру если нет данных
 
 env:
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -87,6 +88,10 @@ jobs:
       - name: Агент 2 — напоминание 09:00 МСК (если дайджест не записан)
         if: github.event_name == 'schedule' && github.event.schedule == '0 6 * * 2'
         run: python agents/agent2_strategist.py --reminder-only
+
+      - name: Уведомление Александру 10:00 МСК (если дайджест не записан)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 7 * * 2'
+        run: python agents/agent1_analyst.py --notify-owner
 
       # === Ручной запуск через workflow_dispatch ===
 
