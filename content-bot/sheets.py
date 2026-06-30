@@ -5,11 +5,13 @@ Push — мгновенно при событиях бота. Pull — APSchedul
   A: Gen ID  |  B: Формат  |  C: Текст поста  |  D: Статус  |  E: Дата публикации  |  F: Ссылка
 """
 import hashlib
+import html
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import gspread
+from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.service_account import Credentials
 
 import config
@@ -75,6 +77,108 @@ def _hash(text: str) -> str:
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
+# ── Rich text: Sheets → Telegram HTML ────────────────────────
+
+_sheets_session: AuthorizedSession | None = None
+
+
+def _get_sheets_session() -> AuthorizedSession:
+    global _sheets_session
+    if _sheets_session is None:
+        creds = Credentials.from_service_account_file(
+            config.SERVICE_ACCOUNT_JSON,
+            scopes=["https://www.googleapis.com/auth/spreadsheets"],
+        )
+        _sheets_session = AuthorizedSession(creds)
+    return _sheets_session
+
+
+def _textformat_runs_to_html(plain: str, runs: list) -> str:
+    """Конвертирует textFormatRuns из Sheets API в Telegram HTML.
+    plain — чистый текст ячейки, runs — список {startIndex, format}."""
+    if not runs:
+        return html.escape(plain)
+
+    # Строим границы сегментов: startIndex каждого run + len(plain) в конце
+    boundaries = [r.get("startIndex", 0) for r in runs] + [len(plain)]
+    result = []
+    for idx, run in enumerate(runs):
+        start = boundaries[idx]
+        end = boundaries[idx + 1]
+        segment = html.escape(plain[start:end])
+        if not segment:
+            continue
+        fmt = run.get("format", {})
+        link_uri = (fmt.get("link") or {}).get("uri", "")
+        # Применяем теги изнутри наружу: link → bold → italic → underline → strikethrough
+        if link_uri:
+            segment = f'<a href="{html.escape(link_uri, quote=True)}">{segment}</a>'
+        if fmt.get("bold"):
+            segment = f"<b>{segment}</b>"
+        if fmt.get("italic"):
+            segment = f"<i>{segment}</i>"
+        if fmt.get("underline"):
+            segment = f"<u>{segment}</u>"
+        if fmt.get("strikethrough"):
+            segment = f"<s>{segment}</s>"
+        result.append(segment)
+    return "".join(result)
+
+
+def _apply_blockquotes(text: str) -> str:
+    """Абзацы, где все строки начинаются с '> ', превращает в <blockquote expandable>."""
+    paragraphs = text.split("\n\n")
+    out = []
+    for para in paragraphs:
+        lines = para.split("\n")
+        if lines and all(ln.startswith("> ") or ln == ">" for ln in lines):
+            inner = "\n".join(ln[2:] if ln.startswith("> ") else "" for ln in lines)
+            out.append(f"<blockquote expandable>{inner}</blockquote>")
+        else:
+            out.append(para)
+    return "\n\n".join(out)
+
+
+def _fetch_posts_rich_text() -> dict[int, str]:
+    """Один API-запрос к Sheets v4 — возвращает {row_num: html} для колонки D листа «Посты».
+    row_num соответствует номеру строки в таблице (начиная с 2, строка 1 — заголовок)."""
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{config.SPREADSHEET_ID}"
+    sheet_name = SHEET_POSTS.replace("'", "\\'")
+    params = {
+        "includeGridData": "true",
+        "ranges": f"'{sheet_name}'!D2:D500",
+        "fields": "sheets.data.rowData.values(formattedValue,textFormatRuns)",
+    }
+    try:
+        resp = _get_sheets_session().get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logging.warning(f"[sheets] rich text fetch failed: {e}")
+        return {}
+
+    result: dict[int, str] = {}
+    rows_data = (
+        data.get("sheets", [{}])[0]
+        .get("data", [{}])[0]
+        .get("rowData", [])
+    )
+    for i, row_data in enumerate(rows_data):
+        sheet_row = i + 2  # строка 1 — заголовок
+        values = row_data.get("values", [])
+        if not values:
+            continue
+        cell = values[0]
+        plain = cell.get("formattedValue", "")
+        if not plain:
+            continue
+        runs = cell.get("textFormatRuns", [])
+        html_text = _textformat_runs_to_html(plain, runs)
+        html_text = _apply_blockquotes(html_text)
+        result[sheet_row] = html_text
+    return result
+
+
 # ── Push: бот → Sheets (мгновенно при событиях) ──────────────
 def push_idea(idea: dict):
     """Записывает идею в лист «Идеи» — только дата и тема."""
@@ -130,6 +234,7 @@ def get_pending_actions() -> dict[str, list[dict]]:
     тот же приём, что в _sync_posts(), иначе публикация/уведомление уйдут со старым текстом из БД."""
     ws = _get_spreadsheet().worksheet(SHEET_POSTS)
     rows = ws.get_all_values()
+    rich_texts = _fetch_posts_rich_text()
     gid = ws.id
 
     review, urgent, to_publish = [], [], []
@@ -137,7 +242,7 @@ def get_pending_actions() -> dict[str, list[dict]]:
         if len(row) < 5:
             continue
         gen_id_raw = row[0]
-        text = row[3] if len(row) > 3 else ""
+        text = rich_texts.get(i) or (row[3] if len(row) > 3 else "")
         status = row[4].strip()
         pub_date = row[5].strip() if len(row) > 5 else ""
         if not gen_id_raw or status not in (_STATUS_ON_REVIEW, _STATUS_URGENT, _STATUS_TO_PUBLISH):
@@ -400,6 +505,7 @@ def _sync_posts():
     ss = _get_spreadsheet()
     ws = ss.worksheet(SHEET_POSTS)
     rows = ws.get_all_values()
+    rich_texts = _fetch_posts_rich_text()
 
     rows_to_delete = []
 
@@ -409,7 +515,7 @@ def _sync_posts():
         gen_id_raw = row[0]
         # row[1] = Дата (пропускаем)
         # row[2] = Формат (пропускаем)
-        text       = row[3] if len(row) > 3 else ""
+        text       = rich_texts.get(i) or (row[3] if len(row) > 3 else "")
         status     = row[4] if len(row) > 4 else ""
         pub_date   = row[5] if len(row) > 5 else ""
 
