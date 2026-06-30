@@ -95,35 +95,58 @@ def _get_sheets_session() -> AuthorizedSession:
     return _sheets_session
 
 
+def _utf16_to_py(text: str, utf16_idx: int) -> int:
+    """Sheets API возвращает startIndex в UTF-16 code units (эмодзи вне BMP = 2 единицы).
+    Конвертируем в Python codepoint index, чтобы не терять первый символ слова после эмодзи."""
+    py = 0
+    u16 = 0
+    for ch in text:
+        if u16 >= utf16_idx:
+            return py
+        u16 += 2 if ord(ch) > 0xFFFF else 1
+        py += 1
+    return py
+
+
 def _textformat_runs_to_html(plain: str, runs: list) -> str:
-    """Конвертирует textFormatRuns из Sheets API в Telegram HTML.
-    plain — чистый текст ячейки, runs — список {startIndex, format}."""
+    """Конвертирует textFormatRuns из Sheets API в Telegram HTML."""
     if not runs:
         return html.escape(plain)
 
-    # Строим границы сегментов: startIndex каждого run + len(plain) в конце
-    boundaries = [r.get("startIndex", 0) for r in runs] + [len(plain)]
     result = []
+    prev = 0  # Python codepoint position
     for idx, run in enumerate(runs):
-        start = boundaries[idx]
-        end = boundaries[idx + 1]
-        segment = html.escape(plain[start:end])
-        if not segment:
-            continue
-        fmt = run.get("format", {})
-        link_uri = (fmt.get("link") or {}).get("uri", "")
-        # Применяем теги изнутри наружу: link → bold → italic → underline → strikethrough
-        if link_uri:
-            segment = f'<a href="{html.escape(link_uri, quote=True)}">{segment}</a>'
-        if fmt.get("bold"):
-            segment = f"<b>{segment}</b>"
-        if fmt.get("italic"):
-            segment = f"<i>{segment}</i>"
-        if fmt.get("underline"):
-            segment = f"<u>{segment}</u>"
-        if fmt.get("strikethrough"):
-            segment = f"<s>{segment}</s>"
-        result.append(segment)
+        py_start = _utf16_to_py(plain, run.get("startIndex", 0))
+        if idx + 1 < len(runs):
+            py_end = _utf16_to_py(plain, runs[idx + 1].get("startIndex", len(plain)))
+        else:
+            py_end = len(plain)
+
+        # Текст до начала этого run (без форматирования)
+        if py_start > prev:
+            result.append(html.escape(plain[prev:py_start]))
+
+        segment = html.escape(plain[py_start:py_end])
+        if segment:
+            fmt = run.get("format", {})
+            link_uri = (fmt.get("link") or {}).get("uri", "")
+            if link_uri:
+                segment = f'<a href="{html.escape(link_uri, quote=True)}">{segment}</a>'
+            if fmt.get("bold"):
+                segment = f"<b>{segment}</b>"
+            if fmt.get("italic"):
+                segment = f"<i>{segment}</i>"
+            if fmt.get("underline"):
+                segment = f"<u>{segment}</u>"
+            if fmt.get("strikethrough"):
+                segment = f"<s>{segment}</s>"
+            result.append(segment)
+        prev = py_end
+
+    # Остаток текста после последнего run
+    if prev < len(plain):
+        result.append(html.escape(plain[prev:]))
+
     return "".join(result)
 
 
