@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 
-PHONE_HOST = "192.168.1.144:5555"
+PHONE_HOST = "192.168.1.16:5555"
 ADB = os.path.expanduser("~/Library/Android/sdk/platform-tools/adb")
 CUBE_FOLDER = "/storage/emulated/0/Documents/CubeCallRecorder/All"
 
