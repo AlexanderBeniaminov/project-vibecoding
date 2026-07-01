@@ -888,6 +888,8 @@ _ACTION_TOOLS = {
 
 # Состояние: user_id → fact_id (ожидаем исправление текста факта)
 _awaiting_correction: dict[int, int] = {}
+# Состояние: user_id → agreement_id (ожидаем исправление текста договорённости)
+_pending_fix_state: dict[int, int] = {}
 
 
 def _fact_approval_keyboard(fact_id: int) -> InlineKeyboardMarkup:
@@ -1216,6 +1218,49 @@ async def _generate_call_summary(transcript: str, user_id: int, chat_id: int) ->
     except Exception as e:
         logging.error(f"[CallSummary] ошибка: {e}")
         return "Не удалось составить саммари. Транскрипция выше — используй её вручную."
+
+
+async def _extract_and_save_agreements(summary: str) -> int:
+    """Извлекает конкретные задачи и договорённости из саммари → сохраняет в agreements. Возвращает кол-во."""
+    from tools.db import add_agreement
+    extract_prompt = f"""Из этого резюме звонка извлеки список конкретных задач и договорённостей.
+Верни JSON-массив: [{{"text": "..."}}]
+Только конкретные действия (позвонить, отправить, встретиться, договорились и т.д.).
+Не включай общие факты и описания. Если нечего извлечь — верни [].
+
+Резюме:
+{summary}"""
+    try:
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[
+                {"role": "system", "content": "Извлеки задачи и договорённости из резюме. Верни только JSON-массив."},
+                {"role": "user", "content": extract_prompt},
+            ],
+            max_tokens=400,
+            temperature=0.1,
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'```json\s*', '', raw)
+        raw = re.sub(r'```\s*', '', raw)
+        items = json.loads(raw)
+        count = 0
+        for item in items:
+            if isinstance(item, dict) and item.get("text"):
+                add_agreement(item["text"].strip(), source="call")
+                count += 1
+        return count
+    except Exception as e:
+        logging.warning(f"[Agreements] не удалось извлечь: {e}")
+        return 0
+
+
+def _agreement_kb(agreement_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="📅 В календарь", callback_data=f"agr_cal_{agreement_id}"),
+        InlineKeyboardButton(text="✏️ Исправить", callback_data=f"agr_fix_{agreement_id}"),
+        InlineKeyboardButton(text="🗑 Удалить", callback_data=f"agr_del_{agreement_id}"),
+    ]])
 
 
 # ── Доступ ────────────────────────────────────────────────────
@@ -1654,6 +1699,9 @@ async def handle_audio_file(message: Message):
     kb = _call_summary_kb()
     await message.answer(f"📋 *Саммари звонка:*\n\n{summary}", reply_markup=kb, parse_mode="Markdown")
 
+    # Извлекаем договорённости в фоне — не задерживаем ответ пользователю
+    asyncio.create_task(_extract_and_save_agreements(summary))
+
 
 def _call_summary_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -1718,6 +1766,88 @@ async def call_delete_callback(callback: CallbackQuery):
     _pending_call_transcripts.pop(user_id, None)
     _awaiting_call_correction.pop(user_id, None)
     await callback.message.edit_text("🗑 Саммари удалено.")
+    await callback.answer()
+
+
+# ── Дайджест договорённостей — кнопки ────────────────────────
+
+@dp.callback_query(F.data.startswith("agr_del_"))
+async def agr_del_callback(callback: CallbackQuery):
+    agr_id = int(callback.data.split("agr_del_")[1])
+    from tools.db import update_agreement_status
+    update_agreement_status(agr_id, "deleted")
+    await callback.message.edit_text("🗑 Удалено.")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("agr_fix_"))
+async def agr_fix_callback(callback: CallbackQuery):
+    agr_id = int(callback.data.split("agr_fix_")[1])
+    user_id = callback.from_user.id
+    _pending_fix_state[user_id] = agr_id
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer("✏️ Напиши исправленный текст:")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("agr_cal_"))
+async def agr_cal_callback(callback: CallbackQuery):
+    from tools.db import get_agreement_by_id, update_agreement_status
+    agr_id = int(callback.data.split("agr_cal_")[1])
+    agr = get_agreement_by_id(agr_id)
+    if not agr:
+        await callback.answer("Не найдено")
+        return
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer("📅 Добавляю в Google Calendar...")
+    parse_prompt = (
+        f"Из текста извлеки дату, время и название для события Google Calendar.\n"
+        f"Текст: {agr['text']}\n"
+        f"Сегодня: {datetime.now(_MSK).strftime('%d.%m.%Y')}\n"
+        f"Верни JSON: {{\"date\": \"YYYY-MM-DD\", \"time\": \"HH:MM\", \"title\": \"название\"}}\n"
+        f"Если дата не указана — null. Если время не указано — null."
+    )
+    try:
+        resp = await ai_client.chat.completions.create(
+            model=config.MODEL,
+            messages=[
+                {"role": "system", "content": "Извлеки дату и название события. Верни только JSON."},
+                {"role": "user", "content": parse_prompt},
+            ],
+            max_tokens=150,
+            temperature=0.0,
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r'```json\s*', '', raw)
+        raw = re.sub(r'```\s*', '', raw)
+        parsed = json.loads(raw)
+    except Exception as e:
+        await callback.message.answer(f"Не удалось распознать дату: {e}\nДобавь вручную в календарь.")
+        await callback.answer()
+        return
+    if not parsed.get("date"):
+        await callback.message.answer("Не нашёл дату в тексте. Уточни когда это должно быть:")
+        await callback.answer()
+        return
+    date_str = parsed["date"]
+    time_str = parsed.get("time") or "10:00"
+    start_iso = f"{date_str}T{time_str}:00"
+    title = (parsed.get("title") or agr["text"])[:80]
+    try:
+        loop = asyncio.get_running_loop()
+        result_msg = await loop.run_in_executor(
+            None,
+            lambda: calendar.create_event(
+                config.GOOGLE_CALENDAR_ID,
+                config.SERVICE_ACCOUNT_JSON,
+                title,
+                start_iso,
+            )
+        )
+        update_agreement_status(agr_id, "calendar")
+        await callback.message.answer(f"✅ {result_msg}", parse_mode="Markdown")
+    except Exception as e:
+        await callback.message.answer(f"Ошибка создания события: {e}")
     await callback.answer()
 
 
@@ -1927,6 +2057,14 @@ async def handle_message(message: Message):
         await message.answer(f"📋 *Обновлённое саммари:*\n\n{new_summary}", reply_markup=_call_summary_kb(), parse_mode="Markdown")
         return
 
+    # Режим исправления договорённости из дайджеста
+    if message.text and user_id in _pending_fix_state:
+        agr_id = _pending_fix_state.pop(user_id)
+        from tools.db import update_agreement_status
+        update_agreement_status(agr_id, "pending", text=message.text.strip())
+        await message.answer("✅ Текст обновлён.")
+        return
+
     # Режим исправления факта: следующее сообщение — новый текст факта
     if message.text and user_id in _awaiting_correction:
         fact_id = _awaiting_correction.pop(user_id)
@@ -2124,6 +2262,48 @@ async def weekly_review():
 
 
 
+# ── Вечерний дайджест договорённостей ────────────────────────
+async def _send_agreements_digest(user_id: int, items: list, header: str):
+    """Отправляет список договорённостей отдельными сообщениями с кнопками."""
+    from tools.db import mark_digest_sent
+    await bot.send_message(user_id, header)
+    sent_ids = []
+    for agr in items:
+        kb = _agreement_kb(agr["id"])
+        await bot.send_message(user_id, f"📌 {agr['text']}", reply_markup=kb)
+        sent_ids.append(agr["id"])
+    if sent_ids:
+        mark_digest_sent(sent_ids)
+
+
+async def send_evening_digest():
+    """22:00 МСК — отправляет договорённости за сегодня."""
+    from tools.db import get_pending_agreements
+    for user_id in config.ALLOWED_USER_IDS:
+        try:
+            items = get_pending_agreements(only_today=True)
+            if not items:
+                continue
+            header = f"📋 *Итоги дня — {len(items)} договорённост{'ь' if len(items)==1 else 'и' if len(items)<5 else 'ей'}:*"
+            await _send_agreements_digest(user_id, items, header)
+        except Exception as e:
+            logging.error(f"[EveningDigest] ошибка для {user_id}: {e}")
+
+
+async def send_morning_carryover():
+    """10:00 МСК — повторяет вчерашние неразобранные договорённости."""
+    from tools.db import get_pending_agreements
+    for user_id in config.ALLOWED_USER_IDS:
+        try:
+            items = get_pending_agreements(only_today=False)
+            if not items:
+                continue
+            header = f"⏰ *Не разобрано вчера — {len(items)} пункт{'а' if len(items)<5 else 'ов'}:*"
+            await _send_agreements_digest(user_id, items, header)
+        except Exception as e:
+            logging.error(f"[MorningCarryover] ошибка для {user_id}: {e}")
+
+
 # ── Команда /schedule ─────────────────────────────────────────
 @dp.message(Command("schedule"))
 async def cmd_schedule(message: Message):
@@ -2138,6 +2318,26 @@ async def cmd_schedule(message: Message):
     await message.answer(_format_schedule(today_iso, cal_events, reminders), parse_mode="Markdown")
 
 
+# ── Команда /digest — ручной запуск дайджеста ─────────────────
+@dp.message(Command("digest"))
+async def cmd_digest(message: Message):
+    if not is_allowed(message.from_user.id):
+        return
+    from tools.db import get_pending_agreements
+    items_today = get_pending_agreements(only_today=True)
+    items_old = get_pending_agreements(only_today=False)
+    total = items_today + items_old
+    if not total:
+        await message.answer("📋 Нет невыполненных договорённостей.")
+        return
+    if items_old:
+        header = f"⏰ *Не разобрано ранее — {len(items_old)} пункт{'а' if len(items_old)<5 else 'ов'}:*"
+        await _send_agreements_digest(message.from_user.id, items_old, header)
+    if items_today:
+        header = f"📋 *Сегодня — {len(items_today)} договорённост{'ь' if len(items_today)==1 else 'и' if len(items_today)<5 else 'ей'}:*"
+        await _send_agreements_digest(message.from_user.id, items_today, header)
+
+
 # ── Запуск ────────────────────────────────────────────────────
 async def main():
     init_db()
@@ -2148,6 +2348,20 @@ async def main():
         hour=9, minute=0,
         timezone="Europe/Moscow",
         id="morning_briefing",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_evening_digest, "cron",
+        hour=22, minute=0,
+        timezone="Europe/Moscow",
+        id="evening_digest",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_morning_carryover, "cron",
+        hour=10, minute=0,
+        timezone="Europe/Moscow",
+        id="morning_carryover",
         replace_existing=True,
     )
     scheduler.start()
@@ -2164,6 +2378,7 @@ async def main():
         BotCommand(command="notes",     description="Последние заметки"),
         BotCommand(command="memory",    description="Сохранённые факты"),
         BotCommand(command="schedule",  description="Расписание на сегодня"),
+        BotCommand(command="digest",    description="Договорённости — показать все"),
         BotCommand(command="reset",     description="Очистить контекст диалога"),
     ])
     print(f"[{datetime.now(_MSK).strftime('%H:%M:%S')} МСК] Бот запущен.")
