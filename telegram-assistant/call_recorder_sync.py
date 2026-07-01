@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Наблюдатель за записями Cube ACR — отправляет новые файлы в Telegram-бот.
-Запускается на Mac по cron каждые 2 минуты.
+Наблюдатель за записями Cube ACR.
+Каждые 2 минуты (cron) проверяет новые записи на телефоне,
+загружает их на сервер и запускает обработку.
 
-Устройство: Huawei Nova 11 по ADB WiFi (192.168.1.144:5555)
+Телефон: Huawei Nova 11, ADB WiFi 192.168.1.144:5555
 Папка записей: /storage/emulated/0/Documents/CubeCallRecorder/All/
 """
 
@@ -11,7 +12,6 @@ import subprocess
 import os
 import sys
 import json
-import requests
 import time
 from pathlib import Path
 from datetime import datetime
@@ -20,10 +20,11 @@ PHONE_HOST = "192.168.1.144:5555"
 ADB = os.path.expanduser("~/Library/Android/sdk/platform-tools/adb")
 CUBE_FOLDER = "/storage/emulated/0/Documents/CubeCallRecorder/All"
 
-BOT_TOKEN = "7778266500:AAFT-5f7eJOMIBIR5o8j3RHBkhzIGNxS0F8"
-CHAT_ID = 994743403
+SERVER_ALIAS = "server"
+SERVER_INBOX = "/tmp/call_recordings"
+SERVER_PROCESS_SCRIPT = "/home/parser/bots/assistant/process_call_audio.py"
+SERVER_VENV_PYTHON = "/home/parser/venv/bin/python3"
 
-# Локальные пути
 SCRIPT_DIR = Path(__file__).parent
 SEEN_FILE = SCRIPT_DIR / "data" / "cube_acr_seen.json"
 TEMP_DIR = Path("/tmp/cube_acr_sync")
@@ -35,20 +36,18 @@ def log(msg: str):
     print(f"[{ts}] {msg}", flush=True)
 
 
-def adb(*args, timeout=30) -> tuple[int, str, str]:
-    cmd = [ADB, "-s", PHONE_HOST] + list(args)
+def run(cmd: list, timeout=30) -> tuple[int, str, str]:
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
 def connect_phone() -> bool:
-    code, out, err = adb("shell", "echo", "ok")
+    code, out, _ = run([ADB, "-s", PHONE_HOST, "shell", "echo", "ok"])
     if code == 0:
         return True
-    # Попробуем переподключиться
-    subprocess.run([ADB, "connect", PHONE_HOST], capture_output=True, timeout=10)
+    run([ADB, "connect", PHONE_HOST])
     time.sleep(2)
-    code, out, _ = adb("shell", "echo", "ok")
+    code, _, _ = run([ADB, "-s", PHONE_HOST, "shell", "echo", "ok"])
     return code == 0
 
 
@@ -66,50 +65,64 @@ def save_seen(seen: set):
 
 
 def list_recordings() -> list[str]:
-    code, out, _ = adb("shell", "ls", "-1", CUBE_FOLDER)
+    code, out, _ = run([ADB, "-s", PHONE_HOST, "shell", "ls", "-1", CUBE_FOLDER])
     if code != 0 or not out:
         return []
-    return [f.strip() for f in out.splitlines() if f.strip().endswith((".amr", ".m4a", ".mp4", ".wav", ".ogg"))]
+    return [
+        f.strip() for f in out.splitlines()
+        if f.strip().endswith((".amr", ".m4a", ".mp4", ".wav", ".ogg"))
+    ]
 
 
-def pull_and_send(filename: str) -> bool:
+def ensure_server_inbox():
+    run(["ssh", SERVER_ALIAS, f"mkdir -p {SERVER_INBOX}"])
+
+
+def process_file(filename: str) -> bool:
     local_path = TEMP_DIR / filename
-    # Скачиваем файл
-    remote_path = f"{CUBE_FOLDER}/{filename}"
-    code, _, err = adb("pull", remote_path, str(local_path), timeout=60)
-    if code != 0:
+
+    # 1. Скачиваем с телефона
+    code, _, err = run(
+        [ADB, "-s", PHONE_HOST, "pull", f"{CUBE_FOLDER}/{filename}", str(local_path)],
+        timeout=120
+    )
+    if code != 0 or not local_path.exists() or local_path.stat().st_size == 0:
         log(f"Ошибка pull {filename}: {err}")
         return False
-    if not local_path.exists() or local_path.stat().st_size == 0:
-        log(f"Файл пустой: {filename}")
-        return False
 
-    # Извлекаем номер из имени файла: phone_YYYYMMDD-HHMMSS__PHONENUMBER.amr
-    parts = filename.replace(".amr", "").replace(".m4a", "").split("__")
-    phone_number = parts[1] if len(parts) > 1 else "неизвестный номер"
-    caption = f"📞 Запись звонка\nНомер: {phone_number}\nФайл: {filename}"
+    size_kb = local_path.stat().st_size // 1024
+    log(f"Скачан: {filename} ({size_kb} КБ)")
 
-    # Отправляем в Telegram
-    with open(local_path, "rb") as f:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio",
-            data={"chat_id": CHAT_ID, "caption": caption},
-            files={"audio": (filename, f, "audio/amr")},
-            timeout=120,
-        )
-
-    if resp.status_code == 200:
-        log(f"Отправлено: {filename}")
-        local_path.unlink(missing_ok=True)
-        return True
-    else:
-        log(f"Ошибка Telegram {resp.status_code}: {resp.text[:200]}")
+    # 2. Копируем на сервер
+    remote_path = f"{SERVER_INBOX}/{filename}"
+    code, _, err = run(
+        ["scp", str(local_path), f"{SERVER_ALIAS}:{remote_path}"],
+        timeout=120
+    )
+    if code != 0:
+        log(f"Ошибка scp {filename}: {err}")
         local_path.unlink(missing_ok=True)
         return False
+
+    # 3. Запускаем обработку на сервере (в фоне)
+    code, _, err = run(
+        ["ssh", SERVER_ALIAS,
+         f"nohup {SERVER_VENV_PYTHON} {SERVER_PROCESS_SCRIPT} {remote_path} "
+         f"> /tmp/call_recordings/process_{filename}.log 2>&1 &"],
+        timeout=15
+    )
+
+    local_path.unlink(missing_ok=True)
+    if code != 0:
+        log(f"Ошибка запуска обработки {filename}: {err}")
+        return False
+
+    log(f"Обработка запущена: {filename}")
+    return True
 
 
 def main():
-    log("=== Запуск синхронизации записей звонков ===")
+    log("=== Синхронизация записей Cube ACR ===")
 
     if not connect_phone():
         log("Телефон недоступен по ADB WiFi — пропускаем")
@@ -119,22 +132,37 @@ def main():
     files = list_recordings()
 
     if not files:
-        log("Новых записей нет или папка пуста")
+        log("Записей нет или папка пуста")
         sys.exit(0)
 
     new_files = [f for f in files if f not in seen]
     if not new_files:
-        log(f"Все {len(files)} файлов уже обработаны")
+        log(f"Всё уже обработано ({len(files)} файлов)")
         sys.exit(0)
 
     log(f"Новых файлов: {len(new_files)}")
+    ensure_server_inbox()
+
     for filename in new_files:
-        if pull_and_send(filename):
+        # Пропускаем слишком маленькие файлы (обрыв соединения < 5KB)
+        code, out, _ = run([ADB, "-s", PHONE_HOST, "shell", "stat", "-c%s",
+                            f"{CUBE_FOLDER}/{filename}"])
+        try:
+            size = int(out)
+        except ValueError:
+            size = 0
+        if size < 5000:
+            log(f"Пропуск {filename} — слишком маленький ({size} байт)")
             seen.add(filename)
             save_seen(seen)
-        time.sleep(1)
+            continue
 
-    log("=== Синхронизация завершена ===")
+        if process_file(filename):
+            seen.add(filename)
+            save_seen(seen)
+        time.sleep(2)
+
+    log("=== Готово ===")
 
 
 if __name__ == "__main__":
