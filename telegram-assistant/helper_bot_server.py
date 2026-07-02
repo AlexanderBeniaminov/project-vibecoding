@@ -85,7 +85,7 @@ _HOTELIER_DB = Path(config.DATA_DIR) / "hotelier.db"
 histories: dict[int, list] = {}
 _pending_reformat: dict[int, dict] = {}  # {user_id: {instruction, original}}
 _last_message_time: dict[int, float] = {}
-_CONTEXT_TTL = 300  # 5 минут — после паузы контекст считается новым
+_CONTEXT_TTL = 1800  # 30 минут — после паузы контекст считается новым
 _pending_searches: dict[int, str] = {}   # частичный коммерческий запрос ожидает уточнения
 
 # ── Проверка доступа ──────────────────────────────────────────────
